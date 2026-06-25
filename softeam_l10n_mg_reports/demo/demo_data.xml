@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!--
+            Partenaires de démo pour la localisation Madagascar.
+            Pour générer des factures de démo (avec TVA 20% / 0% export), voir
+            scripts/seed_demo_invoices.py — exécuté via `odoo shell` après que
+            le PCG 2005 a été chargé sur la société de l'utilisateur.
+
+            Les factures ne sont pas dans demo.xml car elles nécessitent une
+            résolution dynamique des taxes (xmlids préfixés par company_id par
+            chart_template.try_loading) qui n'est pas exprimable simplement
+            dans les <field eval=…> d'Odoo 18+.
+        -->
+
+        <record id="demo_partner_tana" model="res.partner">
+            <field name="name">TANA SARL (démo Madagascar)</field>
+            <field name="company_type">company</field>
+            <field name="street">Lot II R 145 Antaninarenina</field>
+            <field name="city">Antananarivo</field>
+            <field name="zip">101</field>
+            <field name="country_id" ref="base.mg"/>
+            <field name="phone">+261 20 22 123 45</field>
+            <field name="email">contact@tana-sarl.mg</field>
+            <field name="comment">Client local fictif — pour test ventes locales avec TVA 20 %.</field>
+        </record>
+
+        <record id="demo_partner_export" model="res.partner">
+            <field name="name">USA Trading Inc. (démo export)</field>
+            <field name="company_type">company</field>
+            <field name="street">350 5th Avenue</field>
+            <field name="city">New York</field>
+            <field name="zip">10118</field>
+            <field name="country_id" ref="base.us"/>
+            <field name="comment">Client étranger fictif — pour test ventes export TVA 0 %.</field>
+        </record>
+
+        <record id="demo_partner_faniry" model="res.partner">
+            <field name="name">FANIRY Sarl (démo Madagascar)</field>
+            <field name="company_type">company</field>
+            <field name="street">Boulevard de l'Indépendance</field>
+            <field name="city">Toamasina</field>
+            <field name="zip">501</field>
+            <field name="country_id" ref="base.mg"/>
+            <field name="comment">Fournisseur local fictif — pour test achats avec TVA 20 % déductible.</field>
+        </record>
+    </data>
+</odoo>

@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="income_statement_nature" model="account.report">
+        <field name="name">Compte de Résultat par Nature - Madagascar (PCG 2005)</field>
+        <field name="country_id" ref="base.mg"/>
+        <field name="availability_condition">country</field>
+        <field name="filter_unfold_all" eval="True"/>
+        <field name="filter_period_comparison" eval="True"/>
+        <field name="filter_growth_comparison" eval="True"/>
+        <field name="filter_journals" eval="True"/>
+        <field name="filter_analytic" eval="True"/>
+        <field name="column_ids">
+            <record id="is_balance" model="account.report.column">
+                <field name="name">Montant</field>
+                <field name="expression_label">balance</field>
+            </record>
+        </field>
+        <field name="line_ids">
+            <!-- ============================================ -->
+            <!-- ACTIVITÉ OPÉRATIONNELLE                      -->
+            <!-- ============================================ -->
+            <record id="is_op" model="account.report.line">
+                <field name="name">I. ACTIVITÉ OPÉRATIONNELLE</field>
+                <field name="hierarchy_level">0</field>
+                <field name="children_ids">
+                    <!-- Produits opérationnels -->
+                    <record id="is_ca" model="account.report.line">
+                        <field name="name">Chiffre d'affaires (70)</field>
+                        <field name="code">mg_ca</field>
+                        <field name="expression_ids">
+                            <record id="is_ca_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">-70</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_var_stock_prod" model="account.report.line">
+                        <field name="name">Variation des stocks de produits finis &amp; en-cours (71)</field>
+                        <field name="code">mg_var_stock_prod</field>
+                        <field name="expression_ids">
+                            <record id="is_var_stock_prod_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">-71</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_prod_immo" model="account.report.line">
+                        <field name="name">Production immobilisée (72)</field>
+                        <field name="code">mg_prod_immo</field>
+                        <field name="expression_ids">
+                            <record id="is_prod_immo_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">-72</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_subv" model="account.report.line">
+                        <field name="name">Subventions d'exploitation (74)</field>
+                        <field name="code">mg_subv</field>
+                        <field name="expression_ids">
+                            <record id="is_subv_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">-74</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_autres_prod" model="account.report.line">
+                        <field name="name">Autres produits opérationnels (75)</field>
+                        <field name="code">mg_autres_prod</field>
+                        <field name="expression_ids">
+                            <record id="is_autres_prod_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">-75</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_reprises" model="account.report.line">
+                        <field name="name">Reprises sur provisions et pertes de valeur (78)</field>
+                        <field name="code">mg_reprises</field>
+                        <field name="expression_ids">
+                            <record id="is_reprises_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">-78</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_prod_op_total" model="account.report.line">
+                        <field name="name">I. PRODUCTION DE L'EXERCICE</field>
+                        <field name="code">mg_prod_op_total</field>
+                        <field name="hierarchy_level">1</field>
+                        <field name="expression_ids">
+                            <record id="is_prod_op_total_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">aggregation</field>
+                                <field name="formula">mg_ca.balance + mg_var_stock_prod.balance + mg_prod_immo.balance + mg_subv.balance + mg_autres_prod.balance + mg_reprises.balance</field>
+                            </record>
+                        </field>
+                    </record>
+
+                    <!-- Charges opérationnelles -->
+                    <record id="is_achats" model="account.report.line">
+                        <field name="name">Achats consommés (60)</field>
+                        <field name="code">mg_achats</field>
+                        <field name="expression_ids">
+                            <record id="is_achats_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">60</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_services_ext" model="account.report.line">
+                        <field name="name">Services extérieurs et autres consommations (61, 62)</field>
+                        <field name="code">mg_services_ext</field>
+                        <field name="expression_ids">
+                            <record id="is_services_ext_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">61 + 62</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_charges_personnel" model="account.report.line">
+                        <field name="name">Charges de personnel (64)</field>
+                        <field name="code">mg_charges_personnel</field>
+                        <field name="expression_ids">
+                            <record id="is_charges_personnel_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">64</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_impots_taxes" model="account.report.line">
+                        <field name="name">Impôts, taxes et versements assimilés (63)</field>
+                        <field name="code">mg_impots_taxes</field>
+                        <field name="expression_ids">
+                            <record id="is_impots_taxes_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">63</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_autres_charges_op" model="account.report.line">
+                        <field name="name">Autres charges opérationnelles (65)</field>
+                        <field name="code">mg_autres_charges_op</field>
+                        <field name="expression_ids">
+                            <record id="is_autres_charges_op_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">65</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_dotations" model="account.report.line">
+                        <field name="name">Dotations aux amortissements et provisions (68)</field>
+                        <field name="code">mg_dotations</field>
+                        <field name="expression_ids">
+                            <record id="is_dotations_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">68</field>
+                            </record>
+                        </field>
+                    </record>
+
+                    <record id="is_resultat_op" model="account.report.line">
+                        <field name="name">II. RÉSULTAT OPÉRATIONNEL</field>
+                        <field name="code">mg_resultat_op</field>
+                        <field name="hierarchy_level">1</field>
+                        <field name="expression_ids">
+                            <record id="is_resultat_op_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">aggregation</field>
+                                <field name="formula">mg_prod_op_total.balance - (mg_achats.balance + mg_services_ext.balance + mg_charges_personnel.balance + mg_impots_taxes.balance + mg_autres_charges_op.balance + mg_dotations.balance)</field>
+                            </record>
+                        </field>
+                    </record>
+                </field>
+            </record>
+
+            <!-- ============================================ -->
+            <!-- ACTIVITÉ FINANCIÈRE                          -->
+            <!-- ============================================ -->
+            <record id="is_fin" model="account.report.line">
+                <field name="name">III. ACTIVITÉ FINANCIÈRE</field>
+                <field name="hierarchy_level">0</field>
+                <field name="children_ids">
+                    <record id="is_prod_fin" model="account.report.line">
+                        <field name="name">Produits financiers (76)</field>
+                        <field name="code">mg_prod_fin</field>
+                        <field name="expression_ids">
+                            <record id="is_prod_fin_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">-76</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_charges_fin" model="account.report.line">
+                        <field name="name">Charges financières (66)</field>
+                        <field name="code">mg_charges_fin</field>
+                        <field name="expression_ids">
+                            <record id="is_charges_fin_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">account_codes</field>
+                                <field name="formula">66</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="is_resultat_fin" model="account.report.line">
+                        <field name="name">III. RÉSULTAT FINANCIER</field>
+                        <field name="code">mg_resultat_fin</field>
+                        <field name="hierarchy_level">1</field>
+                        <field name="expression_ids">
+                            <record id="is_resultat_fin_bal" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">aggregation</field>
+                                <field name="formula">mg_prod_fin.balance - mg_charges_fin.balance</field>
+                            </record>
+                        </field>
+                    </record>
+                </field>
+            </record>
+
+            <!-- ============================================ -->
+            <!-- RÉSULTAT NET                                 -->
+            <!-- ============================================ -->
+            <record id="is_resultat_avant_impots" model="account.report.line">
+                <field name="name">IV. RÉSULTAT AVANT IMPÔTS (II + III)</field>
+                <field name="code">mg_res_avant_imp</field>
+                <field name="hierarchy_level">0</field>
+                <field name="expression_ids">
+                    <record id="is_resultat_avant_impots_bal" model="account.report.expression">
+                        <field name="label">balance</field>
+                        <field name="engine">aggregation</field>
+                        <field name="formula">mg_resultat_op.balance + mg_resultat_fin.balance</field>
+                    </record>
+                </field>
+            </record>
+
+            <record id="is_extraordinaire" model="account.report.line">
+                <field name="name">Éléments extraordinaires (77 - 67)</field>
+                <field name="code">mg_extra</field>
+                <field name="expression_ids">
+                    <record id="is_extraordinaire_bal" model="account.report.expression">
+                        <field name="label">balance</field>
+                        <field name="engine">account_codes</field>
+                        <field name="formula">-77 + 67</field>
+                    </record>
+                </field>
+            </record>
+
+            <record id="is_impots_resultats" model="account.report.line">
+                <field name="name">Impôts sur les bénéfices (69)</field>
+                <field name="code">mg_imp_res</field>
+                <field name="expression_ids">
+                    <record id="is_impots_resultats_bal" model="account.report.expression">
+                        <field name="label">balance</field>
+                        <field name="engine">account_codes</field>
+                        <field name="formula">69</field>
+                    </record>
+                </field>
+            </record>
+
+            <record id="is_resultat_net" model="account.report.line">
+                <field name="name">V. RÉSULTAT NET DE L'EXERCICE</field>
+                <field name="code">mg_res_net</field>
+                <field name="hierarchy_level">0</field>
+                <field name="expression_ids">
+                    <record id="is_resultat_net_bal" model="account.report.expression">
+                        <field name="label">balance</field>
+                        <field name="engine">aggregation</field>
+                        <field name="formula">mg_res_avant_imp.balance - mg_extra.balance - mg_imp_res.balance</field>
+                    </record>
+                </field>
+            </record>
+        </field>
+    </record>
+</odoo>

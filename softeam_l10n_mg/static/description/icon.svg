@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 280" width="280" height="280">
+  <!-- Madagascar flag (proportions adapted to square icon) -->
+  <!-- White vertical band on the left -->
+  <rect x="0" y="0" width="93.33" height="280" fill="#FFFFFF"/>
+  <!-- Red horizontal band (top right) -->
+  <rect x="93.33" y="0" width="186.67" height="140" fill="#FC3D32"/>
+  <!-- Green horizontal band (bottom right) -->
+  <rect x="93.33" y="140" width="186.67" height="140" fill="#007E3A"/>
+  <!-- Subtle outer border -->
+  <rect x="0.5" y="0.5" width="279" height="279" fill="none" stroke="#1E1E1E" stroke-width="1" stroke-opacity="0.18"/>
+</svg>

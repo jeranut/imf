@@ -1,0 +1,4 @@
+id,name,sequence,country_id/id,tax_payable_account_id,tax_receivable_account_id,advance_tax_payment_account_id
+tax_group_tva_20,TVA 20%,10,base.mg,pcg_4455,pcg_4456,
+tax_group_tva_0,TVA 0% (Export),20,base.mg,pcg_4455,pcg_4456,
+tax_group_exo,TVA Exonérée,30,base.mg,,,

@@ -1,0 +1,67 @@
+id,name,code_prefix_start,code_prefix_end
+group_1,Comptes de capitaux propres et passifs non courants,1,1
+group_2,Comptes d'immobilisations,2,2
+group_3,Comptes de stocks et en-cours,3,3
+group_4,Comptes de tiers,4,4
+group_5,Comptes financiers,5,5
+group_6,Comptes de charges,6,6
+group_7,Comptes de produits,7,7
+group_10,"Capital, réserves et assimilés",10,10
+group_11,Report à nouveau,11,11
+group_12,Résultat de l'exercice,12,12
+group_13,Produits et charges différés - hors cycle d'exploitation,13,13
+group_15,Provisions pour charges - passifs non courants,15,15
+group_16,Emprunts et dettes assimilés,16,16
+group_17,Dettes rattachées à des participations,17,17
+group_18,Comptes de liaison des établissements et sociétés en participation,18,18
+group_20,Immobilisations incorporelles,20,20
+group_21,Immobilisations corporelles,21,21
+group_22,Immobilisations mises en concession,22,22
+group_23,Immobilisations en cours,23,23
+group_26,Participations et créances rattachées,26,26
+group_27,Autres immobilisations financières,27,27
+group_28,Amortissement des immobilisations,28,28
+group_29,Pertes de valeur sur immobilisations,29,29
+group_31,Matières premières et fournitures,31,31
+group_32,Autres approvisionnements,32,32
+group_33,En cours de production de biens,33,33
+group_34,En cours de production de services,34,34
+group_35,Stocks de produits,35,35
+group_37,Stocks de marchandises,37,37
+group_38,Stocks à l'extérieur,38,38
+group_39,Pertes de valeur sur stocks et en cours,39,39
+group_40,Fournisseurs et comptes rattachés,40,40
+group_41,Clients et comptes rattachés,41,41
+group_42,Personnel et comptes rattachés,42,42
+group_43,Organismes sociaux et comptes rattachés,43,43
+group_44,"Etat, collectivités publiques, organismes internationaux",44,44
+group_45,Groupe et Associés,45,45
+group_46,Débiteurs divers et créditeurs divers,46,46
+group_47,Comptes transitoires ou d'attente,47,47
+group_48,Charges ou produits constatés d'avance et provisions,48,48
+group_49,Pertes de valeur sur comptes de tiers,49,49
+group_50,Valeurs mobilières de placement,50,50
+group_51,"Banques, établissements financiers et assimilés",51,51
+group_52,Instruments de trésorerie,52,52
+group_53,Caisse,53,53
+group_54,Régies d'avances et accréditifs,54,54
+group_58,Virements internes,58,58
+group_59,Pertes de valeur sur comptes financiers,59,59
+group_60,Achats consommés,60,60
+group_61,Services extérieurs,61,61
+group_62,Autres services extérieurs,62,62
+group_63,"Impôts, taxes et versements assimilés",63,63
+group_64,Charges de personnel,64,64
+group_65,Autres charges des activités ordinaires,65,65
+group_66,Charges financières,66,66
+group_67,Eléments extraordinaires (charges),67,67
+group_68,"Dotations aux amortissements, provisions, pertes de valeur",68,68
+group_69,Impôts sur les bénéfices,69,69
+group_70,"Ventes de produits fabriqués, marchandises, prestations",70,70
+group_71,Production stockée (ou déstockage),71,71
+group_72,Production immobilisée,72,72
+group_74,Subventions d'exploitation,74,74
+group_75,Autres produits opérationnels,75,75
+group_76,Produits financiers,76,76
+group_77,Eléments extraordinaires (produits),77,77
+group_78,Reprises sur provisions et pertes de valeur,78,78

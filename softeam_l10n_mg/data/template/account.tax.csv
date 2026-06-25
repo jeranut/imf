@@ -1,0 +1,13 @@
+id,name,description,amount,amount_type,type_tax_use,price_include_override,active,invoice_label,country_id/id,tax_group_id/id,invoice_repartition_line_ids/factor_percent,invoice_repartition_line_ids/repartition_type,invoice_repartition_line_ids/account_id,invoice_repartition_line_ids/tag_ids,refund_repartition_line_ids/factor_percent,refund_repartition_line_ids/repartition_type,refund_repartition_line_ids/account_id,refund_repartition_line_ids/tag_ids
+tva_collectee_20,TVA collectée 20%,TVA collectée 20%,20,percent,sale,tax_excluded,TRUE,TVA 20%,base.mg,tax_group_tva_20,100,base,,+VENTE_BASE_20,100,base,,-VENTE_BASE_20
+,,,,,,,,,,,100,tax,pcg_4451,+VENTE_TVA_20,100,tax,pcg_4451,-VENTE_TVA_20
+tva_deductible_bs_20,TVA déductible biens et services 20%,TVA déductible sur biens et services 20%,20,percent,purchase,tax_excluded,TRUE,TVA 20% (B/S),base.mg,tax_group_tva_20,100,base,,+ACHAT_BS_BASE_20,100,base,,-ACHAT_BS_BASE_20
+,,,,,,,,,,,100,tax,pcg_4452,+ACHAT_BS_TVA_20,100,tax,pcg_4452,-ACHAT_BS_TVA_20
+tva_deductible_immo_20,TVA déductible immobilisations 20%,TVA déductible sur immobilisations 20%,20,percent,purchase,tax_excluded,TRUE,TVA 20% (Immo),base.mg,tax_group_tva_20,100,base,,+ACHAT_IMMO_BASE_20,100,base,,-ACHAT_IMMO_BASE_20
+,,,,,,,,,,,100,tax,pcg_4453,+ACHAT_IMMO_TVA_20,100,tax,pcg_4453,-ACHAT_IMMO_TVA_20
+tva_collectee_export_0,TVA exportation 0%,Exportation - hors champ TVA,0,percent,sale,tax_excluded,TRUE,TVA Export 0%,base.mg,tax_group_tva_0,100,base,,+EXPORT_BASE,100,base,,-EXPORT_BASE
+,,,,,,,,,,,100,tax,pcg_4451,,100,tax,pcg_4451,
+tva_exoneree_0,TVA exonérée,Opérations exonérées de TVA,0,percent,sale,tax_excluded,TRUE,Exo TVA,base.mg,tax_group_exo,100,base,,+EXO_VENTE_BASE,100,base,,-EXO_VENTE_BASE
+,,,,,,,,,,,100,tax,pcg_4451,,100,tax,pcg_4451,
+tva_achat_exoneree_0,TVA achat exonérée,Achats exonérés de TVA,0,percent,purchase,tax_excluded,TRUE,Exo TVA,base.mg,tax_group_exo,100,base,,+EXO_ACHAT_BASE,100,base,,-EXO_ACHAT_BASE
+,,,,,,,,,,,100,tax,pcg_4452,,100,tax,pcg_4452,

@@ -86,10 +86,6 @@ class BaseAccountingFinancialReport extends Component {
         await this.loadReport();
     }
 
-    printPdf() {
-        this.action.doAction("base_accounting_kit.action_balance_sheet_report");
-    }
-
     exportXlsx() {
         alert("Export XLSX à connecter dans le prochain lot.");
     }

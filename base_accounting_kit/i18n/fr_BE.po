@@ -2591,9 +2591,6 @@ msgstr ""
 msgid "Net Profit or Loss"
 msgstr "Bénéfice ou perte net"
 
-msgid "Profit and Loss"
-msgstr "Compte de résultat"
-
 #. module: base_accounting_kit
 #. openerp-web
 #: code:addons/base_accounting_kit/static/src/xml/payment_matching.xml:0
@@ -3002,7 +2999,7 @@ msgstr "Bénéfice (perte) à déclarer"
 #: model:ir.actions.act_window,name:base_accounting_kit.action_profit_and_loss_report
 #: model:ir.ui.menu,name:base_accounting_kit.account_financial_reports_profit_loss
 msgid "Profit and Loss"
-msgstr "Compte de résultat"
+msgstr "Profit et perte"
 
 #. module: base_accounting_kit
 #: model:ir.model.fields,field_description:base_accounting_kit.field_account_asset_asset__prorata

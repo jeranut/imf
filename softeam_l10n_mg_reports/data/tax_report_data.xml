@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="tax_report" model="account.report">
+        <field name="name">Déclaration TVA - Madagascar</field>
+        <field name="root_report_id" ref="account.generic_tax_report"/>
+        <field name="country_id" ref="base.mg"/>
+        <field name="availability_condition">country</field>
+        <field name="column_ids">
+            <record id="tax_report_balance" model="account.report.column">
+                <field name="name">Montant</field>
+                <field name="expression_label">balance</field>
+            </record>
+        </field>
+        <field name="line_ids">
+            <!-- ============================================ -->
+            <!-- Section A : CHIFFRE D'AFFAIRES               -->
+            <!-- ============================================ -->
+            <record id="tr_section_a" model="account.report.line">
+                <field name="name">A. Chiffre d'affaires (HT)</field>
+                <field name="hierarchy_level">0</field>
+                <field name="children_ids">
+                    <record id="tr_a1_local_taxable" model="account.report.line">
+                        <field name="name">A1. CA local taxable 20% (base HT)</field>
+                        <field name="code">mg_a1</field>
+                        <field name="expression_ids">
+                            <record id="tr_a1_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">VENTE_BASE_20</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_a2_export" model="account.report.line">
+                        <field name="name">A2. CA exportation (0%)</field>
+                        <field name="code">mg_a2</field>
+                        <field name="expression_ids">
+                            <record id="tr_a2_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">EXPORT_BASE</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_a3_exonere" model="account.report.line">
+                        <field name="name">A3. CA exonéré</field>
+                        <field name="code">mg_a3</field>
+                        <field name="expression_ids">
+                            <record id="tr_a3_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">EXO_VENTE_BASE</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_a4_total" model="account.report.line">
+                        <field name="name">A4. TOTAL Chiffre d'affaires</field>
+                        <field name="code">mg_a4</field>
+                        <field name="hierarchy_level">1</field>
+                        <field name="expression_ids">
+                            <record id="tr_a4_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">aggregation</field>
+                                <field name="formula">mg_a1.balance + mg_a2.balance + mg_a3.balance</field>
+                            </record>
+                        </field>
+                    </record>
+                </field>
+            </record>
+
+            <!-- ============================================ -->
+            <!-- Section B : TVA COLLECTÉE                    -->
+            <!-- ============================================ -->
+            <record id="tr_section_b" model="account.report.line">
+                <field name="name">B. TVA collectée</field>
+                <field name="hierarchy_level">0</field>
+                <field name="children_ids">
+                    <record id="tr_b1_tva_local" model="account.report.line">
+                        <field name="name">B1. TVA collectée 20% sur CA local</field>
+                        <field name="code">mg_b1</field>
+                        <field name="expression_ids">
+                            <record id="tr_b1_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">VENTE_TVA_20</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_b_total" model="account.report.line">
+                        <field name="name">B. TOTAL TVA collectée</field>
+                        <field name="code">mg_b_total</field>
+                        <field name="hierarchy_level">1</field>
+                        <field name="expression_ids">
+                            <record id="tr_b_total_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">aggregation</field>
+                                <field name="formula">mg_b1.balance</field>
+                            </record>
+                        </field>
+                    </record>
+                </field>
+            </record>
+
+            <!-- ============================================ -->
+            <!-- Section C : TVA DÉDUCTIBLE                   -->
+            <!-- ============================================ -->
+            <record id="tr_section_c" model="account.report.line">
+                <field name="name">C. TVA déductible</field>
+                <field name="hierarchy_level">0</field>
+                <field name="children_ids">
+                    <record id="tr_c1_achat_bs_base" model="account.report.line">
+                        <field name="name">C1. Achats biens &amp; services 20% (base HT)</field>
+                        <field name="code">mg_c1</field>
+                        <field name="expression_ids">
+                            <record id="tr_c1_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">ACHAT_BS_BASE_20</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_c2_achat_bs_tva" model="account.report.line">
+                        <field name="name">C2. TVA déductible biens &amp; services 20%</field>
+                        <field name="code">mg_c2</field>
+                        <field name="expression_ids">
+                            <record id="tr_c2_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">ACHAT_BS_TVA_20</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_c3_achat_immo_base" model="account.report.line">
+                        <field name="name">C3. Achats immobilisations 20% (base HT)</field>
+                        <field name="code">mg_c3</field>
+                        <field name="expression_ids">
+                            <record id="tr_c3_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">ACHAT_IMMO_BASE_20</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_c4_achat_immo_tva" model="account.report.line">
+                        <field name="name">C4. TVA déductible immobilisations 20%</field>
+                        <field name="code">mg_c4</field>
+                        <field name="expression_ids">
+                            <record id="tr_c4_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">ACHAT_IMMO_TVA_20</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_c5_achat_exo" model="account.report.line">
+                        <field name="name">C5. Achats exonérés</field>
+                        <field name="code">mg_c5</field>
+                        <field name="expression_ids">
+                            <record id="tr_c5_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">tax_tags</field>
+                                <field name="formula">EXO_ACHAT_BASE</field>
+                            </record>
+                        </field>
+                    </record>
+                    <record id="tr_c_total" model="account.report.line">
+                        <field name="name">C. TOTAL TVA déductible (C2 + C4)</field>
+                        <field name="code">mg_c_total</field>
+                        <field name="hierarchy_level">1</field>
+                        <field name="expression_ids">
+                            <record id="tr_c_total_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">aggregation</field>
+                                <field name="formula">mg_c2.balance + mg_c4.balance</field>
+                            </record>
+                        </field>
+                    </record>
+                </field>
+            </record>
+
+            <!-- ============================================ -->
+            <!-- Section D : CALCUL TVA À DÉCAISSER           -->
+            <!-- ============================================ -->
+            <record id="tr_section_d" model="account.report.line">
+                <field name="name">D. Calcul de la TVA</field>
+                <field name="hierarchy_level">0</field>
+                <field name="children_ids">
+                    <record id="tr_d_solde" model="account.report.line">
+                        <field name="name">D. TVA à décaisser (B - C) — si positif</field>
+                        <field name="code">mg_d_solde</field>
+                        <field name="hierarchy_level">1</field>
+                        <field name="expression_ids">
+                            <record id="tr_d_solde_balance" model="account.report.expression">
+                                <field name="label">balance</field>
+                                <field name="engine">aggregation</field>
+                                <field name="formula">mg_b_total.balance - mg_c_total.balance</field>
+                            </record>
+                        </field>
+                    </record>
+                </field>
+            </record>
+        </field>
+    </record>
+</odoo>

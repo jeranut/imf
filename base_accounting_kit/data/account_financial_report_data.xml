@@ -4,7 +4,7 @@
         <!-- Financial Reports data records in the model account.financial.report-->
         <record id="account_financial_report_profitandloss0"
                 model="account.financial.report">
-            <field name="name"></field>
+            <field name="name">Profit and Loss</field>
             <field name="sign" eval="'-1'"/>
             <field name="type">sum</field>
         </record>
