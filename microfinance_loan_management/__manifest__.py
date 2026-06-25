@@ -1,0 +1,28 @@
+# -*- coding: utf-8 -*-
+{
+    'name': 'Microfinance Loan Management',
+    'version': '17.0.1.0.0',
+    'summary': 'Gestion des crédits clients pour institutions de microfinance',
+    'description': 'Produits de crédit, demandes, approbations, échéanciers, remboursements, pénalités, recouvrement et risque.',
+    'category': 'Accounting/Finance',
+    'author': 'SysAdaptPro',
+    'website': 'https://sysadaptpro.com',
+    'license': 'LGPL-3',
+    'depends': ['base', 'mail', 'account', 'contacts', 'hr', 'calendar'],
+    'data': [
+        'security/groups.xml',
+        'security/ir.model.access.csv',
+        'data/sequence.xml',
+        'data/cron.xml',
+        'views/microfinance_loan_product_views.xml',
+        'views/microfinance_loan_views.xml',
+        'views/microfinance_loan_installment_views.xml',
+        'views/microfinance_loan_payment_views.xml',
+        'views/microfinance_collection_visit_views.xml',
+        'wizard/microfinance_loan_payment_wizard_views.xml',
+        'views/microfinance_dashboard_views.xml',
+        'views/microfinance_menus.xml',
+    ],
+    'application': True,
+    'installable': True,
+}

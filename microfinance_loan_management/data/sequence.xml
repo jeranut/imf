@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="seq_microfinance_loan" model="ir.sequence">
+        <field name="name">Crédit microfinance</field>
+        <field name="code">microfinance.loan</field>
+        <field name="prefix">CR/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+    <record id="seq_microfinance_payment" model="ir.sequence">
+        <field name="name">Remboursement microfinance</field>
+        <field name="code">microfinance.loan.payment</field>
+        <field name="prefix">PAY/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
+</odoo>

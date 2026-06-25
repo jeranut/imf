@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_product_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.product.tree</field>
+        <field name="model">microfinance.loan.product</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="min_amount"/>
+                <field name="max_amount"/>
+                <field name="interest_rate"/>
+                <field name="interest_method"/>
+                <field name="repayment_frequency"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_product_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.product.form</field>
+        <field name="model">microfinance.loan.product</field>
+        <field name="arch" type="xml">
+            <form string="Produit de crédit">
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" placeholder="Nom du produit"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="currency_id"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="min_amount"/>
+                            <field name="max_amount"/>
+                            <field name="min_term"/>
+                            <field name="max_term"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Calcul crédit">
+                            <group>
+                                <field name="interest_rate"/>
+                                <field name="interest_method"/>
+                                <field name="repayment_frequency"/>
+                                <field name="grace_period_days"/>
+                            </group>
+                        </page>
+                        <page string="Pénalités">
+                            <group>
+                                <field name="penalty_type"/>
+                                <field name="penalty_amount" invisible="penalty_type != 'fixed'"/>
+                                <field name="penalty_rate" invisible="penalty_type != 'percentage'"/>
+                            </group>
+                        </page>
+                        <page string="Comptabilité">
+                            <group>
+                                <field name="disbursement_journal_id"/>
+                                <field name="payment_journal_id"/>
+                                <field name="loan_account_id"/>
+                                <field name="interest_account_id"/>
+                                <field name="penalty_account_id"/>
+                                <field name="fee_account_id"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_loan_product" model="ir.actions.act_window">
+        <field name="name">Produits de crédit</field>
+        <field name="res_model">microfinance.loan.product</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="microfinance_dashboard_main" model="microfinance.dashboard"/>
+    <record id="view_microfinance_dashboard_form" model="ir.ui.view">
+        <field name="name">microfinance.dashboard.form</field>
+        <field name="model">microfinance.dashboard</field>
+        <field name="arch" type="xml">
+            <form create="false" edit="false" delete="false">
+                <sheet>
+                    <div class="oe_title"><h1>Tableau de bord Microfinance</h1></div>
+                    <group col="5">
+                        <field name="active_loan_count" string="Crédits actifs"/>
+                        <field name="disbursed_amount" string="Montant décaissé"/>
+                        <field name="outstanding_amount" string="Encours total"/>
+                        <field name="overdue_amount" string="Impayés"/>
+                        <field name="default_rate" string="Taux défaut (%)"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_dashboard" model="ir.actions.act_window">
+        <field name="name">Dashboard</field>
+        <field name="res_model">microfinance.dashboard</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+        <field name="res_id" ref="microfinance_dashboard_main"/>
+        <field name="context">{'form_view_initial_mode': 'readonly'}</field>
+    </record>
+</odoo>

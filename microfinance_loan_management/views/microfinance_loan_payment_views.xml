@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_payment_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.payment.tree</field>
+        <field name="model">microfinance.loan.payment</field>
+        <field name="arch" type="xml">
+            <tree decoration-success="state == 'posted'">
+                <field name="name"/><field name="loan_id"/><field name="partner_id"/><field name="payment_date"/><field name="amount"/><field name="allocated_penalty"/><field name="allocated_interest"/><field name="allocated_principal"/><field name="journal_id"/><field name="state" widget="badge"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_payment_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.payment.form</field>
+        <field name="model">microfinance.loan.payment</field>
+        <field name="arch" type="xml">
+            <form>
+                <header><button name="action_post" string="Comptabiliser" type="object" class="btn-primary" invisible="state != 'draft'"/><button name="action_cancel" string="Annuler" type="object" invisible="state != 'draft'"/><field name="state" widget="statusbar"/></header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
+                    <group><group><field name="loan_id"/><field name="partner_id"/><field name="payment_date"/><field name="amount"/><field name="journal_id"/></group><group><field name="allocated_penalty"/><field name="allocated_interest"/><field name="allocated_principal"/><field name="move_id"/></group></group>
+                    <notebook><page string="Échéances touchées"><field name="installment_ids" readonly="1"/></page><page string="Note"><field name="note"/></page></notebook>
+                </sheet><chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_payment" model="ir.actions.act_window">
+        <field name="name">Remboursements</field><field name="res_model">microfinance.loan.payment</field><field name="view_mode">tree,form,graph,pivot</field>
+    </record>
+</odoo>
