@@ -1,0 +1,129 @@
+.o_bak_financial_report {
+    background: #f5f6f8;
+    min-height: 100%;
+}
+
+.bak-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+}
+
+.bak-left,
+.bak-right {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.bak-filter {
+    background: #f0f1f3;
+    padding: 6px 10px;
+    border-radius: 4px;
+    margin: 0;
+    font-weight: 600;
+}
+
+.bak-filter input {
+    border: none;
+    background: transparent;
+    margin-left: 5px;
+}
+
+.bak-select {
+    width: auto;
+    background: #f0f1f3;
+    border: none;
+    font-weight: 600;
+}
+
+.bak-alert {
+    background: #d7f3f7;
+    color: #00616d;
+    text-align: center;
+    padding: 12px;
+    font-weight: 600;
+}
+
+.bak-page-wrapper {
+    display: flex;
+    justify-content: center;
+    padding: 25px;
+}
+
+.bak-page {
+    background: white;
+    width: 760px;
+    min-height: 850px;
+    padding: 25px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+}
+
+.bak-report-header {
+    display: grid;
+    grid-template-columns: 1fr 240px;
+    margin-bottom: 10px;
+}
+
+.bak-date-box {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+    font-weight: 600;
+}
+
+.bak-columns {
+    display: grid;
+    grid-template-columns: 1fr 160px;
+    padding: 5px 10px;
+    font-weight: 700;
+    text-align: right;
+}
+
+.bak-line {
+    display: grid;
+    grid-template-columns: 1fr 160px;
+    border-bottom: 1px solid #e5e5e5;
+    min-height: 28px;
+    align-items: center;
+    font-size: 13px;
+}
+
+.bak-line-name {
+    color: #1f2d3d;
+}
+
+.bak-line-amount {
+    text-align: right;
+    font-weight: 500;
+}
+
+.bak-section {
+    background: #d9dcdf;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-top: 18px;
+}
+
+.bak-subsection {
+    font-weight: 700;
+}
+
+.bak-negative .bak-line-amount {
+    color: #d33;
+}
+
+.bak-caret {
+    color: #aaa;
+    margin-right: 8px;
+}
+
+.bak-loading {
+    padding: 25px;
+    text-align: center;
+    color: #777;
+}

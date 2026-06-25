@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="base_accounting_kit.FinancialReport">
+        <div class="o_bak_financial_report">
+
+            <div class="bak-toolbar">
+                <div class="bak-left">
+                    <button class="btn btn-primary" t-on-click="printPdf">PDF</button>
+                    <button class="btn btn-secondary" t-on-click="exportXlsx">XLSX</button>
+                    <strong>Bilan</strong>
+                </div>
+
+                <div class="bak-right">
+                    <label class="bak-filter">
+                        À la date du
+                        <input type="date" t-att-value="state.dateTo" t-on-change="onDateChange"/>
+                    </label>
+
+                    <select class="form-select bak-select" t-att-value="state.targetMove" t-on-change="onTargetMoveChange">
+                        <option value="posted">Pièces comptabilisées</option>
+                        <option value="all">Toutes les pièces</option>
+                    </select>
+
+                    <button class="btn btn-light">En Ar</button>
+                </div>
+            </div>
+
+            <div class="bak-alert">
+                Il y a pièces non comptabilisées avant ou au cours de cette période.
+            </div>
+
+            <div class="bak-page-wrapper">
+                <div class="bak-page">
+
+                    <div class="bak-report-header">
+                        <div></div>
+                        <div class="bak-date-box">
+                            À la date du <t t-esc="state.dateTo"/>
+                        </div>
+                    </div>
+
+                    <div class="bak-columns">
+                        <div></div>
+                        <div>Solde</div>
+                    </div>
+
+                    <t t-if="state.loading">
+                        <div class="bak-loading">Chargement du bilan...</div>
+                    </t>
+
+                    <t t-if="state.error">
+                        <div class="alert alert-danger" t-esc="state.error"/>
+                    </t>
+
+                    <t t-if="!state.loading and !state.error">
+                        <t t-foreach="state.lines" t-as="line" t-key="line.id">
+                            <div t-att-class="lineClass(line)">
+                                <div class="bak-line-name" t-att-style="'padding-left:' + paddingLeft(line)">
+                                    <span t-if="line.level > 1" class="bak-caret">›</span>
+                                    <span t-esc="line.name"/>
+                                </div>
+                                <div class="bak-line-amount">
+                                    <t t-esc="formatAmount(line.balance)"/>
+                                </div>
+                            </div>
+                        </t>
+                    </t>
+
+                </div>
+            </div>
+
+        </div>
+    </t>
+
+</templates>
