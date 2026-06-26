@@ -7,37 +7,140 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 12px;
     padding: 10px 16px;
     background: #fff;
     border-bottom: 1px solid #d8dadd;
 }
 
 .bak-left,
-.bak-right {
+.bak-filterbar {
     display: flex;
     gap: 8px;
     align-items: center;
 }
 
-.bak-filter {
-    background: #f0f1f3;
+.bak-filterbar {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.bak-dropdown {
+    position: relative;
+}
+
+.bak-filter-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
     padding: 6px 10px;
+    border: 1px solid #d8dadd;
     border-radius: 4px;
-    margin: 0;
-    font-weight: 600;
-}
-
-.bak-filter input {
-    border: none;
-    background: transparent;
-    margin-left: 5px;
-}
-
-.bak-select {
-    width: auto;
     background: #f0f1f3;
-    border: none;
+    color: #1f2933;
     font-weight: 600;
+    white-space: nowrap;
+}
+
+.bak-filter-button:hover,
+.bak-filter-button.active {
+    background: #e5e7eb;
+    border-color: #b8bcc2;
+}
+
+.bak-menu {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 4px);
+    right: 0;
+    min-width: 230px;
+    max-width: 360px;
+    padding: 6px;
+    background: #fff;
+    border: 1px solid #d8dadd;
+    border-radius: 4px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.bak-menu button,
+.bak-check-row,
+.bak-menu-field {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 30px;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: #1f2933;
+    text-align: left;
+    font-size: 13px;
+}
+
+.bak-menu button:hover,
+.bak-check-row:hover {
+    background: #f3f4f6;
+}
+
+.bak-menu button.active,
+.bak-check-row.active {
+    background: #e7f0ff;
+    color: #0f4c81;
+    font-weight: 700;
+}
+
+.bak-check-row {
+    gap: 8px;
+    cursor: pointer;
+}
+
+.bak-check-row span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bak-menu-field {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    font-weight: 600;
+}
+
+.bak-menu-field input {
+    width: 100%;
+    border: 1px solid #d8dadd;
+    border-radius: 3px;
+    padding: 4px 6px;
+}
+
+.bak-menu-title {
+    display: block;
+    padding: 4px 8px;
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.bak-menu-separator {
+    height: 1px;
+    margin: 6px 4px;
+    background: #e5e7eb;
+}
+
+.bak-journal-menu {
+    min-width: 300px;
+    max-height: 340px;
+    overflow: auto;
+}
+
+.bak-empty-menu {
+    padding: 10px 8px;
+    color: #6b7280;
+    font-size: 13px;
 }
 
 .bak-page-wrapper {
@@ -199,9 +302,15 @@
     }
 
     .bak-left,
-    .bak-right {
+    .bak-filterbar {
         flex-wrap: wrap;
+        justify-content: flex-start;
         margin-bottom: 8px;
+    }
+
+    .bak-menu {
+        left: 0;
+        right: auto;
     }
 
     .bak-page-wrapper {

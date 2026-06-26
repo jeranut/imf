@@ -8,9 +8,11 @@ class FinancialReportController(http.Controller):
 
     @http.route('/base_accounting_kit/financial_report/data', type='json', auth='user')
     def financial_report_data(self, report_name='Balance Sheet', date_to=None,
-                              target_move='posted', **kwargs):
+                              target_move='posted', journal_ids=None, **kwargs):
         company = request.env.company
         date_to = date_to or fields.Date.context_today(request.env.user)
+        journal_ids = self._sanitize_journal_ids(journal_ids, company)
+        journals = self._get_company_journals(company)
 
         account_report = request.env.ref(
             'base_accounting_kit.account_financial_report_balancesheet0',
@@ -43,6 +45,7 @@ class FinancialReportController(http.Controller):
             'debit_credit': False,
             'account_report_id': [account_report.id, account_report.name],
             'target_move': target_move,
+            'journal_ids': journal_ids,
             'view_format': 'vertical',
             'company_id': [company.id, company.name],
         }
@@ -50,7 +53,7 @@ class FinancialReportController(http.Controller):
         used_context = wizard._build_contexts({'form': data})
         data['used_context'] = dict(
             used_context,
-            lang='en_US',
+            lang=request.env.context.get('lang') or 'fr_FR',
         )
 
         raw_lines = wizard.get_account_lines(data)
@@ -68,9 +71,44 @@ class FinancialReportController(http.Controller):
                 if target_move == 'all'
                 else 'Pièces comptabilisées'
             ),
-            'journals_label': 'Tous les journaux',
+            'journals_label': self._journal_label(journal_ids, journals),
+            'journals': [
+                {'id': journal.id, 'name': journal.display_name or journal.name}
+                for journal in journals
+            ],
+            'selected_journal_ids': journal_ids,
             'lines': lines,
         }
+
+    def _get_company_journals(self, company):
+        return request.env['account.journal'].sudo().search([
+            ('company_id', '=', company.id),
+            ('active', '=', True),
+        ], order='type, code, name')
+
+    def _sanitize_journal_ids(self, journal_ids, company):
+        if not journal_ids:
+            return []
+        if isinstance(journal_ids, str):
+            journal_ids = [journal_ids]
+        try:
+            journal_ids = [int(journal_id) for journal_id in journal_ids if journal_id]
+        except (TypeError, ValueError):
+            return []
+        valid_ids = request.env['account.journal'].sudo().search([
+            ('id', 'in', journal_ids),
+            ('company_id', '=', company.id),
+            ('active', '=', True),
+        ]).ids
+        return valid_ids
+
+    def _journal_label(self, journal_ids, journals):
+        if not journal_ids:
+            return 'Tous les journaux'
+        selected = journals.filtered(lambda journal: journal.id in journal_ids)
+        if len(selected) == 1:
+            return selected.display_name or selected.name
+        return '%s journaux' % len(selected)
 
     def _build_balance_sheet_lines(self, raw_lines):
         """Normalize get_account_lines output for the Balance Sheet HTML view."""
@@ -206,6 +244,26 @@ class FinancialReportController(http.Controller):
             'Liability': 'PASSIF',
             'Passif': 'PASSIF',
             'PASSIF': 'PASSIF',
+            'Fixed Assets': 'Immobilisations',
+            'Non-current Assets': 'Actifs non courants',
+            'Current Assets': 'Actif circulant',
+            'Receivable Accounts': 'Créances clients',
+            'Prepayments': "Charges constatées d’avance",
+            'Bank and Cash': 'Trésorerie',
+            'Equity': 'Capitaux propres',
+            'Current Year Earnings': "Résultat non affecté",
+            'Liabilities': 'Dettes',
+            'Payable Accounts': 'Dettes fournisseurs',
+            'Current Liabilities': 'Dettes à court terme',
+            'Credit Card': 'Cartes de crédit',
+            'Non-current Liabilities': 'Dettes à long terme',
+            'Operating Income': 'Produits d’exploitation',
+            'Other Income': 'Autres produits',
+            'Cost of Revenue': 'Coût des ventes',
+            'Gross Profit': 'Marge brute',
+            'Expense': 'Charges',
+            'Expenses': 'Charges d’exploitation',
+            'Depreciation': 'Dotations aux amortissements',
             'Profit (Loss) to report': "Résultat de l’exercice",
             'Profit/Loss to report': "Résultat de l’exercice",
             'Bénéfice (perte) à déclarer': "Résultat de l’exercice",

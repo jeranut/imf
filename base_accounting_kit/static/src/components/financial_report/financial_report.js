@@ -9,8 +9,23 @@ class BaseAccountingFinancialReport extends Component {
         this.rpc = useService("rpc");
         this.action = useService("action");
         this.toggleLine = this.toggleLine.bind(this);
+        this.toggleDropdown = this.toggleDropdown.bind(this);
+        this.isDropdownOpen = this.isDropdownOpen.bind(this);
+        this.closeDropdown = this.closeDropdown.bind(this);
+        this.unfoldAll = this.unfoldAll.bind(this);
+        this.toggleHideZero = this.toggleHideZero.bind(this);
+        this.toggleHorizontalSplit = this.toggleHorizontalSplit.bind(this);
+        this.onSpecificDateChange = this.onSpecificDateChange.bind(this);
+        this.onDateChange = this.onDateChange.bind(this);
+        this.clearJournals = this.clearJournals.bind(this);
+        this.selectDatePreset = this.selectDatePreset.bind(this);
+        this.setComparisonMode = this.setComparisonMode.bind(this);
+        this.setComparisonOrder = this.setComparisonOrder.bind(this);
+        this.toggleJournal = this.toggleJournal.bind(this);
+        this.setTargetMove = this.setTargetMove.bind(this);
+        this.setCurrencyFormat = this.setCurrencyFormat.bind(this);
 
-        const today = new Date().toISOString().slice(0, 10);
+        const today = this.toISODate(new Date());
 
         this.state = useState({
             loading: true,
@@ -18,13 +33,22 @@ class BaseAccountingFinancialReport extends Component {
             reportName: "Balance Sheet",
             title: "Bilan",
             dateTo: today,
+            datePreset: "today",
             targetMove: "posted",
             targetMoveLabel: "Pièces comptabilisées",
             journalsLabel: "Tous les journaux",
+            selectedJournalIds: [],
+            journals: [],
             currency: "",
+            currencyFormat: "full",
             companyName: "",
             lines: [],
             unfolded: {},
+            openDropdown: null,
+            comparisonMode: "none",
+            comparisonOrder: "desc",
+            hideZero: false,
+            horizontalSplit: false,
         });
 
         onWillStart(async () => {
@@ -41,6 +65,7 @@ class BaseAccountingFinancialReport extends Component {
                 report_name: this.state.reportName,
                 date_to: this.state.dateTo,
                 target_move: this.state.targetMove,
+                journal_ids: this.state.selectedJournalIds,
             });
 
             if (!result.success) {
@@ -51,7 +76,9 @@ class BaseAccountingFinancialReport extends Component {
                 this.state.currency = result.currency || "";
                 this.state.companyName = result.company_name || "";
                 this.state.targetMoveLabel = result.target_move_label || "";
-                this.state.journalsLabel = result.journals_label || "";
+                this.state.journalsLabel = result.journals_label || "Tous les journaux";
+                this.state.journals = result.journals || [];
+                this.state.selectedJournalIds = result.selected_journal_ids || this.state.selectedJournalIds;
                 this.initializeUnfolded();
             }
         } catch (error) {
@@ -70,6 +97,18 @@ class BaseAccountingFinancialReport extends Component {
             }
         }
         this.state.unfolded = unfolded;
+    }
+
+    toggleDropdown(name) {
+        this.state.openDropdown = this.state.openDropdown === name ? null : name;
+    }
+
+    isDropdownOpen(name) {
+        return this.state.openDropdown === name;
+    }
+
+    closeDropdown() {
+        this.state.openDropdown = null;
     }
 
     childrenOf(lineId) {
@@ -92,8 +131,23 @@ class BaseAccountingFinancialReport extends Component {
         return true;
     }
 
+    hasNonZeroVisibleChild(line) {
+        return this.childrenOf(line.id).some((child) => {
+            const amount = Number(child.balance || 0);
+            return amount !== 0 || this.hasNonZeroVisibleChild(child);
+        });
+    }
+
     visibleLines() {
-        return this.state.lines.filter((line) => this.isVisible(line));
+        return this.state.lines.filter((line) => {
+            if (!this.isVisible(line)) {
+                return false;
+            }
+            if (!this.state.hideZero) {
+                return true;
+            }
+            return Number(line.balance || 0) !== 0 || this.hasNonZeroVisibleChild(line);
+        });
     }
 
     toggleLine(line) {
@@ -102,11 +156,128 @@ class BaseAccountingFinancialReport extends Component {
         }
     }
 
+    unfoldAll() {
+        const unfolded = {};
+        for (const line of this.state.lines) {
+            if (this.hasChildren(line)) {
+                unfolded[line.id] = true;
+            }
+        }
+        this.state.unfolded = unfolded;
+        this.closeDropdown();
+    }
+
+    async setTargetMove(targetMove) {
+        this.state.targetMove = targetMove;
+        this.closeDropdown();
+        await this.loadReport();
+    }
+
+    toggleHideZero() {
+        this.state.hideZero = !this.state.hideZero;
+    }
+
+    toggleHorizontalSplit() {
+        this.state.horizontalSplit = !this.state.horizontalSplit;
+    }
+
+    async selectDatePreset(preset) {
+        const date = new Date();
+        this.state.datePreset = preset;
+        if (preset === "today") {
+            this.state.dateTo = this.toISODate(date);
+        } else if (preset === "month_end") {
+            this.state.dateTo = this.toISODate(new Date(date.getFullYear(), date.getMonth() + 1, 0));
+        } else if (preset === "quarter_end") {
+            const quarterEndMonth = Math.floor(date.getMonth() / 3) * 3 + 2;
+            this.state.dateTo = this.toISODate(new Date(date.getFullYear(), quarterEndMonth + 1, 0));
+        } else if (preset === "year_end") {
+            this.state.dateTo = this.toISODate(new Date(date.getFullYear(), 11, 31));
+        } else if (preset === "specific") {
+            return;
+        }
+        this.closeDropdown();
+        await this.loadReport();
+    }
+
+    async onSpecificDateChange(ev) {
+        this.state.datePreset = "specific";
+        this.state.dateTo = ev.target.value;
+        await this.loadReport();
+    }
+
+    async onDateChange(ev) {
+        await this.onSpecificDateChange(ev);
+    }
+
+    setComparisonMode(mode) {
+        this.state.comparisonMode = mode;
+    }
+
+    setComparisonOrder(order) {
+        this.state.comparisonOrder = order;
+    }
+
+    async toggleJournal(journalId) {
+        const selected = [...this.state.selectedJournalIds];
+        const index = selected.indexOf(journalId);
+        if (index >= 0) {
+            selected.splice(index, 1);
+        } else {
+            selected.push(journalId);
+        }
+        this.state.selectedJournalIds = selected;
+        await this.loadReport();
+    }
+
+    async clearJournals() {
+        this.state.selectedJournalIds = [];
+        this.closeDropdown();
+        await this.loadReport();
+    }
+
+    isJournalSelected(journalId) {
+        return this.state.selectedJournalIds.includes(journalId);
+    }
+
+    setCurrencyFormat(format) {
+        this.state.currencyFormat = format;
+        this.closeDropdown();
+    }
+
+    currencyButtonLabel() {
+        const labels = {
+            full: "En .Ar",
+            ar: "En Ar",
+            kar: "En KAr",
+            mar: "En MAr",
+        };
+        return labels[this.state.currencyFormat] || "En .Ar";
+    }
+
+    comparisonButtonLabel() {
+        const labels = {
+            none: "% Comparaison",
+            previous_period: "Période précédente",
+            previous_year: "Exercice passé",
+            specific: "Date spécifique",
+        };
+        return labels[this.state.comparisonMode] || "% Comparaison";
+    }
+
+    dateButtonLabel() {
+        return `À la date du ${this.formatDate(this.state.dateTo)}`;
+    }
+
     formatAmount(value) {
-        const amount = Number(value || 0);
+        const rawAmount = Number(value || 0);
+        const format = this.state.currencyFormat;
+        const divisor = format === "kar" ? 1000 : format === "mar" ? 1000000 : 1;
+        const amount = rawAmount / divisor;
+        const digits = format === "full" ? 2 : 0;
         return amount.toLocaleString("fr-FR", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
+            minimumFractionDigits: digits,
+            maximumFractionDigits: digits,
         });
     }
 
@@ -116,6 +287,14 @@ class BaseAccountingFinancialReport extends Component {
         if ((line.level || 0) === 1) classes.push("bak-subsection");
         if (line.type === "account") classes.push("bak-account-line");
         if (line.total) classes.push("bak-total-line");
+        return classes.join(" ");
+    }
+
+    reportClass() {
+        const classes = ["o_bak_financial_report"];
+        if (this.state.horizontalSplit) {
+            classes.push("bak-horizontal-split");
+        }
         return classes.join(" ");
     }
 
@@ -131,20 +310,23 @@ class BaseAccountingFinancialReport extends Component {
         return `${Math.min((line.level || 0) * 24, 112)}px`;
     }
 
-    async onDateChange(ev) {
-        this.state.dateTo = ev.target.value;
-        await this.loadReport();
+    formatDate(value) {
+        if (!value) return "";
+        const parts = value.split("-");
+        if (parts.length !== 3) return value;
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
     }
 
-    async onTargetMoveChange(ev) {
-        this.state.targetMove = ev.target.value;
-        await this.loadReport();
+    toISODate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
     }
 
     printPdf() {
         this.action.doAction("base_accounting_kit.action_balance_sheet_report");
     }
-
 }
 
 BaseAccountingFinancialReport.template = "base_accounting_kit.FinancialReport";
