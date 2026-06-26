@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
+import logging
+
 from odoo import http, fields
 from odoo.http import request
+
+
+_logger = logging.getLogger(__name__)
 
 
 class FinancialReportController(http.Controller):
@@ -61,11 +66,9 @@ class FinancialReportController(http.Controller):
             lang=request.env.context.get('lang') or 'fr_FR',
         )
 
-        if report_config.get('line_model'):
-            raw_lines = request.env[report_config['line_model']].sudo().get_account_lines(data)
-        else:
-            raw_lines = wizard.get_account_lines(data)
-        lines = self._build_financial_report_lines(raw_lines, report_config)
+        raw_lines = wizard.get_account_lines(data)
+        self._log_cash_flow_raw_lines(report_config, report_name, report_xml_id, raw_lines)
+        lines = self._build_report_lines(raw_lines, report_config)
         custom_cash_data = self._get_custom_paid_totals_cash_data(
             company.id, date_from, date_to, journal_ids,
         ) if report_config.get('custom_cash_summary') else False
@@ -114,6 +117,7 @@ class FinancialReportController(http.Controller):
                     'Passif': 'PASSIF',
                     'PASSIF': 'PASSIF',
                 },
+                'line_builder': 'balance_sheet',
                 'section_rank': {'ACTIF': 0, 'PASSIF': 1},
             },
             'base_accounting_kit.account_financial_report_profitandloss0': {
@@ -122,6 +126,7 @@ class FinancialReportController(http.Controller):
                 'pdf_action_xml_id': 'base_accounting_kit.action_profit_and_loss_report',
                 'xlsx_action_xml_id': False,
                 'root_labels': {},
+                'line_builder': 'generic',
                 'section_rank': {},
             },
             'base_accounting_kit.account_financial_report_cash_flow0': {
@@ -130,7 +135,7 @@ class FinancialReportController(http.Controller):
                 'pdf_action_xml_id': 'base_accounting_kit.action_cash_flow_report',
                 'xlsx_action_xml_id': False,
                 'wizard_model': 'cash.flow.report',
-                'line_model': 'report.base_accounting_kit.report_cash_flow',
+                'line_builder': 'cash_flow',
                 'custom_cash_summary': True,
                 'root_labels': {},
                 'section_rank': {},
@@ -189,6 +194,20 @@ class FinancialReportController(http.Controller):
         if len(selected) == 1:
             return selected.display_name or selected.name
         return '%s journaux' % len(selected)
+
+    def _log_cash_flow_raw_lines(self, report_config, report_name, report_xml_id, raw_lines):
+        if report_config.get('xml_id') != 'base_accounting_kit.account_financial_report_cash_flow0':
+            return
+        _logger.info(
+            'Cash Flow HTML raw_lines diagnostic: report_name=%s report_xml_id=%s count=%s',
+            report_name, report_xml_id, len(raw_lines),
+        )
+        for line in raw_lines:
+            _logger.info(
+                'Cash Flow raw line: name=%s type=%s balance=%s r_id=%s a_id=%s parent=%s',
+                line.get('name'), line.get('type'), line.get('balance'),
+                line.get('r_id'), line.get('a_id'), line.get('parent'),
+            )
 
     def _get_custom_paid_totals_cash_data(self, company_id, date_from, date_to, journal_ids):
         if not self._is_model_available('account.daily.balance'):
@@ -393,7 +412,21 @@ class FinancialReportController(http.Controller):
         needle = ' '.join(values).lower()
         return 'regule' in needle or 'régul' in needle or 'regul' in needle
 
-    def _build_financial_report_lines(self, raw_lines, report_config):
+    def _build_report_lines(self, raw_lines, report_config):
+        builder = report_config.get('line_builder')
+        if builder == 'balance_sheet':
+            return self._build_balance_sheet_lines(raw_lines, report_config)
+        if builder == 'cash_flow':
+            return self._build_cash_flow_lines(raw_lines, report_config)
+        return self._build_generic_financial_lines(raw_lines, report_config)
+
+    def _build_balance_sheet_lines(self, raw_lines, report_config):
+        return self._build_generic_financial_lines(raw_lines, report_config)
+
+    def _build_cash_flow_lines(self, raw_lines, report_config):
+        return self._build_generic_financial_lines(raw_lines, report_config)
+
+    def _build_generic_financial_lines(self, raw_lines, report_config):
         """Normalize get_account_lines output for the interactive HTML view."""
         root_report = report_config['record']
         root_line = next(
@@ -410,7 +443,10 @@ class FinancialReportController(http.Controller):
         normalized = []
         by_id = {}
         for order, raw_line in enumerate(raw_lines):
-            line_id = raw_line.get('a_id') if raw_line.get('type') == 'account' else raw_line.get('id')
+            if raw_line.get('type') == 'account':
+                line_id = raw_line.get('id') or raw_line.get('a_id')
+            else:
+                line_id = raw_line.get('id')
             line_id = line_id or '%s_line_%s' % (report_config['xml_id'], order)
             if not line_id or line_id in skipped_ids:
                 continue
@@ -428,6 +464,8 @@ class FinancialReportController(http.Controller):
                 'type': raw_line.get('type') or 'report',
                 'total': raw_line.get('type') == 'report',
                 'account_type': raw_line.get('account_type'),
+                'r_id': raw_line.get('r_id'),
+                'a_id': raw_line.get('a_id'),
                 '_order': order,
                 'unique_key': '%s-%s-%s' % (report_config['xml_id'], line_id, order),
             }

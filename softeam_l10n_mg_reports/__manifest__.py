@@ -29,8 +29,13 @@
     'depends': [
         'softeam_l10n_mg',
         'account',
+        'base_accounting_kit',
     ],
     'data': [
+        'security/ir.model.access.csv',
+        'views/financial_report_wizard_views.xml',
+        'views/financial_report_menus.xml',
+        'reports/financial_report_templates.xml',
         'data/tax_report_data.xml',
         'data/balance_sheet_data.xml',
         'data/income_statement_data.xml',

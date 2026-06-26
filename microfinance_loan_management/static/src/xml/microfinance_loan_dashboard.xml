@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="microfinance_loan_management.MicrofinanceLoanDashboard">
+        <div class="o_microfinance_dashboard">
+            <div class="o_microfinance_dashboard__header">
+                <div>
+                    <p class="o_microfinance_dashboard__eyebrow">Microfinance</p>
+                    <h1>Tableau de bord</h1>
+                </div>
+                <div class="o_microfinance_dashboard__badge">Odoo 17 Community</div>
+            </div>
+
+            <t t-if="state.loading">
+                <div class="o_microfinance_dashboard__loading">Chargement du tableau de bord...</div>
+            </t>
+            <t t-elif="state.error">
+                <div class="o_microfinance_dashboard__empty">Impossible de charger les donnees du dashboard.</div>
+            </t>
+            <t t-else="">
+                <div class="o_microfinance_kpi_grid">
+                    <article class="o_microfinance_kpi o_microfinance_kpi--blue">
+                        <span>Credits actifs</span>
+                        <strong t-esc="formatNumber(kpis.active_loan_count)"/>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--green">
+                        <span>Montant decaisse</span>
+                        <strong t-esc="formatMoney(kpis.disbursed_amount)"/>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--cyan">
+                        <span>Encours total</span>
+                        <strong t-esc="formatMoney(kpis.outstanding_amount)"/>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--red">
+                        <span>Impayes</span>
+                        <strong t-esc="formatMoney(kpis.overdue_amount)"/>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--amber">
+                        <span>Taux defaut</span>
+                        <strong t-esc="formatPercent(kpis.default_rate)"/>
+                    </article>
+                </div>
+
+                <div class="o_microfinance_dashboard__grid">
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Credits par etat</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="stateChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel o_microfinance_panel--wide">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Decaissements par mois</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="disbursementChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel o_microfinance_panel--wide">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Remboursements vs impayes</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="repaymentChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Taux de defaut</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="defaultRateChart"/>
+                        <div class="o_microfinance_risk">
+                            <span><i class="o_microfinance_risk__dot o_microfinance_risk__dot--low"/>Low <b t-esc="state.data.risk_distribution.low"/></span>
+                            <span><i class="o_microfinance_risk__dot o_microfinance_risk__dot--medium"/>Medium <b t-esc="state.data.risk_distribution.medium"/></span>
+                            <span><i class="o_microfinance_risk__dot o_microfinance_risk__dot--high"/>High <b t-esc="state.data.risk_distribution.high"/></span>
+                        </div>
+                    </section>
+                </div>
+
+                <section class="o_microfinance_panel o_microfinance_panel--table">
+                    <div class="o_microfinance_panel__title">
+                        <h2>Credits les plus en retard</h2>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle o_microfinance_table">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Credit</th>
+                                    <th class="text-end">Montant du</th>
+                                    <th class="text-end">Jours de retard</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="topOverdueLoans" t-as="line" t-key="line.loan">
+                                    <td t-esc="line.partner"/>
+                                    <td t-esc="line.loan"/>
+                                    <td class="text-end" t-esc="formatMoney(line.amount_due)"/>
+                                    <td class="text-end" t-esc="formatNumber(line.days_overdue)"/>
+                                </tr>
+                                <tr t-if="!topOverdueLoans.length">
+                                    <td colspan="4" class="text-center text-muted py-4">Aucun credit en retard.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </t>
+        </div>
+    </t>
+</templates>

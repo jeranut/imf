@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_softeam_l10n_mg_financial_report_wizard_readonly,softeam.l10n.mg.financial.report.wizard,model_softeam_l10n_mg_financial_report_wizard,account.group_account_readonly,1,1,1,1

@@ -1,7 +1,7 @@
 {
     'name': 'Comptabilité Malagasy (PCG 2005)',
     'version': '17.0.1.0.0',
-    'category': 'Accounting/Localizations',
+    'category': 'Accounting/Localizations/Account Charts',
     'summary': 'Compta Malagasy Comptabilité Madagascar PCG 2005 — Plan comptable, TVA, positions fiscales, Ariary MGA, l10n_mg',
     'description': "<h2>Comptabilit&eacute; Malagasy (PCG 2005)</h2>"
                    "<p>Localisation comptable Malagasy bas&eacute;e sur le <strong>Plan Comptable G&eacute;n&eacute;ral 2005</strong> (d&eacute;cret n&deg;2004-272 du 18 f&eacute;vrier 2004), coh&eacute;rent avec les normes IAS/IFRS.</p>"
@@ -20,6 +20,8 @@
                    "<p><a href=\"mailto:support@softeamg.com\">support@softeamg.com</a> &middot; <a href=\"https://softeamg.com\">softeamg.com</a></p>",
     'author': 'SofteamG',
     'website': 'https://softeamg.com',
+    'icon': '/account/static/description/l10n.png',
+    'countries': ['mg'],
     'support': 'support@softeamg.com',
     'license': 'LGPL-3',
     'depends': [

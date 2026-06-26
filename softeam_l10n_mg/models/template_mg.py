@@ -8,7 +8,7 @@ class AccountChartTemplate(models.AbstractModel):
     @template('mg')
     def _get_mg_template_data(self):
         return {
-            'name': 'Madagascar - PCG 2005',
+            'name': 'PCG 2005',
             'parent': None,
             'code_digits': '6',
             'use_anglo_saxon': False,

@@ -1,0 +1,193 @@
+.o_microfinance_dashboard {
+    min-height: 100%;
+    padding: 24px;
+    background: #f8fafc;
+    color: #0f172a;
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 20px;
+
+        h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+    }
+
+    &__eyebrow {
+        margin: 0 0 4px;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    &__badge {
+        padding: 8px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #475569;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    &__loading,
+    &__empty {
+        padding: 40px;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: #ffffff;
+        color: #475569;
+        text-align: center;
+    }
+
+    &__grid {
+        display: grid;
+        grid-template-columns: minmax(260px, 0.9fr) minmax(320px, 1.35fr);
+        gap: 16px;
+        align-items: stretch;
+    }
+}
+
+.o_microfinance_kpi_grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(150px, 1fr));
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.o_microfinance_kpi {
+    min-height: 112px;
+    padding: 18px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+
+    span {
+        display: block;
+        margin-bottom: 14px;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    strong {
+        display: block;
+        color: #0f172a;
+        font-size: 25px;
+        line-height: 1.15;
+        overflow-wrap: anywhere;
+    }
+
+    &--blue { border-top: 4px solid #2563eb; }
+    &--green { border-top: 4px solid #10b981; }
+    &--cyan { border-top: 4px solid #0891b2; }
+    &--red { border-top: 4px solid #ef4444; }
+    &--amber { border-top: 4px solid #f59e0b; }
+}
+
+.o_microfinance_panel {
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+
+    &--wide {
+        min-height: 380px;
+    }
+
+    &--table {
+        margin-top: 16px;
+    }
+
+    &__title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+
+        h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+    }
+}
+
+.o_microfinance_chart {
+    min-height: 280px;
+}
+
+.o_microfinance_risk {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 16px;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+
+    span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    &__dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+
+        &--low { background: #10b981; }
+        &--medium { background: #f59e0b; }
+        &--high { background: #ef4444; }
+    }
+}
+
+.o_microfinance_table {
+    margin-bottom: 0;
+
+    thead th {
+        color: #64748b;
+        font-size: 12px;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+}
+
+@media (max-width: 1200px) {
+    .o_microfinance_kpi_grid {
+        grid-template-columns: repeat(2, minmax(160px, 1fr));
+    }
+
+    .o_microfinance_dashboard__grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .o_microfinance_dashboard {
+        padding: 16px;
+
+        &__header {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+    }
+
+    .o_microfinance_kpi_grid {
+        grid-template-columns: 1fr;
+    }
+}
