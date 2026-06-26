@@ -24,14 +24,23 @@ class BaseAccountingFinancialReport extends Component {
         this.toggleJournal = this.toggleJournal.bind(this);
         this.setTargetMove = this.setTargetMove.bind(this);
         this.setCurrencyFormat = this.setCurrencyFormat.bind(this);
+        this.toggleBudget = this.toggleBudget.bind(this);
+        this.exportXlsx = this.exportXlsx.bind(this);
+        this.printPdf = this.printPdf.bind(this);
 
+        const action = this.props.action || {};
+        const params = action.params || {};
+        const context = action.context || {};
         const today = this.toISODate(new Date());
 
         this.state = useState({
             loading: true,
             error: null,
-            reportName: "Balance Sheet",
-            title: "Bilan",
+            reportName: params.report_name || context.report_name || "Balance Sheet",
+            reportXmlId: params.report_xml_id || context.report_xml_id || "base_accounting_kit.account_financial_report_balancesheet0",
+            title: params.report_title || context.report_title || "Bilan",
+            pdfActionXmlId: params.pdf_action_xml_id || context.pdf_action_xml_id || "base_accounting_kit.action_balance_sheet_report",
+            xlsxActionXmlId: params.xlsx_action_xml_id || context.xlsx_action_xml_id || false,
             dateTo: today,
             datePreset: "today",
             targetMove: "posted",
@@ -49,6 +58,7 @@ class BaseAccountingFinancialReport extends Component {
             comparisonOrder: "desc",
             hideZero: false,
             horizontalSplit: false,
+            showBudget: false,
         });
 
         onWillStart(async () => {
@@ -63,6 +73,7 @@ class BaseAccountingFinancialReport extends Component {
         try {
             const result = await this.rpc("/base_accounting_kit/financial_report/data", {
                 report_name: this.state.reportName,
+                report_xml_id: this.state.reportXmlId,
                 date_to: this.state.dateTo,
                 target_move: this.state.targetMove,
                 journal_ids: this.state.selectedJournalIds,
@@ -73,6 +84,11 @@ class BaseAccountingFinancialReport extends Component {
                 this.state.lines = [];
             } else {
                 this.state.lines = result.lines || [];
+                this.state.reportName = result.report_name || this.state.reportName;
+                this.state.reportXmlId = result.report_xml_id || this.state.reportXmlId;
+                this.state.title = result.report_title || this.state.title;
+                this.state.pdfActionXmlId = result.pdf_action_xml_id || this.state.pdfActionXmlId;
+                this.state.xlsxActionXmlId = result.xlsx_action_xml_id || this.state.xlsxActionXmlId;
                 this.state.currency = result.currency || "";
                 this.state.companyName = result.company_name || "";
                 this.state.targetMoveLabel = result.target_move_label || "";
@@ -82,7 +98,7 @@ class BaseAccountingFinancialReport extends Component {
                 this.initializeUnfolded();
             }
         } catch (error) {
-            this.state.error = "Impossible de charger le bilan.";
+            this.state.error = "Impossible de charger le rapport.";
             this.state.lines = [];
         }
 
@@ -179,6 +195,10 @@ class BaseAccountingFinancialReport extends Component {
 
     toggleHorizontalSplit() {
         this.state.horizontalSplit = !this.state.horizontalSplit;
+    }
+
+    toggleBudget() {
+        this.state.showBudget = !this.state.showBudget;
     }
 
     async selectDatePreset(preset) {
@@ -325,7 +345,15 @@ class BaseAccountingFinancialReport extends Component {
     }
 
     printPdf() {
-        this.action.doAction("base_accounting_kit.action_balance_sheet_report");
+        if (this.state.pdfActionXmlId) {
+            this.action.doAction(this.state.pdfActionXmlId);
+        }
+    }
+
+    exportXlsx() {
+        if (this.state.xlsxActionXmlId) {
+            this.action.doAction(this.state.xlsxActionXmlId);
+        }
     }
 }
 

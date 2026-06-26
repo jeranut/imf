@@ -6,7 +6,8 @@
 
             <div class="bak-toolbar">
                 <div class="bak-left">
-                    <button class="btn btn-primary" t-on-click="printPdf">PDF</button>
+                    <button class="btn btn-primary" t-on-click="this.printPdf">PDF</button>
+                    <button class="btn btn-secondary" t-att-disabled="!state.xlsxActionXmlId" t-on-click="this.exportXlsx">XLSX</button>
                     <strong t-esc="state.title"/>
                 </div>
 
@@ -80,6 +81,13 @@
                     </div>
 
                     <div class="bak-dropdown">
+                        <button t-att-class="state.showBudget ? 'bak-filter-button active' : 'bak-filter-button'" type="button" t-on-click="this.toggleBudget">
+                            <i class="fa fa-bar-chart"/>
+                            <span>Budget</span>
+                        </button>
+                    </div>
+
+                    <div class="bak-dropdown">
                         <button class="bak-filter-button" type="button" t-on-click="() => this.toggleDropdown('currency')">
                             <i class="fa fa-bar-chart"/>
                             <span t-esc="currencyButtonLabel()"/>
@@ -98,7 +106,7 @@
                 <div class="bak-page">
 
                     <div class="bak-report-title">
-                        <h2>Bilan</h2>
+                        <h2 t-esc="state.title"/>
                         <div t-esc="state.companyName"/>
                     </div>
 
@@ -121,8 +129,9 @@
                         </div>
                     </div>
 
-                    <div class="bak-columns">
+                    <div t-att-class="state.showBudget ? 'bak-columns bak-with-budget' : 'bak-columns'">
                         <div>Libellé</div>
+                        <div t-if="state.showBudget">Budget</div>
                         <div>Solde</div>
                     </div>
 
@@ -135,8 +144,8 @@
                     </t>
 
                     <t t-if="!state.loading and !state.error">
-                        <t t-foreach="visibleLines()" t-as="line" t-key="line.id">
-                            <div t-att-class="lineClass(line)">
+                        <t t-foreach="visibleLines()" t-as="line" t-key="line.unique_key || line_index">
+                            <div t-att-class="lineClass(line) + (state.showBudget ? ' bak-with-budget' : '')">
                                 <div class="bak-line-name" t-att-style="'padding-left:' + paddingLeft(line)">
                                     <button t-if="hasChildren(line)"
                                             class="bak-caret"
@@ -148,6 +157,7 @@
                                     <span t-if="!hasChildren(line)" class="bak-caret-spacer"/>
                                     <span t-esc="line.name"/>
                                 </div>
+                                <div t-if="state.showBudget" class="bak-line-budget">-</div>
                                 <div t-att-class="amountClass(line)">
                                     <t t-esc="formatAmount(line.balance)"/>
                                 </div>

@@ -218,8 +218,20 @@
     font-weight: 700;
 }
 
-.bak-columns div:last-child {
+.bak-columns div:not(:first-child) {
     text-align: right;
+}
+
+.bak-columns.bak-with-budget,
+.bak-line.bak-with-budget {
+    grid-template-columns: minmax(0, 1fr) 150px 180px;
+}
+
+.bak-line-budget {
+    padding-right: 12px;
+    text-align: right;
+    color: #9aa0a6;
+    font-variant-numeric: tabular-nums;
 }
 
 .bak-line {
@@ -324,5 +336,10 @@
     .bak-columns,
     .bak-line {
         grid-template-columns: minmax(0, 1fr) 120px;
+    }
+
+    .bak-columns.bak-with-budget,
+    .bak-line.bak-with-budget {
+        grid-template-columns: minmax(0, 1fr) 90px 120px;
     }
 }

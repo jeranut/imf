@@ -4,28 +4,24 @@ from odoo.http import request
 
 
 class FinancialReportController(http.Controller):
-    """JSON controller for the Balance Sheet HTML view."""
+    """JSON controller for interactive financial report HTML views."""
 
     @http.route('/base_accounting_kit/financial_report/data', type='json', auth='user')
-    def financial_report_data(self, report_name='Balance Sheet', date_to=None,
-                              target_move='posted', journal_ids=None, **kwargs):
+    def financial_report_data(self, report_name='Balance Sheet', report_xml_id=None,
+                              date_to=None, target_move='posted', journal_ids=None,
+                              **kwargs):
         company = request.env.company
         date_to = date_to or fields.Date.context_today(request.env.user)
         journal_ids = self._sanitize_journal_ids(journal_ids, company)
         journals = self._get_company_journals(company)
 
-        account_report = request.env.ref(
-            'base_accounting_kit.account_financial_report_balancesheet0',
-            raise_if_not_found=False,
-        )
+        report_config = self._get_report_config(report_name, report_xml_id)
+        account_report = report_config and report_config.get('record')
 
         if not account_report:
             return {
                 'success': False,
-                'error': (
-                    'Rapport Bilan introuvable : '
-                    'base_accounting_kit.account_financial_report_balancesheet0'
-                ),
+                'error': 'Rapport financier introuvable.',
                 'lines': [],
             }
 
@@ -57,11 +53,15 @@ class FinancialReportController(http.Controller):
         )
 
         raw_lines = wizard.get_account_lines(data)
-        lines = self._build_balance_sheet_lines(raw_lines)
+        lines = self._build_financial_report_lines(raw_lines, report_config)
 
         return {
             'success': True,
-            'report_name': 'Bilan',
+            'report_name': account_report.name,
+            'report_title': report_config['title'],
+            'report_xml_id': report_config['xml_id'],
+            'pdf_action_xml_id': report_config['pdf_action_xml_id'],
+            'xlsx_action_xml_id': report_config.get('xlsx_action_xml_id'),
             'date_to': str(date_to),
             'currency': company.currency_id.symbol or '',
             'company_name': company.name,
@@ -79,6 +79,58 @@ class FinancialReportController(http.Controller):
             'selected_journal_ids': journal_ids,
             'lines': lines,
         }
+
+    def _get_report_config(self, report_name=None, report_xml_id=None):
+        reports = {
+            'base_accounting_kit.account_financial_report_balancesheet0': {
+                'aliases': {'Balance Sheet', 'Bilan'},
+                'title': 'Bilan',
+                'pdf_action_xml_id': 'base_accounting_kit.action_balance_sheet_report',
+                'xlsx_action_xml_id': False,
+                'root_labels': {
+                    'Assets': 'ACTIF',
+                    'Asset': 'ACTIF',
+                    'Les Atouts': 'ACTIF',
+                    'LES ATOUTS': 'ACTIF',
+                    'Immobilisations': 'ACTIF',
+                    'Liability': 'PASSIF',
+                    'Passif': 'PASSIF',
+                    'PASSIF': 'PASSIF',
+                },
+                'section_rank': {'ACTIF': 0, 'PASSIF': 1},
+            },
+            'base_accounting_kit.account_financial_report_profitandloss0': {
+                'aliases': {'Profit and Loss', 'Compte de résultat'},
+                'title': 'Compte de résultat',
+                'pdf_action_xml_id': 'base_accounting_kit.action_profit_and_loss_report',
+                'xlsx_action_xml_id': False,
+                'root_labels': {},
+                'section_rank': {},
+            },
+        }
+
+        requested_xml_id = report_xml_id
+        if requested_xml_id and not requested_xml_id.startswith('base_accounting_kit.'):
+            requested_xml_id = 'base_accounting_kit.%s' % requested_xml_id
+
+        config = reports.get(requested_xml_id)
+        if not config:
+            report_name = (report_name or '').strip()
+            for xml_id, candidate in reports.items():
+                if report_name in candidate['aliases']:
+                    requested_xml_id = xml_id
+                    config = candidate
+                    break
+
+        if not config:
+            requested_xml_id = 'base_accounting_kit.account_financial_report_balancesheet0'
+            config = reports[requested_xml_id]
+
+        record = request.env.ref(requested_xml_id, raise_if_not_found=False)
+        if not record:
+            return None
+
+        return dict(config, xml_id=requested_xml_id, record=record)
 
     def _get_company_journals(self, company):
         return request.env['account.journal'].sudo().search([
@@ -110,41 +162,14 @@ class FinancialReportController(http.Controller):
             return selected.display_name or selected.name
         return '%s journaux' % len(selected)
 
-    def _build_balance_sheet_lines(self, raw_lines):
-        """Normalize get_account_lines output for the Balance Sheet HTML view."""
-        report_refs = {
-            'root': request.env.ref(
-                'base_accounting_kit.account_financial_report_balancesheet0',
-                raise_if_not_found=False,
-            ),
-            'assets': request.env.ref(
-                'base_accounting_kit.account_financial_report_assets0',
-                raise_if_not_found=False,
-            ),
-            'liability': request.env.ref(
-                'base_accounting_kit.account_financial_report_liabilitysum0',
-                raise_if_not_found=False,
-            ),
-            'debts': request.env.ref(
-                'base_accounting_kit.account_financial_report_liability0',
-                raise_if_not_found=False,
-            ),
-            'result': request.env.ref(
-                'base_accounting_kit.account_financial_report_profitloss_toreport0',
-                raise_if_not_found=False,
-            ),
-        }
-        ref_ids = {
-            key: report.id
-            for key, report in report_refs.items()
-            if report
-        }
-
+    def _build_financial_report_lines(self, raw_lines, report_config):
+        """Normalize get_account_lines output for the interactive HTML view."""
+        root_report = report_config['record']
         root_line = next(
             (
                 line for line in raw_lines
                 if line.get('type') == 'report'
-                and line.get('r_id') == ref_ids.get('root')
+                and line.get('r_id') == root_report.id
             ),
             None,
         )
@@ -165,13 +190,14 @@ class FinancialReportController(http.Controller):
             line = {
                 'id': line_id,
                 'parent': parent,
-                'name': self._balance_sheet_display_name(raw_line, ref_ids),
+                'name': self._financial_report_display_name(raw_line, report_config),
                 'balance': round(raw_line.get('balance') or 0.0, 2),
                 'level': 0,
                 'type': raw_line.get('type') or 'report',
                 'total': raw_line.get('type') == 'report',
                 'account_type': raw_line.get('account_type'),
                 '_order': order,
+                'unique_key': '%s-%s-%s' % (report_config['xml_id'], line_id, order),
             }
             normalized.append(line)
             by_id[line_id] = line
@@ -191,17 +217,14 @@ class FinancialReportController(http.Controller):
         for line in normalized:
             line['level'] = compute_level(line)
 
-        return self._order_balance_sheet_lines(normalized)
+        return self._order_financial_report_lines(normalized, report_config)
 
-    def _order_balance_sheet_lines(self, lines):
+    def _order_financial_report_lines(self, lines, report_config):
         by_parent = {}
         for line in lines:
             by_parent.setdefault(line.get('parent') or False, []).append(line)
 
-        section_rank = {
-            'ACTIF': 0,
-            'PASSIF': 1,
-        }
+        section_rank = report_config.get('section_rank') or {}
 
         def sort_key(line):
             if not line.get('parent'):
@@ -220,30 +243,13 @@ class FinancialReportController(http.Controller):
             line.pop('_order', None)
         return ordered
 
-    def _balance_sheet_display_name(self, line, ref_ids):
+    def _financial_report_display_name(self, line, report_config):
         if line.get('type') == 'account':
             return line.get('name') or ''
 
-        report_id = line.get('r_id')
-        if report_id == ref_ids.get('assets'):
-            return 'ACTIF'
-        if report_id == ref_ids.get('liability'):
-            return 'PASSIF'
-        if report_id == ref_ids.get('debts'):
-            return 'Dettes'
-        if report_id == ref_ids.get('result'):
-            return "Résultat de l’exercice"
-
         name = (line.get('name') or '').strip()
         labels = {
-            'Assets': 'ACTIF',
-            'Asset': 'ACTIF',
-            'Les Atouts': 'ACTIF',
-            'LES ATOUTS': 'ACTIF',
-            'Immobilisations': 'ACTIF',
-            'Liability': 'PASSIF',
-            'Passif': 'PASSIF',
-            'PASSIF': 'PASSIF',
+            **(report_config.get('root_labels') or {}),
             'Fixed Assets': 'Immobilisations',
             'Non-current Assets': 'Actifs non courants',
             'Current Assets': 'Actif circulant',
@@ -261,6 +267,7 @@ class FinancialReportController(http.Controller):
             'Other Income': 'Autres produits',
             'Cost of Revenue': 'Coût des ventes',
             'Gross Profit': 'Marge brute',
+            'Income': 'Produits',
             'Expense': 'Charges',
             'Expenses': 'Charges d’exploitation',
             'Depreciation': 'Dotations aux amortissements',
