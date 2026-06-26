@@ -447,7 +447,7 @@ msgstr "Après"
 #: model:ir.ui.menu,name:base_accounting_kit.menu_aged_trial_balance
 #: model_terms:ir.ui.view,arch_db:base_accounting_kit.report_agedpartnerbalance
 msgid "Aged Partner Balance"
-msgstr "Solde du partenaire âgé"
+msgstr "Balance âgée des tiers"
 
 #. module: base_accounting_kit
 #: model:ir.model,name:base_accounting_kit.model_report_base_accounting_kit_report_agedpartnerbalance
@@ -684,7 +684,7 @@ msgstr "Reconnaissance des actifs / revenus"
 #: model_terms:ir.ui.view,arch_db:base_accounting_kit.view_account_asset_asset_purchase_tree
 #: model_terms:ir.ui.view,arch_db:base_accounting_kit.view_account_asset_category_search
 msgid "Assets"
-msgstr "Les atouts"
+msgstr "Immobilisations"
 
 #. module: base_accounting_kit
 #: model:ir.actions.act_window,name:base_accounting_kit.action_asset_asset_report
@@ -735,7 +735,7 @@ msgstr "Nombre de pièces jointes"
 #. module: base_accounting_kit
 #: model:ir.ui.menu,name:base_accounting_kit.account_reports_audit
 msgid "Audit Reports"
-msgstr "Rapports d'audit"
+msgstr "Contrôle comptable"
 
 #. module: base_accounting_kit
 #: model:ir.model.fields,field_description:base_accounting_kit.field_account_asset_category__open_asset
@@ -776,7 +776,7 @@ msgstr "Bilan"
 #. module: base_accounting_kit
 #: model:ir.ui.menu,name:base_accounting_kit.account_bank_book_menu
 msgid "Bank Book"
-msgstr "Livret de banque"
+msgstr "Journal de banque"
 
 #. module: base_accounting_kit
 #: model:ir.actions.act_window,name:base_accounting_kit.action_account_bank_book_view
@@ -833,7 +833,7 @@ msgstr ""
 #. module: base_accounting_kit
 #: model:ir.ui.menu,name:base_accounting_kit.account_cash_book_menu
 msgid "Cash Book"
-msgstr "Livre de caisse"
+msgstr "Journal de caisse"
 
 #. module: base_accounting_kit
 #: model:ir.actions.act_window,name:base_accounting_kit.action_account_cash_book_view
@@ -856,7 +856,7 @@ msgstr "Rapport de flux de trésorerie"
 #: model:ir.actions.report,name:base_accounting_kit.action_report_cash_flow
 #: model:ir.ui.menu,name:base_accounting_kit.menu_account_cash_flow_report
 msgid "Cash Flow Statement"
-msgstr "État des flux de trésorerie"
+msgstr "Tableau des flux de trésorerie"
 
 #. module: base_accounting_kit
 #: model:ir.model.fields,field_description:base_accounting_kit.field_account_account__cash_flow_type
@@ -1236,7 +1236,7 @@ msgstr ""
 #. module: base_accounting_kit
 #: model:ir.ui.menu,name:base_accounting_kit.account_reports_daily_reports
 msgid "Daily Reports"
-msgstr ""
+msgstr "États comptables"
 
 #. module: base_accounting_kit
 #. openerp-web
@@ -1305,7 +1305,7 @@ msgstr ""
 #. module: base_accounting_kit
 #: model:ir.ui.menu,name:base_accounting_kit.account_day_book_menu
 msgid "Day Book"
-msgstr ""
+msgstr "Journal des écritures"
 
 #. module: base_accounting_kit
 #: model:ir.actions.report,name:base_accounting_kit.day_book_pdf_report
@@ -1856,7 +1856,7 @@ msgstr ""
 #: model:ir.actions.report,name:base_accounting_kit.action_report_general_ledger
 #: model:ir.ui.menu,name:base_accounting_kit.menu_general_ledger
 msgid "General Ledger"
-msgstr "Grand livre général"
+msgstr "Grand livre"
 
 #. module: base_accounting_kit
 #: model:ir.model,name:base_accounting_kit.model_account_report_general_ledger
@@ -1889,7 +1889,7 @@ msgstr "Générer des entrées récurrentes"
 #. module: base_accounting_kit
 #: model:ir.ui.menu,name:base_accounting_kit.account_reports_generic_statements
 msgid "Generic Statements"
-msgstr "Déclarations génériques"
+msgstr "États financiers"
 
 #. module: base_accounting_kit
 #: model:ir.model.fields,help:base_accounting_kit.field_followup_line__sequence
@@ -2262,7 +2262,7 @@ msgstr "Journaux"
 #: model:ir.actions.report,name:base_accounting_kit.action_report_journal
 #: model:ir.ui.menu,name:base_accounting_kit.menu_print_journal
 msgid "Journals Audit"
-msgstr ""
+msgstr "Contrôle des journaux"
 
 #. module: base_accounting_kit
 #. openerp-web
@@ -2812,7 +2812,7 @@ msgstr "Partenaire"
 #: model:ir.ui.menu,name:base_accounting_kit.menu_partner_ledger
 #: model_terms:ir.ui.view,arch_db:base_accounting_kit.report_partnerledger
 msgid "Partner Ledger"
-msgstr "Grand livre des partenaires"
+msgstr "Grand livre auxiliaire"
 
 #. module: base_accounting_kit
 #: model:ir.model,name:base_accounting_kit.model_report_base_accounting_kit_report_partnerledger
@@ -2822,7 +2822,7 @@ msgstr "Rapport du grand livre des partenaires"
 #. module: base_accounting_kit
 #: model:ir.ui.menu,name:base_accounting_kit.account_reports_partner
 msgid "Partner Reports"
-msgstr ""
+msgstr "États des tiers"
 
 #. module: base_accounting_kit
 #: model:ir.model.fields,field_description:base_accounting_kit.field_account_aged_trial_balance__result_selection
@@ -2999,7 +2999,7 @@ msgstr "Bénéfice (perte) à déclarer"
 #: model:ir.actions.act_window,name:base_accounting_kit.action_profit_and_loss_report
 #: model:ir.ui.menu,name:base_accounting_kit.account_financial_reports_profit_loss
 msgid "Profit and Loss"
-msgstr "Profit et perte"
+msgstr "Compte de résultat"
 
 #. module: base_accounting_kit
 #: model:ir.model.fields,field_description:base_accounting_kit.field_account_asset_asset__prorata
@@ -3435,7 +3435,7 @@ msgstr "Taxe incluse dans le prix"
 #: model:ir.ui.menu,name:base_accounting_kit.menu_tax_report
 #: model_terms:ir.ui.view,arch_db:base_accounting_kit.report_tax
 msgid "Tax Report"
-msgstr "Rapport fiscal"
+msgstr "Déclaration de TVA"
 
 #. module: base_accounting_kit
 #: model:ir.actions.act_window,name:base_accounting_kit.action_account_tax_report
@@ -3710,7 +3710,7 @@ msgstr "Transaction"
 #: model:ir.actions.report,name:base_accounting_kit.action_report_trial_balance
 #: model:ir.ui.menu,name:base_accounting_kit.menu_Balance_report
 msgid "Trial Balance"
-msgstr "Balance de vérification"
+msgstr "Balance générale"
 
 #. module: base_accounting_kit
 #: model:ir.model,name:base_accounting_kit.model_account_balance_report
