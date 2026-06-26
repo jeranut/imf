@@ -307,6 +307,88 @@
     color: #777;
 }
 
+.bak-cash-summary {
+    margin: 18px 0 20px;
+    border: 1px solid #d8dadd;
+    border-radius: 4px;
+    background: #fbfbfc;
+}
+
+.bak-cash-summary-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid #e1e4e8;
+}
+
+.bak-cash-summary-header span {
+    color: #6b7280;
+    font-size: 12px;
+}
+
+.bak-cash-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: #e1e4e8;
+}
+
+.bak-cash-summary-grid > div {
+    min-width: 0;
+    padding: 10px 12px;
+    background: #fff;
+}
+
+.bak-cash-summary-grid span {
+    display: block;
+    color: #6b7280;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.bak-cash-summary-grid strong {
+    display: block;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+
+.bak-cash-detail-table {
+    border-top: 1px solid #e1e4e8;
+}
+
+.bak-cash-detail-head,
+.bak-cash-detail-row {
+    display: grid;
+    grid-template-columns: 120px minmax(0, 1fr) repeat(3, 120px);
+    gap: 8px;
+    align-items: center;
+    padding: 8px 12px;
+}
+
+.bak-cash-detail-head {
+    color: #374151;
+    font-size: 12px;
+    font-weight: 700;
+    background: #f3f4f6;
+}
+
+.bak-cash-detail-row {
+    border-top: 1px solid #edf0f2;
+    font-size: 12.5px;
+}
+
+.bak-cash-detail-head div:nth-child(n + 3),
+.bak-cash-detail-row div:nth-child(n + 3) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.bak-cash-detail-row small {
+    display: block;
+    color: #6b7280;
+}
+
 @media (max-width: 768px) {
     .bak-toolbar,
     .bak-report-meta {
@@ -341,5 +423,18 @@
     .bak-columns.bak-with-budget,
     .bak-line.bak-with-budget {
         grid-template-columns: minmax(0, 1fr) 90px 120px;
+    }
+
+    .bak-cash-summary-header,
+    .bak-cash-summary-grid,
+    .bak-cash-detail-head,
+    .bak-cash-detail-row {
+        display: block;
+    }
+
+    .bak-cash-detail-head div,
+    .bak-cash-detail-row div {
+        margin-bottom: 4px;
+        text-align: left !important;
     }
 }

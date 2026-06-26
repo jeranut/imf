@@ -51,6 +51,7 @@ class BaseAccountingFinancialReport extends Component {
             currency: "",
             currencyFormat: "full",
             companyName: "",
+            customCashData: false,
             lines: [],
             unfolded: {},
             openDropdown: null,
@@ -82,6 +83,7 @@ class BaseAccountingFinancialReport extends Component {
             if (!result.success) {
                 this.state.error = result.error || "Erreur de chargement du rapport.";
                 this.state.lines = [];
+                this.state.customCashData = false;
             } else {
                 this.state.lines = result.lines || [];
                 this.state.reportName = result.report_name || this.state.reportName;
@@ -91,6 +93,7 @@ class BaseAccountingFinancialReport extends Component {
                 this.state.xlsxActionXmlId = result.xlsx_action_xml_id || this.state.xlsxActionXmlId;
                 this.state.currency = result.currency || "";
                 this.state.companyName = result.company_name || "";
+                this.state.customCashData = result.custom_cash_data || false;
                 this.state.targetMoveLabel = result.target_move_label || "";
                 this.state.journalsLabel = result.journals_label || "Tous les journaux";
                 this.state.journals = result.journals || [];
@@ -100,6 +103,7 @@ class BaseAccountingFinancialReport extends Component {
         } catch (error) {
             this.state.error = "Impossible de charger le rapport.";
             this.state.lines = [];
+            this.state.customCashData = false;
         }
 
         this.state.loading = false;

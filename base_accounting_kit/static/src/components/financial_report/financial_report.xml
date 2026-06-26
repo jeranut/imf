@@ -129,6 +129,60 @@
                         </div>
                     </div>
 
+                    <div t-if="state.customCashData" class="bak-cash-summary">
+                        <div class="bak-cash-summary-header">
+                            <strong t-esc="state.customCashData.title"/>
+                            <span>Lecture opérationnelle hors calcul comptable</span>
+                        </div>
+                        <div class="bak-cash-summary-grid">
+                            <div>
+                                <span>Solde initial</span>
+                                <strong t-esc="formatAmount(state.customCashData.opening_balance)"/>
+                            </div>
+                            <div>
+                                <span>Flux entrants opérationnels</span>
+                                <strong t-esc="formatAmount(state.customCashData.total_cash_in)"/>
+                            </div>
+                            <div>
+                                <span>Flux sortants opérationnels</span>
+                                <strong t-esc="formatAmount(state.customCashData.total_cash_out)"/>
+                            </div>
+                            <div>
+                                <span>Flux net</span>
+                                <strong t-esc="formatAmount(state.customCashData.net_cash_flow)"/>
+                            </div>
+                            <div>
+                                <span>Ajustements / corrections</span>
+                                <strong t-esc="formatAmount(state.customCashData.adjustments)"/>
+                            </div>
+                            <div>
+                                <span>Solde de trésorerie journalier</span>
+                                <strong t-esc="formatAmount(state.customCashData.closing_balance)"/>
+                            </div>
+                        </div>
+                        <div t-if="state.customCashData.details.length" class="bak-cash-detail-table">
+                            <div class="bak-cash-detail-head">
+                                <div>Source</div>
+                                <div>Journal / paiement</div>
+                                <div>Entrants</div>
+                                <div>Sortants</div>
+                                <div>Net</div>
+                            </div>
+                            <t t-foreach="state.customCashData.details" t-as="detail" t-key="detail.key || detail_index">
+                                <div class="bak-cash-detail-row">
+                                    <div t-esc="detail.source"/>
+                                    <div>
+                                        <span t-esc="detail.journal"/>
+                                        <small t-if="detail.payment_type" t-esc="detail.payment_type"/>
+                                    </div>
+                                    <div t-esc="formatAmount(detail.cash_in)"/>
+                                    <div t-esc="formatAmount(detail.cash_out)"/>
+                                    <div t-esc="formatAmount(detail.balance)"/>
+                                </div>
+                            </t>
+                        </div>
+                    </div>
+
                     <div t-att-class="state.showBudget ? 'bak-columns bak-with-budget' : 'bak-columns'">
                         <div>Libellé</div>
                         <div t-if="state.showBudget">Budget</div>
@@ -136,7 +190,7 @@
                     </div>
 
                     <t t-if="state.loading">
-                        <div class="bak-loading">Chargement du bilan...</div>
+                        <div class="bak-loading">Chargement du rapport...</div>
                     </t>
 
                     <t t-if="state.error">
