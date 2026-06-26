@@ -8,6 +8,7 @@ class BaseAccountingFinancialReport extends Component {
     setup() {
         this.rpc = useService("rpc");
         this.action = useService("action");
+        this.toggleLine = this.toggleLine.bind(this);
 
         const today = new Date().toISOString().slice(0, 10);
 
@@ -18,6 +19,8 @@ class BaseAccountingFinancialReport extends Component {
             title: "Bilan",
             dateTo: today,
             targetMove: "posted",
+            targetMoveLabel: "Pièces comptabilisées",
+            journalsLabel: "Tous les journaux",
             currency: "",
             companyName: "",
             lines: [],
@@ -47,6 +50,9 @@ class BaseAccountingFinancialReport extends Component {
                 this.state.lines = result.lines || [];
                 this.state.currency = result.currency || "";
                 this.state.companyName = result.company_name || "";
+                this.state.targetMoveLabel = result.target_move_label || "";
+                this.state.journalsLabel = result.journals_label || "";
+                this.initializeUnfolded();
             }
         } catch (error) {
             this.state.error = "Impossible de charger le bilan.";
@@ -54,6 +60,46 @@ class BaseAccountingFinancialReport extends Component {
         }
 
         this.state.loading = false;
+    }
+
+    initializeUnfolded() {
+        const unfolded = {};
+        for (const line of this.state.lines) {
+            if ((line.level || 0) <= 2) {
+                unfolded[line.id] = true;
+            }
+        }
+        this.state.unfolded = unfolded;
+    }
+
+    childrenOf(lineId) {
+        return this.state.lines.filter((line) => line.parent === lineId);
+    }
+
+    hasChildren(line) {
+        return this.state.lines.some((candidate) => candidate.parent === line.id);
+    }
+
+    isVisible(line) {
+        let parentId = line.parent;
+        while (parentId) {
+            if (!this.state.unfolded[parentId]) {
+                return false;
+            }
+            const parent = this.state.lines.find((candidate) => candidate.id === parentId);
+            parentId = parent ? parent.parent : false;
+        }
+        return true;
+    }
+
+    visibleLines() {
+        return this.state.lines.filter((line) => this.isVisible(line));
+    }
+
+    toggleLine(line) {
+        if (this.hasChildren(line)) {
+            this.state.unfolded[line.id] = !this.state.unfolded[line.id];
+        }
     }
 
     formatAmount(value) {
@@ -65,15 +111,24 @@ class BaseAccountingFinancialReport extends Component {
     }
 
     lineClass(line) {
-        const classes = ["bak-line"];
-        if (line.level <= 1) classes.push("bak-section");
-        if (line.level === 2) classes.push("bak-subsection");
-        if (line.balance < 0) classes.push("bak-negative");
+        const classes = ["bak-line", `bak-level-${line.level || 0}`];
+        if ((line.level || 0) === 0) classes.push("bak-section");
+        if ((line.level || 0) === 1) classes.push("bak-subsection");
+        if (line.type === "account") classes.push("bak-account-line");
+        if (line.total) classes.push("bak-total-line");
+        return classes.join(" ");
+    }
+
+    amountClass(line) {
+        const amount = Number(line.balance || 0);
+        const classes = ["bak-line-amount"];
+        if (amount < 0) classes.push("bak-negative");
+        if (amount === 0) classes.push("bak-zero");
         return classes.join(" ");
     }
 
     paddingLeft(line) {
-        return `${Math.min((line.level || 1) * 16, 80)}px`;
+        return `${Math.min((line.level || 0) * 24, 112)}px`;
     }
 
     async onDateChange(ev) {
@@ -86,9 +141,10 @@ class BaseAccountingFinancialReport extends Component {
         await this.loadReport();
     }
 
-    exportXlsx() {
-        alert("Export XLSX à connecter dans le prochain lot.");
+    printPdf() {
+        this.action.doAction("base_accounting_kit.action_balance_sheet_report");
     }
+
 }
 
 BaseAccountingFinancialReport.template = "base_accounting_kit.FinancialReport";

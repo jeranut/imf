@@ -7,8 +7,7 @@
             <div class="bak-toolbar">
                 <div class="bak-left">
                     <button class="btn btn-primary" t-on-click="printPdf">PDF</button>
-                    <button class="btn btn-secondary" t-on-click="exportXlsx">XLSX</button>
-                    <strong>Bilan</strong>
+                    <strong t-esc="state.title"/>
                 </div>
 
                 <div class="bak-right">
@@ -21,27 +20,38 @@
                         <option value="posted">Pièces comptabilisées</option>
                         <option value="all">Toutes les pièces</option>
                     </select>
-
-                    <button class="btn btn-light">En Ar</button>
                 </div>
-            </div>
-
-            <div class="bak-alert">
-                Il y a pièces non comptabilisées avant ou au cours de cette période.
             </div>
 
             <div class="bak-page-wrapper">
                 <div class="bak-page">
 
-                    <div class="bak-report-header">
-                        <div></div>
-                        <div class="bak-date-box">
-                            À la date du <t t-esc="state.dateTo"/>
+                    <div class="bak-report-title">
+                        <h2>Bilan</h2>
+                        <div t-esc="state.companyName"/>
+                    </div>
+
+                    <div class="bak-report-meta">
+                        <div>
+                            <span>Date</span>
+                            <strong t-esc="state.dateTo"/>
+                        </div>
+                        <div>
+                            <span>Journaux</span>
+                            <strong t-esc="state.journalsLabel"/>
+                        </div>
+                        <div>
+                            <span>Pièces</span>
+                            <strong t-esc="state.targetMoveLabel"/>
+                        </div>
+                        <div>
+                            <span>Devise</span>
+                            <strong t-esc="state.currency"/>
                         </div>
                     </div>
 
                     <div class="bak-columns">
-                        <div></div>
+                        <div>Libellé</div>
                         <div>Solde</div>
                     </div>
 
@@ -54,13 +64,20 @@
                     </t>
 
                     <t t-if="!state.loading and !state.error">
-                        <t t-foreach="state.lines" t-as="line" t-key="line.id">
+                        <t t-foreach="visibleLines()" t-as="line" t-key="line.id">
                             <div t-att-class="lineClass(line)">
                                 <div class="bak-line-name" t-att-style="'padding-left:' + paddingLeft(line)">
-                                    <span t-if="line.level > 1" class="bak-caret">›</span>
+                                    <button t-if="hasChildren(line)"
+                                            class="bak-caret"
+                                            type="button"
+                                            t-on-click="() => toggleLine(line)">
+                                        <t t-if="state.unfolded[line.id]">▾</t>
+                                        <t t-else="">▸</t>
+                                    </button>
+                                    <span t-if="!hasChildren(line)" class="bak-caret-spacer"/>
                                     <span t-esc="line.name"/>
                                 </div>
-                                <div class="bak-line-amount">
+                                <div t-att-class="amountClass(line)">
                                     <t t-esc="formatAmount(line.balance)"/>
                                 </div>
                             </div>
