@@ -113,6 +113,8 @@
                         <field name="overdue_amount" readonly="1"/>
                         <field name="overdue_installment_count" readonly="1"/>
                         <field name="risk_score" widget="progressbar" readonly="1"/>
+                        <field name="provision_amount" readonly="1"/>
+                        <field name="provision_posted_amount" readonly="1"/>
                     </group>
                     <notebook>
                         <page string="Échéancier"><field name="installment_ids" readonly="1"/></page>

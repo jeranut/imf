@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Tranches indicatives (à ajuster par l'institution selon sa politique
+         de provisionnement) : société principale uniquement, chaque société
+         additionnelle configure les siennes dans Microfinance > Configuration
+         > Règles de provisionnement. -->
+    <record id="provision_rule_0_30" model="microfinance.provision.rule">
+        <field name="company_id" ref="base.main_company"/>
+        <field name="min_days">0</field>
+        <field name="max_days">30</field>
+        <field name="provision_rate">0.0</field>
+    </record>
+    <record id="provision_rule_31_60" model="microfinance.provision.rule">
+        <field name="company_id" ref="base.main_company"/>
+        <field name="min_days">31</field>
+        <field name="max_days">60</field>
+        <field name="provision_rate">25.0</field>
+    </record>
+    <record id="provision_rule_61_90" model="microfinance.provision.rule">
+        <field name="company_id" ref="base.main_company"/>
+        <field name="min_days">61</field>
+        <field name="max_days">90</field>
+        <field name="provision_rate">50.0</field>
+    </record>
+    <record id="provision_rule_91_180" model="microfinance.provision.rule">
+        <field name="company_id" ref="base.main_company"/>
+        <field name="min_days">91</field>
+        <field name="max_days">180</field>
+        <field name="provision_rate">75.0</field>
+    </record>
+    <record id="provision_rule_181_plus" model="microfinance.provision.rule">
+        <field name="company_id" ref="base.main_company"/>
+        <field name="min_days">181</field>
+        <field name="max_days">0</field>
+        <field name="provision_rate">100.0</field>
+    </record>
+</odoo>

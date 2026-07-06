@@ -45,6 +45,14 @@ class MicrofinanceLoanProduct(models.Model):
         'account.account', string='Compte pertes sur créances irrécouvrables',
         help='Requis uniquement au moment de la radiation d\'un crédit de ce produit.',
     )
+    provision_account_id = fields.Many2one(
+        'account.account', string='Compte de charge provision',
+        help='Requis uniquement au moment de comptabiliser une provision pour ce produit.',
+    )
+    provision_contra_account_id = fields.Many2one(
+        'account.account', string='Compte de contrepartie provision (bilan)',
+        help='Requis uniquement au moment de comptabiliser une provision pour ce produit.',
+    )
     company_id = fields.Many2one('res.company', default=lambda self: self.env.company, required=True)
     currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)
     active = fields.Boolean(default=True)

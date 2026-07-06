@@ -1,6 +1,9 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_microfinance_loan_product_user,loan.product.user,model_microfinance_loan_product,group_microfinance_user,1,0,0,0
 access_microfinance_loan_product_manager,loan.product.manager,model_microfinance_loan_product,group_microfinance_manager,1,1,1,1
+access_microfinance_provision_rule_user,provision.rule.user,model_microfinance_provision_rule,group_microfinance_user,1,0,0,0
+access_microfinance_provision_rule_manager,provision.rule.manager,model_microfinance_provision_rule,group_microfinance_manager,1,1,1,1
+access_microfinance_provision_rule_finance,provision.rule.finance,model_microfinance_provision_rule,group_microfinance_finance,1,0,0,0
 access_microfinance_loan_user,loan.user,model_microfinance_loan,group_microfinance_user,1,1,1,0
 access_microfinance_loan_manager,loan.manager,model_microfinance_loan,group_microfinance_manager,1,1,1,1
 access_microfinance_loan_finance,loan.finance,model_microfinance_loan,group_microfinance_finance,1,1,0,0

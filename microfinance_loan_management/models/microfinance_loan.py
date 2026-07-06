@@ -50,6 +50,8 @@ class MicrofinanceLoan(models.Model):
     overdue_amount = fields.Monetary(compute='_compute_totals', store=True)
     overdue_installment_count = fields.Integer(compute='_compute_totals', store=True)
     risk_score = fields.Integer(compute='_compute_risk_score', store=True)
+    provision_amount = fields.Monetary(compute='_compute_provision', store=True, string='Provision requise')
+    provision_posted_amount = fields.Monetary(copy=False, readonly=True, default=0.0, string='Provision comptabilisée')
     scoring_profile_id = fields.Many2one(
         'microfinance.scoring.profile',
         string='Profil de scoring',
@@ -109,23 +111,44 @@ class MicrofinanceLoan(models.Model):
             loan.overdue_amount = sum(overdue.mapped('residual_amount'))
             loan.overdue_installment_count = len(overdue)
 
+    def _get_max_overdue_days(self):
+        self.ensure_one()
+        today = fields.Date.context_today(self)
+        overdue = self.installment_ids.filtered(lambda l: l.state == 'overdue')
+        max_days = 0
+        for line in overdue:
+            if line.due_date:
+                max_days = max(max_days, (today - line.due_date).days)
+        return max_days
+
     @api.depends('state', 'overdue_installment_count', 'overdue_amount', 'installment_ids.due_date', 'installment_ids.state', 'payment_ids.amount')
     def _compute_risk_score(self):
-        today = fields.Date.context_today(self)
         for loan in self:
             if loan.state == 'written_off':
                 # Written-off loans are no longer part of the active risk/PAR calculations.
                 loan.risk_score = 0
                 continue
-            overdue = loan.installment_ids.filtered(lambda l: l.state == 'overdue')
-            max_days = 0
-            for line in overdue:
-                if line.due_date:
-                    max_days = max(max_days, (today - line.due_date).days)
+            max_days = loan._get_max_overdue_days()
             amount_ratio = loan.loan_amount and (loan.overdue_amount / loan.loan_amount) or 0.0
             partial_count = len(loan.installment_ids.filtered(lambda l: l.state == 'partial'))
             score = min(100, int(loan.overdue_installment_count * 15 + max_days * 1.2 + amount_ratio * 40 + partial_count * 5))
             loan.risk_score = max(score, 0)
+
+    @api.depends('state', 'balance_total', 'company_id', 'installment_ids.due_date', 'installment_ids.state')
+    def _compute_provision(self):
+        Rule = self.env['microfinance.provision.rule']
+        for loan in self:
+            if loan.state not in ('active', 'defaulted'):
+                loan.provision_amount = 0.0
+                continue
+            max_days = loan._get_max_overdue_days()
+            rule = Rule.search([
+                ('company_id', '=', loan.company_id.id),
+                ('min_days', '<=', max_days),
+                '|', ('max_days', '=', 0), ('max_days', '>=', max_days),
+            ], order='min_days desc', limit=1)
+            rate = rule.provision_rate if rule else 0.0
+            loan.provision_amount = min(loan.balance_total * rate / 100.0, loan.balance_total)
 
     def _compute_counts(self):
         for loan in self:
@@ -517,6 +540,75 @@ class MicrofinanceLoan(models.Model):
             'date': write_off_date, 'reason': reason, 'move': move.name,
         })
         return move
+
+    def _get_misc_operations_journal(self):
+        self.ensure_one()
+        journal = self.env['account.journal'].search([
+            ('company_id', '=', self.company_id.id), ('type', '=', 'general'),
+        ], limit=1)
+        if not journal:
+            raise UserError(_('Aucun journal des opérations diverses n\'est configuré pour cette société.'))
+        return journal
+
+    def _prepare_provision_move(self, delta, as_of_date):
+        self.ensure_one()
+        product = self.product_id
+        if not product.provision_account_id or not product.provision_contra_account_id:
+            raise UserError(_(
+                'Configurez les comptes de provision (charge et contrepartie) pour le produit %s '
+                'avant de comptabiliser une provision.'
+            ) % product.display_name)
+        journal = self._get_misc_operations_journal()
+        amount = abs(delta)
+        if delta > 0:
+            label = _('Dotation provision %s') % self.name
+            charge_vals = {'debit': amount, 'credit': 0.0}
+            contra_vals = {'debit': 0.0, 'credit': amount}
+        else:
+            label = _('Reprise provision %s') % self.name
+            charge_vals = {'debit': 0.0, 'credit': amount}
+            contra_vals = {'debit': amount, 'credit': 0.0}
+        return {
+            'date': as_of_date,
+            'journal_id': journal.id,
+            'ref': label,
+            'microfinance_loan_id': self.id,
+            'line_ids': [
+                (0, 0, dict(charge_vals, name=label, partner_id=self.partner_id.id, account_id=product.provision_account_id.id)),
+                (0, 0, dict(contra_vals, name=label, partner_id=self.partner_id.id, account_id=product.provision_contra_account_id.id)),
+            ],
+        }
+
+    def action_post_provisions(self, as_of_date=None):
+        """Comptabilise, pour chaque crédit actif ou en défaut de la sélection, le delta entre la
+        provision déjà comptabilisée (provision_posted_amount) et la provision requise recalculée
+        (provision_amount). Une écriture dédiée par crédit : plus facile à tracer/auditer une par
+        une dans le chatter qu'une écriture consolidée, au prix d'un nombre d'écritures plus élevé
+        lors d'une campagne mensuelle sur tout le portefeuille."""
+        as_of_date = as_of_date or fields.Date.context_today(self)
+        for loan in self.filtered(lambda l: l.state in ('active', 'defaulted')):
+            delta = loan.provision_amount - loan.provision_posted_amount
+            if abs(delta) < 0.01:
+                continue
+            move = self.env['account.move'].with_context(
+                default_loan_id=False,
+                default_loan_line_id=False,
+            ).create(loan._prepare_provision_move(delta, as_of_date))
+            move.action_post()
+            old_amount = loan.provision_posted_amount
+            loan.write({'provision_posted_amount': loan.provision_amount})
+            loan.message_post(body=_(
+                'Provision ajustée au %(date)s : %(old)s → %(new)s (delta %(delta)s). Écriture : %(move)s'
+            ) % {
+                'date': as_of_date, 'old': '%.2f' % old_amount, 'new': '%.2f' % loan.provision_amount,
+                'delta': '%.2f' % delta, 'move': move.name,
+            })
+        return True
+
+    @api.model
+    def cron_post_provisions(self):
+        self.search([('state', 'in', ('active', 'defaulted'))]).action_post_provisions()
+        return True
 
     def action_open_payment_wizard(self):
         self.ensure_one()
