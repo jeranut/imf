@@ -68,6 +68,7 @@
                     <button name="action_generate_schedule" string="Générer échéancier" type="object" invisible="state not in ('draft','submitted','manager_validated','finance_validated','approved')"/>
                     <button name="action_disburse" string="Activer / Décaisser" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
                     <button name="action_open_payment_wizard" string="Enregistrer remboursement" type="object" class="btn-primary" invisible="state not in ('active','defaulted')"/>
+                    <button name="action_reschedule" string="Rééchelonner" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'active'"/>
                     <button name="action_mark_default" string="Marquer en défaut" type="object" invisible="state != 'active'"/>
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
                     <button name="action_recompute_risk" string="Recalculer risque" type="object"/>
@@ -98,6 +99,7 @@
                             <field name="manager_id"/>
                             <field name="finance_user_id"/>
                             <field name="collection_agent_id"/>
+                            <field name="reschedule_count"/>
                         </group>
                     </group>
                     <group string="Résumé financier">

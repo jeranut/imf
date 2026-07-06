@@ -75,6 +75,7 @@ class MicrofinanceLoan(models.Model):
     payment_count = fields.Integer(compute='_compute_counts')
     visit_count = fields.Integer(compute='_compute_counts')
     move_count = fields.Integer(compute='_compute_counts')
+    reschedule_count = fields.Integer(default=0, copy=False, readonly=True, tracking=True)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -301,6 +302,95 @@ class MicrofinanceLoan(models.Model):
                 }))
                 remaining -= principal
             loan.write({'installment_ids': vals})
+        return True
+
+    def action_reschedule(self):
+        self.ensure_one()
+        if self.state != 'active':
+            raise UserError(_('Le rééchelonnement n\'est possible que pour un crédit actif.'))
+        if not self.installment_ids.filtered(lambda inst: inst.state != 'paid'):
+            raise UserError(_('Aucune échéance restante à rééchelonner.'))
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Rééchelonner le crédit'),
+            'res_model': 'microfinance.loan.reschedule.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_loan_id': self.id},
+        }
+
+    def _reschedule_installments(self, new_term, new_first_due_date):
+        self.ensure_one()
+        unpaid = self.installment_ids.filtered(lambda inst: inst.state != 'paid').sorted(lambda inst: (inst.due_date, inst.sequence))
+        if not unpaid:
+            raise UserError(_('Aucune échéance restante à rééchelonner.'))
+
+        def _summary(installments):
+            return '<br/>'.join(
+                _('Échéance %s : %s - Capital %.2f, Intérêt %.2f, Solde %.2f') % (
+                    inst.sequence, inst.due_date, inst.principal_amount, inst.interest_amount, inst.residual_amount
+                ) for inst in installments
+            ) or _('Aucune échéance')
+
+        old_summary = _summary(unpaid)
+        remaining_principal = sum(inst.principal_amount - inst.paid_principal for inst in unpaid)
+        # Only arrears (overdue or partially paid) carry interest/penalty already accrued and due;
+        # plain future pending installments have their interest recomputed fresh below.
+        arrears = unpaid.filtered(lambda inst: inst.state in ('overdue', 'partial'))
+        carried_interest = sum(inst.interest_amount - inst.paid_interest for inst in arrears)
+        carried_penalty = sum(inst.penalty_amount - inst.paid_penalty for inst in arrears)
+        term = new_term or len(unpaid)
+        original_first_due_date = unpaid[0].due_date
+        start = new_first_due_date or original_first_due_date
+        delta = self._period_delta()
+
+        # Partially paid installments keep their history (paid_* amounts stay untouched for
+        # accounting purposes) but are locked to what was actually collected; the outstanding
+        # part is carried into the new schedule instead. Untouched installments are dropped.
+        partially_paid = unpaid.filtered(lambda inst: inst.paid_principal or inst.paid_interest or inst.paid_penalty)
+        for inst in partially_paid:
+            inst.write({
+                'principal_amount': inst.paid_principal,
+                'interest_amount': inst.paid_interest,
+                'penalty_amount': inst.paid_penalty,
+            })
+        (unpaid - partially_paid).unlink()
+        vals = []
+        sequence = 1
+        if carried_interest > 0.01 or carried_penalty > 0.01:
+            # Interest/penalty already accrued before the reschedule keep their original due date,
+            # in a dedicated line so they are not lost nor merged with the new principal schedule.
+            vals.append((0, 0, {
+                'sequence': sequence,
+                'due_date': original_first_due_date,
+                'principal_amount': 0.0,
+                'interest_amount': max(carried_interest, 0.0),
+                'penalty_amount': max(carried_penalty, 0.0),
+            }))
+            sequence += 1
+        principal = remaining_principal / term
+        remaining = remaining_principal
+        for idx in range(term):
+            if self.interest_method == 'flat':
+                interest = remaining_principal * (self.interest_rate / 100.0) / 12.0
+            else:
+                interest = remaining * (self.interest_rate / 100.0) / 12.0
+            due_date = start + (delta * idx)
+            vals.append((0, 0, {
+                'sequence': sequence,
+                'due_date': due_date,
+                'principal_amount': principal,
+                'interest_amount': interest,
+            }))
+            remaining -= principal
+            sequence += 1
+        self.write({'installment_ids': vals})
+        new_summary = _summary(self.installment_ids.filtered(lambda inst: inst.state != 'paid'))
+        self.reschedule_count += 1
+        self.message_post(body=_(
+            'Rééchelonnement n°%(count)s effectué.<br/>Ancien échéancier restant :<br/>%(old)s'
+            '<br/><br/>Nouvel échéancier :<br/>%(new)s'
+        ) % {'count': self.reschedule_count, 'old': old_summary, 'new': new_summary})
         return True
 
     def _prepare_disbursement_move(self):

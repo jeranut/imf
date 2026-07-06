@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_reschedule_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.reschedule.wizard.form</field>
+        <field name="model">microfinance.loan.reschedule.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Rééchelonnement">
+                <group>
+                    <field name="loan_id" readonly="1"/>
+                    <field name="currency_id" invisible="1"/>
+                    <field name="new_term"/>
+                    <field name="new_first_due_date"/>
+                </group>
+                <footer>
+                    <button name="action_apply" string="Rééchelonner" type="object" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
