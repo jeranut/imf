@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+    <!-- Action REGULE (placée AVANT utilisation dans le form) -->
+    <record id="action_regule_wizard" model="ir.actions.act_window">
+        <field name="name">Veuillez choisir la référence de l’écriture à régulariser</field>
+        <field name="res_model">regule.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <record id="action_cloturer_balance_wizard" model="ir.actions.act_window">
+        <field name="name">Êtes-vous sûr de vouloir clôturer le journal ?</field>
+        <field name="type">ir.actions.act_window</field>
+        <field name="res_model">cloturer.balance.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <record id="view_cloturer_balance_wizard_form" model="ir.ui.view">
+        <field name="name">cloturer.balance.wizard.form</field>
+        <field name="model">cloturer.balance.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Clôture du journal">
+                <sheet>
+                    <footer>
+                        <button string="Confirmer" type="object" name="action_confirm_cloture" class="btn-primary"/>
+                        <button string="Annuler" special="cancel" class="btn-secondary"/>
+                    </footer>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+
+    <record id="view_account_daily_balance_form" model="ir.ui.view">
+        <field name="name">account.daily.balance.form</field>
+        <field name="model">account.daily.balance</field>
+        <field name="arch" type="xml">
+            <form string="Totaux Journaliers">
+                <header>
+                    <field name="etat" invisible="1"/>
+                    <field name="solde_initial_defini" invisible="1"/>
+                    <field name="show_advance_payment_button" invisible="1"/>
+                    <button name="action_open_init_wizard"
+                            type="object"
+                            string="INITIALISER LE SOLDE"
+                            class="btn-primary oe_highlight"
+                            invisible="solde_initial_defini or etat == 'cloturer'"/>
+                    <button name="action_update_totals_wizard"
+                            type="object"
+                            string="AJOUT RECETTE DU JOUR"
+                            class="btn-primary"/>
+                    <button name="action_open_advance_payment_wizard"
+                            type="object"
+                            string="AVANCE SUR PAYMENT"
+                            class="btn-primary"
+                            invisible="etat == 'cloturer' or not show_advance_payment_button"/>
+                    <button name="action_update_totals"
+                            type="object"
+                            string="UPDATE"
+                            class="btn-success"/>
+
+                    <button name="%(action_regule_wizard)d"
+                            type="action"
+                            string="REGULE"
+                            class="btn-danger oe_highlight"
+                            context="{'default_balance_id': active_id}"/>
+                    <button name="%(action_cloturer_balance_wizard)d"
+                            type="action"
+                            string="CLOTURER"
+                            class="btn-warning"
+                            context="{'default_balance_id': active_id}"/>
+                    <button name="%(action_report_account_daily_balance)d"
+                            type="action"
+                            string="IMPRIMER"
+                            class="btn-secondary"/>
+                    <button name="action_reouvrir"
+                            type="object"
+                            string="RÉOUVRIR"
+                            class="btn-secondary"
+                            invisible="etat != 'cloturer'"
+                            groups="custom_paid_totals.group_paid_totals_manager,account.group_account_manager,base.group_system"/>
+
+                </header>
+
+                <sheet>
+                    <field name="company_currency_id" invisible="1"/>
+                    <div class="o_paidtotals_summary_grid">
+                        <div class="o_paidtotals_summary_item">
+                            <span>Date</span>
+                            <strong><field name="date" nolabel="1" readonly="1"/></strong>
+                        </div>
+                        <div class="o_paidtotals_summary_item">
+                            <span>Company</span>
+                            <strong><field name="company_id" nolabel="1" readonly="1"/></strong>
+                        </div>
+                        <div class="o_paidtotals_summary_item">
+                            <span>Ancien solde</span>
+                            <strong>
+                                <field name="ancien_solde" nolabel="1" readonly="1"
+                                       widget="monetary"
+                                       options="{'currency_field': 'company_currency_id'}"/>
+                            </strong>
+                            <span class="badge badge-warning" invisible="solde_initial_defini">
+                                Non défini
+                            </span>
+                        </div>
+                        <div class="o_paidtotals_summary_item">
+                            <span>Total Décaissements</span>
+                            <strong>
+                                <field name="total_debit" nolabel="1" readonly="1"
+                                       widget="monetary"
+                                       options="{'currency_field': 'company_currency_id'}"/>
+                            </strong>
+                        </div>
+                        <div class="o_paidtotals_summary_item">
+                            <span>Total Encaissements</span>
+                            <strong>
+                                <field name="total_credit" nolabel="1" readonly="1"
+                                       widget="monetary"
+                                       options="{'currency_field': 'company_currency_id'}"/>
+                            </strong>
+                        </div>
+                        <div class="o_paidtotals_summary_item">
+                            <span>Nouveau solde</span>
+                            <strong>
+                                <field name="nouveau_solde" nolabel="1" readonly="1"
+                                       widget="monetary"
+                                       options="{'currency_field': 'company_currency_id'}"/>
+                            </strong>
+                        </div>
+                        <div class="o_paidtotals_summary_item" invisible="not closing_move_id">
+                            <span>Écriture de clôture</span>
+                            <strong><field name="closing_move_id" nolabel="1" readonly="1"/></strong>
+                        </div>
+                    </div>
+
+                    <field name="show_lines" invisible="1"/>
+                    <field name="show_lines"
+                           widget="daily_balance_dashboard"
+                           class="daily-balance-dashboard-field"
+                           nolabel="1"
+                           readonly="1"/>
+
+                    <separator string="Détails du jour"/>
+
+                    <field name="line_ids"
+                           nolabel="1"
+                           domain="[('balance_id.date', '=', date),('company_id', '=', company_id)]"
+                           modifiers='{"invisible": [["show_lines", "=", false]]}'>
+
+                        <tree create="false" edit="false" delete="false" default_order="id asc"
+                              decoration-danger="libelle == 'REGULE'"
+                              options="{'no_open': True}"> <!--  Ligne REGULE en rouge -->
+                            <!-- 🏷 Badge REGULÉ affiché en rouge -->
+                            <field name="regule_badge"
+                                   widget="badge"
+                                   string=""
+                                   decoration-danger="regule_badge == 'REGULE'"
+                                   width="50"/>
+
+                            <field name="id" string="ID" width="40"/>
+                            <field name="categorie" string="Catégorie" width="100"/>
+                            <field name="reference"/>
+                            <field name="payment_date"/>
+                            <field name="journal_id"/>
+                            <field name="libelle"/>
+                            <field name="payment"/>
+                            <field name="debit"/>
+                            <field name="credit"/>
+                        </tree>
+                        <form string="Détails (Lecture seule)" create="false" edit="false">
+                            <group>
+                                <h3>Lecture seule</h3>
+                            </group>
+                        </form>
+                    </field>
+
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_account_daily_balance_tree" model="ir.ui.view">
+        <field name="name">account.daily.balance.tree</field>
+        <field name="model">account.daily.balance</field>
+        <field name="arch" type="xml">
+            <tree string="Totaux Journaliers">
+                <field name="date"/>
+                <field name="company_id"/>
+                <field name="ancien_solde" widget="monetary" options="{'currency_field': 'company_currency_id'}"
+                       class="o_field_number"/>
+                <field name="total_debit" widget="monetary" options="{'currency_field': 'company_currency_id'}"
+                       class="o_field_number"/>
+                <field name="total_credit" widget="monetary" options="{'currency_field': 'company_currency_id'}"
+                       class="o_field_number"/>
+                <field name="nouveau_solde" widget="monetary" options="{'currency_field': 'company_currency_id'}"
+                       class="o_field_number"/>
+                <!-- Badge coloré pour l'état -->
+                <field name="etat" widget="badge"
+                       options="{'badge_success': ['ouvert'], 'badge_danger': ['cloturer']}"/>
+            </tree>
+
+        </field>
+    </record>
+
+    <record id="view_account_daily_balance_line_dashboard_tree" model="ir.ui.view">
+        <field name="name">account.daily.balance.line.dashboard.tree</field>
+        <field name="model">account.daily.balance.line</field>
+        <field name="arch" type="xml">
+            <tree string="Documents d'origine" create="false" edit="false" delete="false">
+                <field name="balance_id"/>
+                <field name="reference"/>
+                <field name="libelle"/>
+                <field name="move_id" string="Facture d'origine"/>
+                <field name="payment_id" string="Paiement d'origine"/>
+                <field name="expense_id" string="Dépense d'origine"/>
+                <field name="journal_id"/>
+                <field name="payment_date"/>
+                <field name="debit"/>
+                <field name="credit"/>
+            </tree>
+        </field>
+    </record>
+
+
+    <!-- Wizard recette -->
+    <record id="view_update_totals_wizard_form" model="ir.ui.view">
+        <field name="name">update.totals.wizard.form</field>
+        <field name="model">update.totals.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Veuillez entrer la description et la référence de la recette et le montant">
+                <field name="balance_id" invisible="1"/>
+                <group>
+                    <field name="libelle" placeholder="Ex: RECETTE"/>
+                    <field name="recette"/>
+                </group>
+                <footer>
+                    <button string="Confirmer" type="object" name="action_confirm" class="btn-primary"/>
+                    <button string="Annuler" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Action to open wizard recette -->
+    <record id="action_update_totals_wizard" model="ir.actions.act_window">
+        <field name="name">Wizard Update Totals</field>
+        <field name="res_model">update.totals.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="context">{'default_balance_id': active_id}</field>
+    </record>
+
+    <!-- View REGULE Wizard -->
+    <record id="view_regule_wizard_form" model="ir.ui.view">
+        <field name="name">regule.wizard.form</field>
+        <field name="model">regule.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Réguler la ligne">
+                <field name="balance_id" invisible="1"/>
+                <field name="company_id" invisible="1"/>
+                <group>
+                    <field name="reference_id"
+                           string="Référence"
+                           domain="[('balance_id', '=', balance_id), ('company_id', '=', company_id)]"
+                           options="{'no_create': True, 'no_create_edit': True}"/>
+                    <field name="montant" readonly="1"/>
+                </group>
+                <footer>
+                    <button string="Confirmer" type="object" name="action_confirm_regule" class="btn-primary"/>
+                    <button string="Annuler" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+
+    <!-- Wizard réouverture (Cas B : mouvement de clôture existant) -->
+    <record id="view_reopen_balance_wizard_form" model="ir.ui.view">
+        <field name="name">reopen.balance.wizard.form</field>
+        <field name="model">reopen.balance.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Réouvrir la balance">
+                <field name="balance_id" invisible="1"/>
+                <field name="balance_mobile_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <div class="alert alert-warning" role="alert">
+                    Cette action va contrepasser un mouvement comptable déjà réconcilié.
+                    Cette opération est irréversible sans intervention manuelle. Confirmez-vous ?
+                </div>
+                <group>
+                    <field name="closing_move_id" readonly="1"/>
+                    <field name="closing_move_date" readonly="1"/>
+                    <field name="closing_move_amount" readonly="1" widget="monetary"
+                           options="{'currency_field': 'currency_id'}"/>
+                    <field name="reason" placeholder="Ex : erreur de saisie, écriture générée par l'ancien code sans mouvement..."/>
+                </group>
+                <footer>
+                    <button name="action_confirm" type="object" string="Confirmer la réouverture" class="btn-danger"/>
+                    <button string="Annuler" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Initial balance wizard -->
+    <record id="view_account_daily_balance_init_wizard" model="ir.ui.view">
+        <field name="name">account.daily.balance.init.wizard.form</field>
+        <field name="model">account.daily.balance.init.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Saisir le solde initial">
+                <group>
+                    <field name="initial_balance"/>
+                </group>
+                <footer>
+                    <button name="action_confirm" type="object" string="Valider" class="btn-primary"/>
+                    <button string="Annuler" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_paid_daily_total" model="ir.actions.act_window">
+        <field name="name">Journal Espèces</field>
+        <field name="res_model">account.daily.balance</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('company_id','in',context.get('allowed_company_ids', []))]</field>
+    </record>
+
+    <!-- MENU TRESORERIE - rattaché à l'app Comptabilité (ex-Facturation,
+         account.menu_finance) au lieu d'être sa propre app dans la grille.
+         sequence=3 : à égalité avec "Fournisseurs" (account.menu_finance_payables,
+         sequence=3), départagé par id croissant (ce menu est créé après les
+         menus core account, donc id plus élevé => trié juste après), et avant
+         "Comptabilité"/Accounting (account.menu_finance_entries, sequence=4).
+         Un ir.ui.menu avec parent_id n'apparaît jamais dans la grille d'apps -
+         plus besoin de web_icon ni de retirer 'application' pour le faire
+         disparaître de la grille. Les 4 sous-menus (Journaux, Avances sur
+         Payment, Analyse, Configuration) restent rattachés automatiquement
+         puisqu'ils référencent déjà cet id comme parent. -->
+    <menuitem id="menu_paid_totals_main"
+              name="Trésorerie"
+              parent="account.menu_finance"
+              sequence="3"/>
+
+    <!-- MENU SECONDAIRE -->
+    <menuitem id="menu_paid_totals_list"
+              name="Journaux"
+              parent="menu_paid_totals_main"
+              sequence="1"/>
+
+    <!-- JOURNAL ESPECES -->
+    <menuitem id="menu_cash_journal"
+              name="Journal Espèces"
+              parent="menu_paid_totals_list"
+              action="action_paid_daily_total"
+              sequence="1"/>
+
+</odoo>

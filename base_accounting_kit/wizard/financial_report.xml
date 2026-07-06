@@ -18,6 +18,9 @@
                         <field name="enable_filter" invisible="1"/>
                         <field name="debit_credit"/>
                         <field name="company_id" invisible="1"/>
+                        <field name="journal_ids" widget="many2many_tags"
+                               options="{'no_create': True}"
+                               domain="[('company_id', '=', company_id)]"/>
                     </group>
                 </group>
 

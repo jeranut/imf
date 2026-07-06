@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="action_report_account_daily_balance" model="ir.actions.report">
+        <field name="name">Rapport Trésorerie - Journal du jour</field>
+        <field name="model">account.daily.balance</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">custom_paid_totals.report_account_daily_balance</field>
+        <field name="report_file">custom_paid_totals.report_account_daily_balance</field>
+        <field name="print_report_name">'Tresorerie - %s' % (object.date)</field>
+    </record>
+
+    <!-- Même layout que les rapports internes de base_accounting_kit
+         (report_cash_book, day_book_report_template) : web.internal_layout,
+         class="page", table-condensed, widget monetary via t-options. Le
+         style du bloc résumé reprend les valeurs de .bak-report-meta
+         (financial_report.scss) ; inliné en <style> car ce SCSS n'est
+         chargé que dans web.assets_backend, pas dans le pipeline wkhtmltopdf. -->
+    <template id="report_account_daily_balance">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.internal_layout">
+                    <div class="page">
+                        <style>
+                            .o_paidtotals_report_meta {
+                                display: grid;
+                                grid-template-columns: repeat(4, minmax(0, 1fr));
+                                gap: 10px;
+                                margin-bottom: 18px;
+                            }
+                            .o_paidtotals_report_meta > div {
+                                border: 1px solid #e1e4e8;
+                                border-radius: 4px;
+                                padding: 8px 10px;
+                                background: #fafafa;
+                            }
+                            .o_paidtotals_report_meta span {
+                                display: block;
+                                color: #6b7280;
+                                font-size: 11px;
+                                text-transform: uppercase;
+                            }
+                            .o_paidtotals_report_meta strong {
+                                display: block;
+                                margin-top: 2px;
+                                font-weight: 600;
+                                text-transform: none;
+                                color: #000;
+                                font-size: 13px;
+                            }
+                            .o_paidtotals_report_bar_row {
+                                display: flex;
+                                align-items: center;
+                                gap: 10px;
+                                margin-bottom: 8px;
+                            }
+                            .o_paidtotals_report_bar_label {
+                                width: 130px;
+                                font-size: 12px;
+                                color: #374151;
+                            }
+                            .o_paidtotals_report_bar_track {
+                                flex: 1 1 auto;
+                                background: #ececec;
+                                border-radius: 3px;
+                                height: 14px;
+                                overflow: hidden;
+                            }
+                            .o_paidtotals_report_bar_fill {
+                                height: 100%;
+                            }
+                            .o_paidtotals_report_bar_debit {
+                                background: #d9534f;
+                            }
+                            .o_paidtotals_report_bar_credit {
+                                background: #5cb85c;
+                            }
+                            .o_paidtotals_report_bar_value {
+                                width: 110px;
+                                text-align: right;
+                                font-weight: 600;
+                                font-size: 12px;
+                            }
+                        </style>
+
+                        <h2>
+                            <span t-esc="o.company_id.name"/>: Rapport Trésorerie - Journal du jour
+                        </h2>
+
+                        <div class="o_paidtotals_report_meta">
+                            <div>
+                                <span>Date</span>
+                                <strong><span t-esc="o.date" t-options="{'widget': 'date'}"/></strong>
+                            </div>
+                            <div>
+                                <span>Company</span>
+                                <strong><span t-esc="o.company_id.name"/></strong>
+                            </div>
+                            <div>
+                                <span>Ancien solde</span>
+                                <strong>
+                                    <span t-esc="o.ancien_solde"
+                                          t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/>
+                                </strong>
+                            </div>
+                            <div>
+                                <span>Total Décaissements</span>
+                                <strong>
+                                    <span t-esc="o.total_debit"
+                                          t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/>
+                                </strong>
+                            </div>
+                            <div>
+                                <span>Total Encaissements</span>
+                                <strong>
+                                    <span t-esc="o.total_credit"
+                                          t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/>
+                                </strong>
+                            </div>
+                            <div>
+                                <span>Nouveau solde</span>
+                                <strong>
+                                    <span t-esc="o.nouveau_solde"
+                                          t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/>
+                                </strong>
+                            </div>
+                            <div t-if="o.closing_move_id">
+                                <span>Écriture de clôture</span>
+                                <strong><span t-esc="o.closing_move_id.name or o.closing_move_id.ref"/></strong>
+                            </div>
+                        </div>
+
+                        <t t-set="bar_max" t-value="max(o.total_debit, o.total_credit, 1.0)"/>
+                        <div class="o_paidtotals_report_chart">
+                            <div class="o_paidtotals_report_bar_row">
+                                <span class="o_paidtotals_report_bar_label">Décaissements</span>
+                                <div class="o_paidtotals_report_bar_track">
+                                    <div class="o_paidtotals_report_bar_fill o_paidtotals_report_bar_debit"
+                                         t-attf-style="width: #{o.total_debit / bar_max * 100}%;"/>
+                                </div>
+                                <span class="o_paidtotals_report_bar_value">
+                                    <span t-esc="o.total_debit"
+                                          t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/>
+                                </span>
+                            </div>
+                            <div class="o_paidtotals_report_bar_row">
+                                <span class="o_paidtotals_report_bar_label">Encaissements</span>
+                                <div class="o_paidtotals_report_bar_track">
+                                    <div class="o_paidtotals_report_bar_fill o_paidtotals_report_bar_credit"
+                                         t-attf-style="width: #{o.total_credit / bar_max * 100}%;"/>
+                                </div>
+                                <span class="o_paidtotals_report_bar_value">
+                                    <span t-esc="o.total_credit"
+                                          t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/>
+                                </span>
+                            </div>
+                        </div>
+
+                        <h4>Détails du jour</h4>
+                        <table class="table table-condensed">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Catégorie</th>
+                                    <th>Référence facture</th>
+                                    <th>Date paiement</th>
+                                    <th>Journal</th>
+                                    <th>Libellé</th>
+                                    <th>Payment</th>
+                                    <th class="text-end">Décaissement</th>
+                                    <th class="text-end">Encaissement</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="o.line_ids" t-as="line">
+                                    <td><span t-esc="line.id"/></td>
+                                    <td><span t-esc="line.categorie"/></td>
+                                    <td><span t-esc="line.reference"/></td>
+                                    <td><span t-esc="line.payment_date" t-options="{'widget': 'date'}"/></td>
+                                    <td><span t-esc="line.journal_id.name"/></td>
+                                    <td><span t-esc="line.libelle"/></td>
+                                    <td><span t-esc="line.payment"/></td>
+                                    <td class="text-end">
+                                        <span t-esc="line.debit"
+                                              t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/>
+                                    </td>
+                                    <td class="text-end">
+                                        <span t-esc="line.credit"
+                                              t-options="{'widget': 'monetary', 'display_currency': o.company_currency_id}"/>
+                                    </td>
+                                </tr>
+                                <tr t-if="not o.line_ids">
+                                    <td colspan="9" class="text-center text-muted">Aucune ligne pour ce jour.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+
+</odoo>

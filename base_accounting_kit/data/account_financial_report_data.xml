@@ -121,12 +121,22 @@
             <field name="type">account_type</field>
             <field name="account_type_ids">asset_non_current</field>
         </record>
+        <!-- Actifs circulants : regroupement intermédiaire (RF-03), aligné sur la référence Enterprise -->
+        <record id="account_financial_report_asset_current_group0"
+                model="account.financial.report">
+            <field name="name">Current Assets Group</field>
+            <field name="sequence">3</field>
+            <field name="parent_id"
+                   ref="account_financial_report_assets0"/>
+            <field name="display_detail">no_detail</field>
+            <field name="type">sum</field>
+        </record>
         <record id="account_financial_report_asset_current0"
                 model="account.financial.report">
             <field name="name">Current Assets</field>
-            <field name="sequence">10</field>
+            <field name="sequence">3</field>
             <field name="parent_id"
-                   ref="account_financial_report_assets0"/>
+                   ref="account_financial_report_asset_current_group0"/>
             <field name="display_detail">detail_with_hierarchy</field>
             <field name="type">account_type</field>
             <field name="account_type_ids">asset_current</field>
@@ -134,9 +144,9 @@
         <record id="account_financial_report_asset_receivable0"
                 model="account.financial.report">
             <field name="name">Receivable Accounts</field>
-            <field name="sequence">20</field>
+            <field name="sequence">2</field>
             <field name="parent_id"
-                   ref="account_financial_report_assets0"/>
+                   ref="account_financial_report_asset_current_group0"/>
             <field name="display_detail">detail_with_hierarchy</field>
             <field name="type">account_type</field>
             <field name="account_type_ids">asset_receivable</field>
@@ -144,9 +154,9 @@
         <record id="account_financial_report_asset_prepayments0"
                 model="account.financial.report">
             <field name="name">Prepayments</field>
-            <field name="sequence">30</field>
+            <field name="sequence">4</field>
             <field name="parent_id"
-                   ref="account_financial_report_assets0"/>
+                   ref="account_financial_report_asset_current_group0"/>
             <field name="display_detail">detail_with_hierarchy</field>
             <field name="type">account_type</field>
             <field name="account_type_ids">asset_prepayments</field>
@@ -154,9 +164,9 @@
         <record id="account_financial_report_asset_cash0"
                 model="account.financial.report">
             <field name="name">Bank and Cash</field>
-            <field name="sequence">40</field>
+            <field name="sequence">1</field>
             <field name="parent_id"
-                   ref="account_financial_report_assets0"/>
+                   ref="account_financial_report_asset_current_group0"/>
             <field name="display_detail">detail_with_hierarchy</field>
             <field name="type">account_type</field>
             <field name="account_type_ids">asset_cash</field>
@@ -170,12 +180,31 @@
             <field name="display_detail">no_detail</field>
             <field name="type">sum</field>
         </record>
+        <record id="account_financial_report_liability0"
+                model="account.financial.report">
+            <field name="name">Liabilities</field>
+            <field name="sequence">10</field>
+            <field name="parent_id"
+                   ref="account_financial_report_liabilitysum0"/>
+            <field name="display_detail">no_detail</field>
+            <field name="type">sum</field>
+        </record>
+        <!-- Capitaux propres : section racine distincte du Passif (RF-03) -->
+        <record id="account_financial_report_equitysection0"
+                model="account.financial.report">
+            <field name="name">Equity Section</field>
+            <field name="sequence">3</field>
+            <field name="parent_id"
+                   ref="account_financial_report_balancesheet0"/>
+            <field name="display_detail">no_detail</field>
+            <field name="type">sum</field>
+        </record>
         <record id="account_financial_report_equity0"
                 model="account.financial.report">
             <field name="name">Equity</field>
             <field name="sequence">1</field>
             <field name="parent_id"
-                   ref="account_financial_report_liabilitysum0"/>
+                   ref="account_financial_report_equitysection0"/>
             <field name="display_detail">detail_with_hierarchy</field>
             <field name="type">account_type</field>
             <field name="account_type_ids">equity</field>
@@ -185,7 +214,7 @@
             <field name="name">Current Year Earnings</field>
             <field name="sequence">2</field>
             <field name="parent_id"
-                   ref="account_financial_report_liabilitysum0"/>
+                   ref="account_financial_report_equitysection0"/>
             <field name="display_detail">detail_with_hierarchy</field>
             <field name="type">account_type</field>
             <field name="account_type_ids">equity_unaffected</field>
@@ -195,20 +224,11 @@
             <field name="name">Profit (Loss) to report</field>
             <field name="sequence">3</field>
             <field name="parent_id"
-                   ref="account_financial_report_liabilitysum0"/>
+                   ref="account_financial_report_equitysection0"/>
             <field name="display_detail">no_detail</field>
             <field name="type">account_report</field>
             <field name="account_report_id"
                    ref="account_financial_report_profitandloss0"/>
-        </record>
-        <record id="account_financial_report_liability0"
-                model="account.financial.report">
-            <field name="name">Liabilities</field>
-            <field name="sequence">10</field>
-            <field name="parent_id"
-                   ref="account_financial_report_liabilitysum0"/>
-            <field name="display_detail">no_detail</field>
-            <field name="type">sum</field>
         </record>
         <record id="account_financial_report_liability_payable0"
                 model="account.financial.report">

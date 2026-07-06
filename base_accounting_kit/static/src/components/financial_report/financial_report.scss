@@ -1,6 +1,14 @@
+// `.o_action` (applied to this same root element by the web client) is
+// deliberately `overflow: hidden` — Odoo's own views scroll via a dedicated
+// `.o_content` child instead of the action root. We follow the same
+// pattern: the toolbar/banner are fixed-size flex items, and
+// `.bak-page-wrapper` alone is the scrollable region.
 .o_bak_financial_report {
     background: #f5f6f8;
-    min-height: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .bak-toolbar {
@@ -11,6 +19,41 @@
     padding: 10px 16px;
     background: #fff;
     border-bottom: 1px solid #d8dadd;
+    flex: 0 0 auto;
+}
+
+.bak-alert-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: #e7f3ff;
+    border-bottom: 1px solid #b6dcff;
+    color: #0f4c81;
+    font-size: 13px;
+    flex: 0 0 auto;
+}
+
+.bak-alert-banner a {
+    margin-left: auto;
+    font-weight: 600;
+    color: #0f4c81;
+    text-decoration: underline;
+    white-space: nowrap;
+}
+
+.bak-balance-warning-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 8px 12px;
+    background: #fdecea;
+    border: 1px solid #f3b8b3;
+    border-radius: 4px;
+    color: #a02622;
+    font-size: 13px;
+    font-weight: 600;
 }
 
 .bak-left,
@@ -146,7 +189,13 @@
 .bak-page-wrapper {
     display: flex;
     justify-content: center;
+    align-items: flex-start;
     padding: 28px;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .bak-page {
@@ -158,6 +207,7 @@
     border: 1px solid #d8dadd;
     border-radius: 4px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+    box-sizing: border-box;
 }
 
 .bak-report-title {
@@ -281,8 +331,51 @@
     font-weight: 600;
 }
 
+.bak-positive {
+    color: #1e7e34;
+}
+
+.bak-delta {
+    font-size: 12px;
+    color: #6b7280;
+}
+
 .bak-zero {
     color: #9aa0a6;
+}
+
+.bak-account-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.bak-account-link:hover {
+    text-decoration: underline;
+    color: #0f4c81;
+}
+
+.bak-account-dropdown {
+    display: inline-flex;
+    margin-left: 6px;
+}
+
+.bak-account-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.4em;
+    height: 1.4em;
+    border-radius: 3px;
+    color: #9aa0a6;
+    cursor: pointer;
+    line-height: 1;
+    font-size: 0.85em; // proportionnel au font-size hérité de .bak-line/.bak-account-line
+    flex: 0 0 auto;
+}
+
+.bak-account-menu:hover {
+    background: #eceff1;
+    color: #374151;
 }
 
 .bak-caret,

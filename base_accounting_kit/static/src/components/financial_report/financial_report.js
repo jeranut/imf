@@ -3,11 +3,15 @@
 import { registry } from "@web/core/registry";
 import { Component, onWillStart, useState } from "@odoo/owl";
 import { useService } from "@web/core/utils/hooks";
+import { Dropdown } from "@web/core/dropdown/dropdown";
+import { DropdownItem } from "@web/core/dropdown/dropdown_item";
 
 class BaseAccountingFinancialReport extends Component {
+    static components = { Dropdown, DropdownItem };
     setup() {
         this.rpc = useService("rpc");
         this.action = useService("action");
+        this.companyService = useService("company");
         this.toggleLine = this.toggleLine.bind(this);
         this.toggleDropdown = this.toggleDropdown.bind(this);
         this.isDropdownOpen = this.isDropdownOpen.bind(this);
@@ -27,6 +31,9 @@ class BaseAccountingFinancialReport extends Component {
         this.toggleBudget = this.toggleBudget.bind(this);
         this.exportXlsx = this.exportXlsx.bind(this);
         this.printPdf = this.printPdf.bind(this);
+        this.openUnpostedEntries = this.openUnpostedEntries.bind(this);
+        this.onComparisonDateChange = this.onComparisonDateChange.bind(this);
+        this.onAccountClick = this.onAccountClick.bind(this);
 
         const action = this.props.action || {};
         const params = action.params || {};
@@ -57,9 +64,13 @@ class BaseAccountingFinancialReport extends Component {
             openDropdown: null,
             comparisonMode: "none",
             comparisonOrder: "desc",
+            comparisonDateTo: false,
+            comparisonDateToUsed: false,
             hideZero: false,
             horizontalSplit: false,
             showBudget: false,
+            unpostedEntriesExist: false,
+            balanceCheck: false,
         });
 
         onWillStart(async () => {
@@ -78,6 +89,10 @@ class BaseAccountingFinancialReport extends Component {
                 date_to: this.state.dateTo,
                 target_move: this.state.targetMove,
                 journal_ids: this.state.selectedJournalIds,
+                enable_comparison: this.state.comparisonMode !== "none",
+                comparison_mode: this.state.comparisonMode,
+                comparison_date_to: this.state.comparisonDateTo || false,
+                company_id: this.companyService.currentCompany.id,
             });
 
             if (!result.success) {
@@ -98,6 +113,9 @@ class BaseAccountingFinancialReport extends Component {
                 this.state.journalsLabel = result.journals_label || "Tous les journaux";
                 this.state.journals = result.journals || [];
                 this.state.selectedJournalIds = result.selected_journal_ids || this.state.selectedJournalIds;
+                this.state.comparisonDateToUsed = result.comparison_date_to || false;
+                this.state.unpostedEntriesExist = result.unposted_entries_exist || false;
+                this.state.balanceCheck = result.balance_check || false;
                 this.initializeUnfolded();
             }
         } catch (error) {
@@ -234,8 +252,53 @@ class BaseAccountingFinancialReport extends Component {
         await this.onSpecificDateChange(ev);
     }
 
-    setComparisonMode(mode) {
+    async setComparisonMode(mode) {
         this.state.comparisonMode = mode;
+        if (mode === "none" || mode !== "specific") {
+            this.closeDropdown();
+        }
+        if (mode !== "specific" || this.state.comparisonDateTo) {
+            await this.loadReport();
+        }
+    }
+
+    async onComparisonDateChange(ev) {
+        this.state.comparisonDateTo = ev.target.value;
+        this.closeDropdown();
+        await this.loadReport();
+    }
+
+    hasComparisonColumn() {
+        return this.state.comparisonMode !== "none" && !this.state.loading && !this.state.error;
+    }
+
+    comparisonColumnLabel() {
+        if (this.state.comparisonDateToUsed) {
+            return `Au ${this.formatDate(this.state.comparisonDateToUsed)}`;
+        }
+        return "Comparaison";
+    }
+
+    amountCmpClass(line) {
+        const amount = Number(line.balance_cmp || 0);
+        const classes = ["bak-line-amount"];
+        if (amount < 0) classes.push("bak-negative");
+        if (amount === 0) classes.push("bak-zero");
+        return classes.join(" ");
+    }
+
+    deltaClass(line) {
+        const delta = Number(line.balance || 0) - Number(line.balance_cmp || 0);
+        const classes = ["bak-line-amount", "bak-delta"];
+        if (delta < 0) classes.push("bak-negative");
+        if (delta > 0) classes.push("bak-positive");
+        return classes.join(" ");
+    }
+
+    formatDelta(line) {
+        const delta = Number(line.balance || 0) - Number(line.balance_cmp || 0);
+        const sign = delta > 0 ? "+" : "";
+        return `${sign}${this.formatAmount(delta)}`;
     }
 
     setComparisonOrder(order) {
@@ -334,6 +397,18 @@ class BaseAccountingFinancialReport extends Component {
         return `${Math.min((line.level || 0) * 24, 112)}px`;
     }
 
+    gridTemplateColumns() {
+        const cols = ["minmax(0, 1fr)"];
+        if (this.state.showBudget) {
+            cols.push("140px");
+        }
+        if (this.hasComparisonColumn()) {
+            cols.push("160px", "140px");
+        }
+        cols.push("180px");
+        return `grid-template-columns: ${cols.join(" ")};`;
+    }
+
     formatDate(value) {
         if (!value) return "";
         const parts = value.split("-");
@@ -358,6 +433,48 @@ class BaseAccountingFinancialReport extends Component {
         if (this.state.xlsxActionXmlId) {
             this.action.doAction(this.state.xlsxActionXmlId);
         }
+    }
+
+    openUnpostedEntries() {
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            name: "Pièces non comptabilisées",
+            res_model: "account.move",
+            view_mode: "list,form",
+            views: [[false, "list"], [false, "form"]],
+            domain: [
+                ["state", "!=", "posted"],
+                ["date", "<=", this.state.dateTo],
+                ["company_id", "=", this.companyService.currentCompany.id],
+            ],
+        });
+    }
+
+    balanceCheckClass() {
+        if (!this.state.balanceCheck) {
+            return "";
+        }
+        return this.state.balanceCheck.ok ? "bak-balance-ok" : "bak-balance-warning";
+    }
+
+    onAccountClick(line) {
+        if (line.type !== "account" || !line.account_id) {
+            return;
+        }
+        this.action.doAction({
+            type: "ir.actions.act_window",
+            name: line.name,
+            res_model: "account.move.line",
+            view_mode: "list,form",
+            views: [[false, "list"], [false, "form"]],
+            domain: [
+                ["account_id", "=", line.account_id],
+                ["date", "<=", this.state.dateTo],
+                ["company_id", "=", this.companyService.currentCompany.id],
+                ["parent_state", this.state.targetMove === "posted" ? "=" : "!=", this.state.targetMove === "posted" ? "posted" : "cancel"],
+            ],
+            context: { search_default_group_by_move: 0 },
+        });
     }
 }
 

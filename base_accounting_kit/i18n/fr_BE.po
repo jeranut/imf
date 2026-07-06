@@ -1661,6 +1661,11 @@ msgid "Entry Label"
 msgstr "Libellé d’écriture"
 
 #. module: base_accounting_kit
+#: model:account.financial.report,name:base_accounting_kit.account_financial_report_equitysection0
+msgid "Equity Section"
+msgstr "Capitaux propres"
+
+#. module: base_accounting_kit
 #: model:account.financial.report,name:base_accounting_kit.account_financial_report_expense0
 msgid "Expense"
 msgstr "Charge"
@@ -2416,10 +2421,14 @@ msgid "Level"
 msgstr "Niveau"
 
 #. module: base_accounting_kit
-#: model:account.financial.report,name:base_accounting_kit.account_financial_report_liability0
 #: model:account.financial.report,name:base_accounting_kit.account_financial_report_liabilitysum0
 msgid "Liability"
 msgstr "Passif"
+
+#. module: base_accounting_kit
+#: model:account.financial.report,name:base_accounting_kit.account_financial_report_liability0
+msgid "Liabilities"
+msgstr "Dettes"
 
 #. module: base_accounting_kit
 #: model:ir.model.fields.selection,name:base_accounting_kit.selection__account_asset_asset__method__linear

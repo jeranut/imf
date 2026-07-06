@@ -112,18 +112,31 @@ class ReportFinancial(models.AbstractModel):
         return accounts
 
     def _use_account_type_fallback(self):
+        # No parameter here depends on the report/account being processed
+        # (only on global cash_flow_type configuration), so the result is
+        # identical for every one of the ~21 800 calls this makes in a
+        # single get_account_lines() run. Cached once per request instead
+        # of re-running 2 search_count() + 1 env.ref() every time.
+        cache = self.env.transaction.cash_flow_fallback_cache
+        if 'result' in cache:
+            return cache['result']
+
         if 'cash_flow_type' not in self.env['account.account']._fields:
-            return True
-        configured_accounts = self.env['account.account'].search_count([
-            ('cash_flow_type', '!=', False),
-        ])
-        cash_flow_root = self.env.ref(
-            'base_accounting_kit.account_financial_report_cash_flow0')
-        configured_report_accounts = self.env['account.financial.report'].search_count([
-            ('parent_id', '=', cash_flow_root.id),
-            ('account_ids', '!=', False),
-        ])
-        return not configured_accounts and not configured_report_accounts
+            result = True
+        else:
+            configured_accounts = self.env['account.account'].search_count([
+                ('cash_flow_type', '!=', False),
+            ])
+            cash_flow_root = self.env.ref(
+                'base_accounting_kit.account_financial_report_cash_flow0')
+            configured_report_accounts = self.env['account.financial.report'].search_count([
+                ('parent_id', '=', cash_flow_root.id),
+                ('account_ids', '!=', False),
+            ])
+            result = not configured_accounts and not configured_report_accounts
+
+        cache['result'] = result
+        return result
 
     def _get_cash_flow_fallback_accounts(self, report):
         account_types = []
@@ -148,41 +161,87 @@ class ReportFinancial(models.AbstractModel):
         return self._use_account_type_fallback() and (
             self._is_cash_in_report(report) or self._is_cash_out_report(report))
 
+    def _cached_report_role(self, role, compute):
+        """Resolve, once per request, the fixed small recordset of
+        financial-report nodes playing a given cash-flow role.
+
+        These roles never depend on the account or report currently being
+        processed (only on a handful of fixed xmlids), yet _is_cash_in_report
+        and friends were being called once per account per report branch
+        (~230 000 times in a single get_account_lines() run), each doing
+        several uncached env.ref() lookups. Caching the resolved recordset
+        turns that into one env.ref() per role per request.
+        """
+        cache = self.env.transaction.cash_flow_fallback_cache
+        roles = cache.setdefault('report_roles', {})
+        if role not in roles:
+            roles[role] = compute()
+        return roles[role]
+
     def _is_operation_cash_in_report(self, report):
-        return report == self.env.ref('base_accounting_kit.cash_in_from_operation0')
+        target = self._cached_report_role(
+            'operation_cash_in',
+            lambda: self.env.ref('base_accounting_kit.cash_in_from_operation0'),
+        )
+        return report == target
 
     def _is_operation_cash_out_report(self, report):
-        return report == self.env.ref('base_accounting_kit.cash_out_operation1')
+        target = self._cached_report_role(
+            'operation_cash_out',
+            lambda: self.env.ref('base_accounting_kit.cash_out_operation1'),
+        )
+        return report == target
 
     def _is_investing_cash_report(self, report):
-        return report in self.env['account.financial.report'].browse([
-            self.env.ref('base_accounting_kit.cash_in_investing0').id,
-            self.env.ref('base_accounting_kit.cash_out_investing1').id,
-        ])
+        reports = self._cached_report_role(
+            'investing_cash',
+            lambda: self.env['account.financial.report'].browse([
+                self.env.ref('base_accounting_kit.cash_in_investing0').id,
+                self.env.ref('base_accounting_kit.cash_out_investing1').id,
+            ]),
+        )
+        return report in reports
 
     def _is_financing_cash_report(self, report):
-        return report in self.env['account.financial.report'].browse([
-            self.env.ref('base_accounting_kit.cash_in_financial0').id,
-            self.env.ref('base_accounting_kit.cash_out_financial1').id,
-        ])
+        reports = self._cached_report_role(
+            'financing_cash',
+            lambda: self.env['account.financial.report'].browse([
+                self.env.ref('base_accounting_kit.cash_in_financial0').id,
+                self.env.ref('base_accounting_kit.cash_out_financial1').id,
+            ]),
+        )
+        return report in reports
 
     def _is_cash_in_report(self, report):
-        cash_in_reports = self.env['account.financial.report'].browse([
-            self.env.ref('base_accounting_kit.cash_in_from_operation0').id,
-            self.env.ref('base_accounting_kit.cash_in_financial0').id,
-            self.env.ref('base_accounting_kit.cash_in_investing0').id,
-        ])
+        cash_in_reports = self._cached_report_role(
+            'cash_in',
+            lambda: self.env['account.financial.report'].browse([
+                self.env.ref('base_accounting_kit.cash_in_from_operation0').id,
+                self.env.ref('base_accounting_kit.cash_in_financial0').id,
+                self.env.ref('base_accounting_kit.cash_in_investing0').id,
+            ]),
+        )
         return report in cash_in_reports
 
     def _is_cash_out_report(self, report):
-        cash_out_reports = self.env['account.financial.report'].browse([
-            self.env.ref('base_accounting_kit.cash_out_operation1').id,
-            self.env.ref('base_accounting_kit.cash_out_financial1').id,
-            self.env.ref('base_accounting_kit.cash_out_investing1').id,
-        ])
+        cash_out_reports = self._cached_report_role(
+            'cash_out',
+            lambda: self.env['account.financial.report'].browse([
+                self.env.ref('base_accounting_kit.cash_out_operation1').id,
+                self.env.ref('base_accounting_kit.cash_out_financial1').id,
+                self.env.ref('base_accounting_kit.cash_out_investing1').id,
+            ]),
+        )
         return report in cash_out_reports
 
     def get_account_lines(self, data):
+        # Per-request memoization slot for _use_account_type_fallback():
+        # `self.with_context(...)` below hands the recursive computation
+        # to a distinct recordset instance, and account.account/report
+        # instances themselves reject arbitrary attributes (__slots__),
+        # so the cache is parked on env.transaction, which every one of
+        # those instances shares for the lifetime of this request only.
+        self.env.transaction.cash_flow_fallback_cache = {}
         lines = []
         account_report = self.env['account.financial.report'].search(
             [('id', '=', data['account_report_id'][0])])

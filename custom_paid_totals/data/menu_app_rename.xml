@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Renomme l'app "Facturation" (module core account) en "Comptabilité"
+         et remplace son icône par celle du module, sans toucher au module
+         'account' lui-même.
+
+         "name" est un champ traduit (stocké par langue) : un <field> sans
+         contexte de langue ne réécrit que la valeur en_US, laissant les
+         traductions fr_FR/fr_BE existantes ("Facturation") intactes et
+         donc toujours affichées aux utilisateurs de cette instance
+         francophone. Il faut donc surcharger explicitement chaque langue
+         active de la base. -->
+    <record id="account.menu_finance" model="ir.ui.menu">
+        <field name="name">Comptabilité</field>
+        <field name="web_icon">custom_paid_totals,static/description/accounting.png</field>
+    </record>
+    <record id="account.menu_finance" model="ir.ui.menu" context="{'lang': 'fr_FR'}">
+        <field name="name">Comptabilité</field>
+    </record>
+    <record id="account.menu_finance" model="ir.ui.menu" context="{'lang': 'fr_BE'}">
+        <field name="name">Comptabilité</field>
+    </record>
+</odoo>

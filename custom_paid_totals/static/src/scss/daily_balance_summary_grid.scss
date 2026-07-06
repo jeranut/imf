@@ -1,0 +1,55 @@
+// Grille de synthèse de l'en-tête du formulaire account.daily.balance
+// (Date, Company, Ancien/Nouveau solde, Totaux, Écriture de clôture).
+// Reprend le langage visuel de .bak-report-meta (base_accounting_kit,
+// financial_report.scss) pour rester cohérent avec le rapport Bilan.
+
+.o_paidtotals_summary_grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+    margin: 0.75rem 0 1rem;
+
+    .o_paidtotals_summary_item {
+        border: 1px solid #e1e4e8;
+        border-radius: 4px;
+        padding: 8px 10px;
+        background: #fafafa;
+
+        > span:first-child {
+            display: block;
+            color: #6b7280;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        strong {
+            display: block;
+            margin-top: 2px;
+            font-weight: 600;
+
+            .o_field_widget {
+                width: auto !important;
+                max-width: none !important;
+                margin: 0;
+            }
+        }
+
+        .badge {
+            display: inline-block;
+            margin-top: 4px;
+        }
+    }
+}
+
+@media (max-width: 767.98px) {
+    .o_paidtotals_summary_grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575.98px) {
+    .o_paidtotals_summary_grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

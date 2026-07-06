@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import logging
 
+from dateutil.relativedelta import relativedelta
+
 from odoo import http, fields
 from odoo.http import request
 
@@ -14,8 +16,10 @@ class FinancialReportController(http.Controller):
     @http.route('/base_accounting_kit/financial_report/data', type='json', auth='user')
     def financial_report_data(self, report_name='Balance Sheet', report_xml_id=None,
                               date_from=None, date_to=None, target_move='posted', journal_ids=None,
+                              enable_comparison=False, comparison_mode='previous_period',
+                              comparison_date_to=None, company_id=None,
                               **kwargs):
-        company = request.env.company
+        company = self._resolve_company(company_id)
         date_to = date_to or fields.Date.context_today(request.env.user)
         date_from = date_from or False
         journal_ids = self._sanitize_journal_ids(journal_ids, company)
@@ -32,7 +36,12 @@ class FinancialReportController(http.Controller):
             }
 
         wizard_model = report_config.get('wizard_model', 'financial.report')
-        wizard_env = request.env[wizard_model].sudo()
+        # with_company() ensures self.env.company inside get_account_lines()/
+        # _query_get() reflects the explicitly selected company (see
+        # _resolve_company): this JSON route never receives allowed_company_ids,
+        # so without this, env.company silently falls back to the user's
+        # default company instead of the one active in the company switcher.
+        wizard_env = request.env[wizard_model].with_company(company).sudo()
         wizard_values = {
             'account_report_id': account_report.id,
             'date_from': date_from,
@@ -72,6 +81,21 @@ class FinancialReportController(http.Controller):
         custom_cash_data = self._get_custom_paid_totals_cash_data(
             company.id, date_from, date_to, journal_ids,
         ) if report_config.get('custom_cash_summary') else False
+        balance_check = self._get_balance_sheet_check(lines, report_config)
+
+        comparison_date_to_used = False
+        if enable_comparison:
+            comparison_date_to_used = self._compute_comparison_date_to(
+                date_to, comparison_mode, comparison_date_to,
+            )
+            self._add_comparison_balances(
+                wizard, lines, report_config, target_move, journal_ids,
+                comparison_date_to_used,
+            )
+
+        unposted_entries_exist = self._get_unposted_entries_exist(
+            company, date_to, journal_ids,
+        )
 
         return {
             'success': True,
@@ -97,7 +121,103 @@ class FinancialReportController(http.Controller):
             ],
             'selected_journal_ids': journal_ids,
             'custom_cash_data': custom_cash_data,
+            'balance_check': balance_check,
+            'enable_comparison': bool(enable_comparison),
+            'comparison_date_to': str(comparison_date_to_used) if comparison_date_to_used else False,
+            'unposted_entries_exist': unposted_entries_exist,
             'lines': lines,
+        }
+
+    def _compute_comparison_date_to(self, date_to, comparison_mode, comparison_date_to):
+        """Resolve the as-of date used for the comparison column.
+
+        The Balance Sheet is a point-in-time snapshot (single `date_to`, no
+        `date_from`), so "comparing periods" means recomputing the same
+        snapshot at an earlier as-of date, not a different date range.
+        """
+        if comparison_mode == 'specific' and comparison_date_to:
+            return fields.Date.to_date(comparison_date_to)
+        reference_date = fields.Date.to_date(date_to)
+        if comparison_mode == 'previous_year':
+            return reference_date - relativedelta(years=1)
+        return reference_date - relativedelta(months=1)
+
+    def _add_comparison_balances(self, wizard, lines, report_config, target_move,
+                                  journal_ids, comparison_date_to):
+        """Compute a second pass of the report as of `comparison_date_to`
+        and merge it into `lines` as a `balance_cmp` key, matched by line id.
+        """
+        comparison_data = {
+            'date_from': False,
+            'date_to': str(comparison_date_to),
+            'enable_filter': False,
+            'debit_credit': False,
+            'account_report_id': [
+                report_config['record'].id, report_config['record'].name,
+            ],
+            'target_move': target_move,
+            'journal_ids': journal_ids,
+            'view_format': 'vertical',
+            'company_id': [wizard.company_id.id, wizard.company_id.name],
+            'filter_cmp': 'filter_no',
+            'date_from_cmp': False,
+            'date_to_cmp': False,
+        }
+        comparison_data['used_context'] = wizard._build_contexts(
+            {'form': comparison_data})
+        comparison_raw_lines = wizard.get_account_lines(comparison_data)
+        comparison_lines = self._build_report_lines(comparison_raw_lines, report_config)
+        comparison_by_id = {line['id']: line['balance'] for line in comparison_lines}
+        for line in lines:
+            line['balance_cmp'] = comparison_by_id.get(line['id'], 0.0)
+
+    def _get_unposted_entries_exist(self, company, date_to, journal_ids):
+        """RF-02: whether draft/unposted entries exist on or before date_to."""
+        domain = [
+            ('company_id', '=', company.id),
+            ('state', '!=', 'posted'),
+            ('date', '<=', date_to),
+        ]
+        if journal_ids:
+            domain.append(('journal_id', 'in', journal_ids))
+        return bool(request.env['account.move'].sudo().search_count(domain, limit=1))
+
+    def _get_balance_sheet_check(self, lines, report_config):
+        """RF-06: Total Actif + Total Passif + Total Capitaux propres == 0.
+
+        Only meaningful for the Balance Sheet report (identified by its
+        ACTIF/PASSIF/CAPITAUX PROPRES section_rank); returns False for the
+        other reports so the front-end simply hides the control.
+
+        Note: with the `sign` convention currently in effect on the
+        account.financial.report tree (no override on the Liability/Equity
+        branches), PASSIF and CAPITAUX PROPRES are raw debit-credit sums and
+        display as negative amounts, unlike Enterprise's positive-magnitude
+        presentation. The accounting identity to check is therefore
+        ACTIF + PASSIF + CAPITAUX_PROPRES == 0 (sum of all balances), not a
+        direct ACTIF == PASSIF + CAPITAUX_PROPRES equality of positive
+        numbers. Flipping the display sign is a separate, higher-risk change
+        (touches ~9 report records) left for a dedicated follow-up.
+        """
+        section_rank = report_config.get('section_rank') or {}
+        if not {'ACTIF', 'PASSIF', 'CAPITAUX PROPRES'} <= set(section_rank):
+            return False
+
+        totals = {}
+        for line in lines:
+            if not line.get('parent') and line.get('name') in section_rank:
+                totals[line['name']] = totals.get(line['name'], 0.0) + (line.get('balance') or 0.0)
+
+        total_actif = totals.get('ACTIF', 0.0)
+        total_passif = totals.get('PASSIF', 0.0)
+        total_capitaux_propres = totals.get('CAPITAUX PROPRES', 0.0)
+        diff = round(total_actif + total_passif + total_capitaux_propres, 2)
+        return {
+            'ok': abs(diff) < 0.01,
+            'total_actif': total_actif,
+            'total_passif': total_passif,
+            'total_capitaux_propres': total_capitaux_propres,
+            'diff': diff,
         }
 
     def _get_report_config(self, report_name=None, report_xml_id=None):
@@ -116,9 +236,13 @@ class FinancialReportController(http.Controller):
                     'Liability': 'PASSIF',
                     'Passif': 'PASSIF',
                     'PASSIF': 'PASSIF',
+                    'Equity Section': 'CAPITAUX PROPRES',
+                    'Capitaux Propres': 'CAPITAUX PROPRES',
+                    'CAPITAUX PROPRES': 'CAPITAUX PROPRES',
                 },
                 'line_builder': 'balance_sheet',
-                'section_rank': {'ACTIF': 0, 'PASSIF': 1},
+                'section_rank': {'ACTIF': 0, 'PASSIF': 1, 'CAPITAUX PROPRES': 2},
+                'custom_cash_summary': True,
             },
             'base_accounting_kit.account_financial_report_profitandloss0': {
                 'aliases': {'Profit and Loss', 'Compte de résultat'},
@@ -164,6 +288,24 @@ class FinancialReportController(http.Controller):
             return None
 
         return dict(config, xml_id=requested_xml_id, record=record)
+
+    def _resolve_company(self, company_id):
+        """This custom JSON route does not receive `allowed_company_ids` in
+        its context (unlike standard call_kw routes), so `request.env.company`
+        always falls back to the user's default company, ignoring whichever
+        company is actually selected in the top-right switcher. The front-end
+        therefore sends the active company id explicitly; fall back to
+        `request.env.company` only if it is missing, invalid, or not among
+        the companies the current user is allowed to access.
+        """
+        if company_id:
+            try:
+                company_id = int(company_id)
+            except (TypeError, ValueError):
+                company_id = None
+        if company_id and company_id in request.env.user.company_ids.ids:
+            return request.env['res.company'].browse(company_id)
+        return request.env.company
 
     def _get_company_journals(self, company):
         return request.env['account.journal'].sudo().search([
@@ -214,7 +356,12 @@ class FinancialReportController(http.Controller):
             return False
 
         date_to = fields.Date.to_date(date_to)
-        date_from = fields.Date.to_date(date_from) if date_from else date_to
+        # No caller currently sends an explicit date_from (Balance Sheet has
+        # none by nature; Cash Flow's front-end doesn't send one either), so
+        # defaulting to date_to reduced this to a single-day window. Leave it
+        # open-ended (cumulative up to date_to) instead, which is the
+        # meaningful reading for an "operational treasury" snapshot.
+        date_from = fields.Date.to_date(date_from) if date_from else None
         journal_ids = journal_ids or []
 
         result = {
@@ -294,7 +441,9 @@ class FinancialReportController(http.Controller):
         if not date_field:
             return model.browse()
 
-        domain = [(date_field, '>=', date_from), (date_field, '<=', date_to)]
+        domain = [(date_field, '<=', date_to)]
+        if date_from:
+            domain.append((date_field, '>=', date_from))
         if 'company_id' in fields_map:
             domain.append(('company_id', '=', company_id))
         balances = model.search(domain, order='%s, id' % date_field)
@@ -464,6 +613,7 @@ class FinancialReportController(http.Controller):
                 'type': raw_line.get('type') or 'report',
                 'total': raw_line.get('type') == 'report',
                 'account_type': raw_line.get('account_type'),
+                'account_id': raw_line.get('account'),
                 'r_id': raw_line.get('r_id'),
                 'a_id': raw_line.get('a_id'),
                 '_order': order,
@@ -522,11 +672,12 @@ class FinancialReportController(http.Controller):
             **(report_config.get('root_labels') or {}),
             'Fixed Assets': 'Immobilisations',
             'Non-current Assets': 'Actifs non courants',
-            'Current Assets': 'Actif circulant',
+            'Current Assets Group': 'Actifs circulants',
+            'Current Assets': 'Actifs circulants',
             'Receivable Accounts': 'Créances clients',
             'Prepayments': "Charges constatées d’avance",
             'Bank and Cash': 'Trésorerie',
-            'Equity': 'Capitaux propres',
+            'Equity': 'Capital et réserves',
             'Current Year Earnings': "Résultat non affecté",
             'Liabilities': 'Dettes',
             'Payable Accounts': 'Dettes fournisseurs',
@@ -551,4 +702,7 @@ class FinancialReportController(http.Controller):
             'Bénéfice (perte) à déclarer': "Résultat de l’exercice",
             'BÉNÉFICE (PERTE) À DÉCLARER': "Résultat de l’exercice",
         }
-        return labels.get(name, name)
+        # Case-insensitive match: translated report names (e.g. fr_BE) may
+        # not match the exact casing used as dict keys above.
+        labels_casefold = {key.casefold(): value for key, value in labels.items()}
+        return labels_casefold.get(name.casefold(), name)

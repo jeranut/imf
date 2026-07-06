@@ -226,7 +226,16 @@ class AccountInvoiceLine(models.Model):
         if context.get('company_id'):
             company_branches = self.env['res.company'].browse([context['company_id']]).mapped('child_ids').ids
             company_branches.append(context['company_id'])
-            common_ids = list(set(context['allowed_company_ids']) & set(company_branches))
+            # allowed_company_ids is normally set by the multi-company web
+            # session context; callers that build a bare context by hand
+            # (e.g. the Cash Flow/Tax report wizards' _build_contexts(),
+            # invoked outside that session - see financial_report_controller)
+            # don't have it, so this used to raise a KeyError. Default to
+            # company_branches itself: with nothing broader to intersect
+            # against, the target company (+ its branches) is what "allowed"
+            # should mean.
+            allowed_company_ids = context.get('allowed_company_ids', company_branches)
+            common_ids = list(set(allowed_company_ids) & set(company_branches))
             domain += [('company_id', 'in', common_ids)]
         elif context.get('allowed_company_ids'):
             domain += [('company_id', 'in', self.env.companies.ids)]

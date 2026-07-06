@@ -1,0 +1,436 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Tree view -->
+    <record id="view_account_daily_balance_mobile_tree" model="ir.ui.view">
+        <field name="name">account.daily.balance.mobile.tree</field>
+        <field name="model">account.daily.balance.mobile</field>
+        <field name="arch" type="xml">
+            <tree string="Journaux de trésorerie">
+                <field name="date"/>
+                <field name="operator_id"/>
+                <field name="company_id"/>
+                <field name="ancien_solde"/>
+                <field name="total_credit"/>
+                <field name="total_debit"/>
+                <field name="nouveau_solde"/>
+                <field name="etats" widget="badge"
+                   options="{'ouvert': 'success', 'cloturer': 'danger'}"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_regule_mobile_wizard" model="ir.actions.act_window">
+        <field name="name">Veuillez choisir la référence de l’écriture à régulariser</field>
+        <field name="res_model">regule.mobile.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+    <!-- Form view -->
+    <record id="view_account_daily_balance_mobile_form" model="ir.ui.view">
+        <field name="name">account.daily.balance.mobile.form</field>
+        <field name="model">account.daily.balance.mobile</field>
+        <field name="arch" type="xml">
+            <form string="Journal de trésorerie">
+                <header>
+                    <field name="show_advance_payment_button" invisible="1"/>
+
+                    <button name="action_update_totals_wizard_mobile" type="object" string="DEPOT"
+                            class="oe_highlight"
+                            invisible="etats == 'cloturer'"/>
+                    <button name="action_open_advance_payment_wizard"
+                            type="object"
+                            string="AVANCE SUR PAYMENT"
+                            class="btn-primary"
+                            invisible="etats == 'cloturer' or not show_advance_payment_button"/>
+                    <button name="action_open_retrait_wizard"
+                            type="object"
+                            string="RETRAIT"
+                            class="btn-success"
+                            invisible="etats == 'cloturer'"/>
+                    <button name="action_update_totals_mobile" type="object" string="UPDATE"
+                            class="btn-success"
+                            invisible="etats == 'cloturer'"/>
+                    <button name="%(action_regule_mobile_wizard)d"
+                            type="action"
+                            string="REGULE"
+                            class="btn-danger oe_highlight"
+                            invisible="etats == 'cloturer'"
+                            context="{'default_balance_id': active_id}"/>
+                    <button name="action_reouvrir_mobile"
+                            type="object"
+                            string="RÉOUVRIR"
+                            class="btn-secondary"
+                            invisible="etats != 'cloturer'"
+                            groups="custom_paid_totals.group_paid_totals_manager,account.group_account_manager,base.group_system"/>
+                    <field name="etats" widget="statusbar"
+                           statusbar_visible="ouvert,cloturer"/>
+                </header>
+
+                <sheet>
+                    <field name="company_currency_id" invisible="1"/>
+                    <div class="daily-balance-summary">
+                        <div class="daily-balance-summary-item">
+                            <strong>Date :</strong>
+                            <field name="date" nolabel="1" readonly="1"/>
+                        </div>
+                        <div class="daily-balance-summary-item">
+                            <strong>Company :</strong>
+                            <field name="company_id" nolabel="1" readonly="1"/>
+                        </div>
+                        <div class="daily-balance-summary-item">
+                            <strong>Journal :</strong>
+                            <field name="operator_id"
+                                   nolabel="1"
+                                   required="1"
+                                   readonly="id"
+                                   domain="[('company_id', '=', company_id)]"
+                                   options="{'no_create': True}"/>
+                        </div>
+                        <div class="daily-balance-summary-item">
+                            <strong>Ancien solde :</strong>
+                            <field name="ancien_solde" nolabel="1" readonly="1"
+                                   widget="monetary"
+                                   options="{'currency_field': 'company_currency_id'}"/>
+                        </div>
+                        <div class="daily-balance-summary-item">
+                            <strong>Total Décaissements :</strong>
+                            <field name="total_debit" nolabel="1" readonly="1"
+                                   widget="monetary"
+                                   options="{'currency_field': 'company_currency_id'}"/>
+                        </div>
+                        <div class="daily-balance-summary-item">
+                            <strong>Total Encaissements :</strong>
+                            <field name="total_credit" nolabel="1" readonly="1"
+                                   widget="monetary"
+                                   options="{'currency_field': 'company_currency_id'}"/>
+                        </div>
+                        <div class="daily-balance-summary-item">
+                            <strong>Nouveau solde :</strong>
+                            <field name="nouveau_solde" nolabel="1" readonly="1"
+                                   widget="monetary"
+                                   options="{'currency_field': 'company_currency_id'}"/>
+                        </div>
+                        <div class="daily-balance-summary-item" invisible="not closing_move_id">
+                            <strong>Écriture de clôture :</strong>
+                            <field name="closing_move_id" nolabel="1" readonly="1"/>
+                        </div>
+                    </div>
+
+                    <field name="show_lines" invisible="1"/>
+                    <field name="show_lines"
+                           widget="daily_balance_dashboard"
+                           class="daily-balance-dashboard-field"
+                           nolabel="1"
+                           readonly="1"/>
+
+                    <separator string="Détails du jour"/>
+
+                    <field name="line_ids"
+                           nolabel="1"
+                           domain="[('balance_id', '=', id), ('company_id', '=', company_id)]">
+                        <tree create="false" edit="false" delete="false" default_order="id asc"
+                              decoration-danger="libelle == 'REGULE'" options="{'no_open': True}">
+                            <field name="regule_badge"
+                                   widget="badge"
+                                   string=""
+                                   decoration-danger="regule_badge == 'REGULE'"
+                                   width="50"/>
+                            <field name="categorie" string="Catégorie" width="100"/>
+                            <field name="reference"/>
+                            <field name="payment_date"/>
+                            <field name="journal_id"/>
+                            <field name="libelle"/>
+                            <field name="payment"/>
+                            <field name="debit"/>
+                            <field name="credit"/>
+                        </tree>
+                        <form string="Détails (Lecture seule)" create="false" edit="false">
+                            <group>
+                                <h3>Lecture seule</h3>
+                            </group>
+                        </form>
+
+                    </field>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <!-- Wizard recette -->
+    <record id="view_update_totals_mobile_wizard" model="ir.ui.view">
+        <field name="name">update.totals.mobile.wizard.form</field>
+        <field name="model">update.totals.mobile.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Ajouter RECETTE Mobile">
+                <group>
+                    <field name="balance_id" invisible="1"/>
+                    <field name="libelle" placeholder="Ex: RECETTE"/>
+                    <field name="recette"/>
+                </group>
+                <footer>
+                    <button string="Confirmer" name="action_confirm" type="object" class="oe_highlight"/>
+                    <button string="Fermer" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Wizard solde initial -->
+    <record id="view_account_daily_balance_mobile_init_wizard" model="ir.ui.view">
+        <field name="name">account.daily.balance.mobile.init.wizard.form</field>
+        <field name="model">account.daily.balance.mobile.init.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Solde initial Mobile">
+                <group>
+                    <field name="balance_id" invisible="1"/>
+                    <field name="initial_balance"/>
+                </group>
+                <footer>
+                    <button string="Confirmer" name="action_confirm" type="object" class="oe_highlight"/>
+                    <button string="Fermer" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Wizard régule -->
+    <record id="view_regule_mobile_wizard" model="ir.ui.view">
+        <field name="name">regule.mobile.wizard.form</field>
+        <field name="model">regule.mobile.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Réguler Mobile">
+                 <field name="balance_id" invisible="1"/>
+                 <field name="company_id" invisible="1"/>
+                <group>
+                    <field name="reference_id"
+                           domain="[('balance_id', '=', balance_id), ('company_id', '=', company_id)]"
+                           options="{'no_create': True, 'no_create_edit': True}"/>
+                    <field name="montant" readonly="1"/>
+                </group>
+                <footer>
+                    <button string="Confirmer Régule" name="action_confirm_regule" type="object" class="oe_highlight"/>
+                    <button string="Fermer" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="view_retrait_wizard_form" model="ir.ui.view">
+        <field name="name">retrait.wizard.form</field>
+        <field name="model">retrait.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Veuillez entrer la description et la référence de la transaction et le montant">
+                <field name="balance_id" invisible="1"/>
+                <field name="company_id" invisible="1"/>
+                <group>
+                    <field name="reference" readonly="1"/>
+                    <field name="motif"/>
+                    <field name="montant"/>
+                </group>
+                <footer>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                    <button string="Confirmer" type="object"
+                            name="action_confirm_retrait"
+                            class="btn-primary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_paid_daily_total_mobile" model="ir.actions.act_window">
+        <field name="name">Tous les journaux</field>
+        <field name="res_model">account.daily.balance.mobile</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('company_id','in',context.get('allowed_company_ids', []))]</field>
+    </record>
+
+    <record id="view_account_daily_balance_mobile_line_dashboard_tree" model="ir.ui.view">
+        <field name="name">account.daily.balance.mobile.line.dashboard.tree</field>
+        <field name="model">account.daily.balance.mobile.line</field>
+        <field name="arch" type="xml">
+            <tree string="Documents d'origine Mobile Money" create="false" edit="false" delete="false">
+                <field name="balance_id"/>
+                <field name="operator_id"/>
+                <field name="reference"/>
+                <field name="libelle"/>
+                <field name="move_id" string="Facture d'origine"/>
+                <field name="payment_id" string="Paiement d'origine"/>
+                <field name="expense_id" string="Dépense d'origine"/>
+                <field name="journal_id"/>
+                <field name="payment_date"/>
+                <field name="debit"/>
+                <field name="credit"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_account_daily_balance_mobile_search" model="ir.ui.view">
+        <field name="name">account.daily.balance.mobile.search</field>
+        <field name="model">account.daily.balance.mobile</field>
+        <field name="arch" type="xml">
+            <search string="Journaux de trésorerie">
+                <field name="date"/>
+                <field name="operator_id"/>
+                <field name="company_id"/>
+                <filter string="Ouvertes" name="open" domain="[('etats', '=', 'ouvert')]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter string="Journal" name="group_by_operator"
+                            context="{'group_by': 'operator_id'}"/>
+                    <filter string="Société" name="group_by_company"
+                            context="{'group_by': 'company_id'}"/>
+                    <filter string="Date" name="group_by_date"
+                            context="{'group_by': 'date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+
+    <record id="action_cleanup_dynamic_journal_menus" model="ir.actions.server">
+        <field name="name">Nettoyer les menus journaux dynamiques</field>
+        <field name="model_id" ref="model_mobile_money_operator"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_cleanup_dynamic_journal_menus()</field>
+        <field name="groups_id" eval="[(4, ref('custom_paid_totals.group_paid_totals_manager')), (4, ref('account.group_account_manager')), (4, ref('base.group_system'))]"/>
+    </record>
+
+    <record id="action_sync_treasury_journal_menus" model="ir.actions.server">
+        <field name="name">Synchroniser les menus journaux</field>
+        <field name="model_id" ref="model_mobile_money_operator"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_sync_treasury_journal_menus()</field>
+        <field name="groups_id" eval="[(4, ref('custom_paid_totals.group_paid_totals_manager')), (4, ref('account.group_account_manager')), (4, ref('base.group_system'))]"/>
+    </record>
+
+    <record id="action_company_treasury_journals" model="ir.actions.act_window">
+        <field name="name">Journaux de la société active</field>
+        <field name="res_model">mobile.money.operator</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('company_id', '=', context.get('allowed_company_ids', [False])[0])]</field>
+        <field name="context">{'default_company_id': context.get('allowed_company_ids', [False])[0], 'allowed_company_ids': [context.get('allowed_company_ids', [False])[0]]}</field>
+    </record>
+
+    <record id="view_mobile_money_operator_tree" model="ir.ui.view">
+        <field name="name">mobile.money.operator.tree</field>
+        <field name="model">mobile.money.operator</field>
+        <field name="arch" type="xml">
+            <tree string="Journaux">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="journal_id"/>
+                <field name="journal_account_id"/>
+                <field name="company_id"/>
+                <field name="active"/>
+                <field name="today_balance_state" invisible="1"/>
+                <button name="action_open_treasury_journal"
+                        type="object"
+                        string="Ouvrir le journal"
+                        class="btn-primary"
+                        invisible="today_balance_state != 'no_movement'"/>
+                <button name="action_open_treasury_journal"
+                        type="object"
+                        string="Ouvrir le journal"
+                        class="btn-success"
+                        invisible="today_balance_state != 'has_movement'"/>
+                <button name="action_open_treasury_journal"
+                        type="object"
+                        string="Ouvrir le journal"
+                        class="btn-danger"
+                        invisible="today_balance_state != 'closed'"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mobile_money_operator_form" model="ir.ui.view">
+        <field name="name">mobile.money.operator.form</field>
+        <field name="model">mobile.money.operator</field>
+        <field name="arch" type="xml">
+            <form string="Journal de trésorerie">
+                <header>
+                    <button name="action_open_treasury_journal"
+                            type="object"
+                            string="Ouvrir le journal"
+                            class="btn-primary"/>
+                </header>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="code"/>
+                        <field name="company_id"/>
+                        <field name="journal_id" required="1"
+                               domain="[('type', '=', 'bank'), ('company_id', '=', company_id)]"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_mobile_money_operator_search" model="ir.ui.view">
+        <field name="name">mobile.money.operator.search</field>
+        <field name="model">mobile.money.operator</field>
+        <field name="arch" type="xml">
+            <search string="Journaux">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="journal_id"/>
+                <field name="company_id"/>
+                <filter string="Archivés" name="inactive" domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_mobile_money_operator" model="ir.actions.act_window">
+        <field name="name">Journaux</field>
+        <field name="res_model">mobile.money.operator</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('company_id', '=', context.get('allowed_company_ids', [False])[0])]</field>
+        <field name="context">{'default_company_id': context.get('allowed_company_ids', [False])[0]}</field>
+    </record>
+    <record id="menu_mobile_journal" model="ir.ui.menu">
+        <field name="name">Tous les journaux</field>
+        <field name="parent_id" ref="menu_paid_totals_list"/>
+        <field name="action" ref="action_paid_daily_total_mobile"/>
+        <field name="sequence">2</field>
+        <field name="active" eval="False"/>
+    </record>
+
+    <record id="menu_company_treasury_journals" model="ir.ui.menu">
+        <field name="name">Journaux de type banque</field>
+        <field name="parent_id" ref="menu_paid_totals_list"/>
+        <field name="action" ref="action_company_treasury_journals"/>
+        <field name="sequence">2</field>
+        <field name="active" eval="True"/>
+    </record>
+
+    <menuitem id="menu_paid_totals_configuration"
+              name="Configuration"
+              parent="menu_paid_totals_main"
+              sequence="90"/>
+
+    <menuitem id="menu_mobile_money_operator"
+              name="Journaux"
+              parent="menu_paid_totals_configuration"
+              action="action_mobile_money_operator"
+              sequence="10"/>
+
+    <menuitem id="menu_cleanup_dynamic_journal_menus"
+              name="Nettoyer les menus journaux dynamiques"
+              parent="menu_paid_totals_configuration"
+              action="action_cleanup_dynamic_journal_menus"
+              sequence="20"
+              groups="custom_paid_totals.group_paid_totals_manager,account.group_account_manager,base.group_system"/>
+
+    <record id="menu_sync_treasury_journal_menus" model="ir.ui.menu">
+        <field name="name">Synchroniser les menus journaux</field>
+        <field name="parent_id" ref="menu_paid_totals_configuration"/>
+        <field name="action" ref="action_sync_treasury_journal_menus"/>
+        <field name="sequence">21</field>
+        <field name="active" eval="False"/>
+        <field name="groups_id" eval="[(6, 0, [ref('custom_paid_totals.group_paid_totals_manager'), ref('account.group_account_manager'), ref('base.group_system')])]"/>
+    </record>
+
+    <function model="mobile.money.operator" name="_sync_all_treasury_menus"/>
+
+</odoo>

@@ -95,6 +95,8 @@ class FinancialReport(models.TransientModel):
         string='Company',
         index=True,
         default=lambda self: self.env.company.id)
+    # journal_ids is already provided by AccountCommonReport (models/account_account.py),
+    # inherited here through the shared "account.report" model.
 
     def view_report_pdf(self):
         """This function will be executed when we click the view button
@@ -107,7 +109,7 @@ class FinancialReport(models.TransientModel):
         data['form'] = self.read(
             ['date_from', 'enable_filter', 'debit_credit', 'date_to',
              'account_report_id', 'target_move', 'view_format',
-             'company_id'])[0]
+             'company_id', 'journal_ids'])[0]
         used_context = self._build_contexts(data)
         data['form']['used_context'] = dict(
             used_context,
