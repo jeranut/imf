@@ -47,6 +47,21 @@ class MicrofinanceLoanProduct(models.Model):
     interest_account_id = fields.Many2one('account.account', string='Compte intérêts', required=True)
     penalty_account_id = fields.Many2one('account.account', string='Compte pénalités', required=True)
     fee_account_id = fields.Many2one('account.account', string='Compte frais')
+    fee_type = fields.Selection([
+        ('fixed', 'Montant fixe'),
+        ('percentage', 'Pourcentage du montant du crédit'),
+    ], default='fixed', required=True)
+    fee_amount = fields.Monetary(string='Frais fixes', default=0.0)
+    fee_rate = fields.Float(string='Taux de frais (%)', default=0.0)
+    fee_journal_id = fields.Many2one(
+        'account.journal', string='Journal encaissement frais', domain="[('type', 'in', ('bank','cash'))]",
+        help='Journal utilisé pour encaisser les frais de dossier, distinct des journaux de '
+             'décaissement/remboursement si l\'institution le souhaite (peut être identique à l\'un des deux).',
+    )
+    fee_charged_before_disbursement = fields.Boolean(
+        string='Frais exigés avant décaissement', default=True,
+        help='Si activé, le décaissement est bloqué tant que les frais de dossier dus n\'ont pas été encaissés.',
+    )
     write_off_account_id = fields.Many2one(
         'account.account', string='Compte pertes sur créances irrécouvrables',
         help='Requis uniquement au moment de la radiation d\'un crédit de ce produit.',
@@ -68,7 +83,7 @@ class MicrofinanceLoanProduct(models.Model):
     ]
 
     @api.constrains('min_amount', 'max_amount', 'min_term', 'max_term', 'interest_rate', 'grace_period_days',
-                     'min_membership_days', 'min_guarantee_ratio')
+                     'min_membership_days', 'min_guarantee_ratio', 'fee_amount', 'fee_rate')
     def _check_values(self):
         for product in self:
             if product.min_amount < 0 or product.max_amount <= 0 or product.max_amount < product.min_amount:
@@ -83,3 +98,5 @@ class MicrofinanceLoanProduct(models.Model):
                 raise ValidationError(_('L\'ancienneté minimum ne peut pas être négative.'))
             if product.min_guarantee_ratio < 0:
                 raise ValidationError(_('Le ratio minimum de garantie ne peut pas être négatif.'))
+            if product.fee_amount < 0 or product.fee_rate < 0:
+                raise ValidationError(_('Les frais de dossier ne peuvent pas être négatifs.'))

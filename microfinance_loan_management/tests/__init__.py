@@ -9,3 +9,4 @@ from . import test_disbursement_receipt
 from . import test_dashboard_par
 from . import test_payment_cancel
 from . import test_guarantee
+from . import test_fee

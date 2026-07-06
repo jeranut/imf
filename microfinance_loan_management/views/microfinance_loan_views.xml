@@ -66,6 +66,7 @@
                     <button name="action_finance_validate" string="Valider finance" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'manager_validated'"/>
                     <button name="action_approve" string="Approuver" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'finance_validated'"/>
                     <button name="action_generate_schedule" string="Générer échéancier" type="object" invisible="state not in ('draft','submitted','manager_validated','finance_validated','approved')"/>
+                    <button name="action_charge_fee" string="Encaisser les frais de dossier" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved' or fee_paid or fee_amount_due &lt;= 0"/>
                     <button name="action_disburse" string="Activer / Décaisser" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
                     <button name="action_open_payment_wizard" string="Enregistrer remboursement" type="object" class="btn-primary" invisible="state not in ('active','defaulted')"/>
                     <button name="action_reschedule" string="Rééchelonner" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'active'"/>
@@ -117,6 +118,9 @@
                         <field name="provision_amount" readonly="1"/>
                         <field name="provision_posted_amount" readonly="1"/>
                         <field name="guarantee_total" readonly="1"/>
+                        <field name="fee_amount_due" readonly="1"/>
+                        <field name="fee_paid" readonly="1"/>
+                        <field name="fee_move_id" readonly="1"/>
                     </group>
                     <notebook>
                         <page string="Échéancier"><field name="installment_ids" readonly="1"/></page>

@@ -82,6 +82,9 @@ class MicrofinanceLoan(models.Model):
     co_borrower_id = fields.Many2one('res.partner', string='Co-emprunteur', tracking=True)
     guarantee_ids = fields.One2many('microfinance.loan.guarantee', 'loan_id', string='Garanties')
     guarantee_total = fields.Monetary(compute='_compute_guarantee_total', store=True, string='Total garanties validées')
+    fee_amount_due = fields.Monetary(compute='_compute_fee_amount', store=True, string='Frais de dossier dus')
+    fee_paid = fields.Boolean(default=False, readonly=True, copy=False)
+    fee_move_id = fields.Many2one('account.move', readonly=True, copy=False)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -121,6 +124,17 @@ class MicrofinanceLoan(models.Model):
         for loan in self:
             validated = loan.guarantee_ids.filtered(lambda g: g.state == 'validated')
             loan.guarantee_total = sum(validated.mapped('estimated_value'))
+
+    @api.depends('loan_amount', 'product_id.fee_type', 'product_id.fee_amount', 'product_id.fee_rate')
+    def _compute_fee_amount(self):
+        for loan in self:
+            product = loan.product_id
+            if not product:
+                loan.fee_amount_due = 0.0
+            elif product.fee_type == 'fixed':
+                loan.fee_amount_due = product.fee_amount
+            else:
+                loan.fee_amount_due = loan.loan_amount * product.fee_rate / 100.0
 
     def _get_max_overdue_days(self):
         self.ensure_one()
@@ -529,10 +543,46 @@ class MicrofinanceLoan(models.Model):
             ]
         }
 
+    def _prepare_fee_move(self):
+        self.ensure_one()
+        product = self.product_id
+        journal = product.fee_journal_id
+        if not journal or not journal.default_account_id or not product.fee_account_id:
+            raise UserError(_('Configurez le journal d\'encaissement des frais, son compte par défaut et le compte frais du produit.'))
+        return {
+            'date': fields.Date.context_today(self),
+            'journal_id': journal.id,
+            'ref': _('Frais de dossier crédit %s') % self.name,
+            'microfinance_loan_id': self.id,
+            'line_ids': [
+                (0, 0, {'name': _('Encaissement frais %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': journal.default_account_id.id, 'debit': self.fee_amount_due, 'credit': 0.0}),
+                (0, 0, {'name': _('Frais de dossier %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.fee_account_id.id, 'debit': 0.0, 'credit': self.fee_amount_due}),
+            ]
+        }
+
+    def action_charge_fee(self):
+        for loan in self:
+            if loan.state != 'approved':
+                raise UserError(_('Les frais de dossier ne peuvent être encaissés que sur un crédit approuvé.'))
+            if loan.fee_paid:
+                raise UserError(_('Les frais de dossier ont déjà été encaissés.'))
+            if loan.fee_amount_due <= 0:
+                raise UserError(_('Aucun frais de dossier à encaisser pour ce crédit.'))
+            move = self.env['account.move'].with_context(
+                default_loan_id=False,
+                default_loan_line_id=False,
+            ).create(loan._prepare_fee_move())
+            move.action_post()
+            loan.write({'fee_paid': True, 'fee_move_id': move.id})
+            loan.message_post(body=_('Frais de dossier encaissés (%.2f). Écriture : %s') % (loan.fee_amount_due, move.name))
+        return True
+
     def action_disburse(self):
         for loan in self:
             if loan.state != 'approved':
                 raise UserError(_('Le crédit doit être approuvé avant décaissement.'))
+            if loan.product_id.fee_charged_before_disbursement and not loan.fee_paid and loan.fee_amount_due > 0:
+                raise UserError(_('Les frais de dossier doivent être encaissés avant le décaissement.'))
             if not loan.installment_ids:
                 loan.action_generate_schedule()
             move = self.env['account.move'].with_context(

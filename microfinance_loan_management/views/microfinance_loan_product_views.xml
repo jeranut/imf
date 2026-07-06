@@ -68,6 +68,11 @@
                                 <field name="interest_account_id"/>
                                 <field name="penalty_account_id"/>
                                 <field name="fee_account_id"/>
+                                <field name="fee_type"/>
+                                <field name="fee_amount" invisible="fee_type != 'fixed'"/>
+                                <field name="fee_rate" invisible="fee_type != 'percentage'"/>
+                                <field name="fee_journal_id"/>
+                                <field name="fee_charged_before_disbursement"/>
                                 <field name="write_off_account_id"/>
                                 <field name="provision_account_id"/>
                                 <field name="provision_contra_account_id"/>
