@@ -73,6 +73,13 @@
                             <span><i class="o_microfinance_risk__dot o_microfinance_risk__dot--high"/>High <b t-esc="state.data.risk_distribution.high"/></span>
                         </div>
                     </section>
+
+                    <section class="o_microfinance_panel o_microfinance_panel--wide">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Portefeuille a risque (PAR) par anciennete</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="parChart"/>
+                    </section>
                 </div>
 
                 <section class="o_microfinance_panel o_microfinance_panel--table">

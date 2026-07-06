@@ -14,6 +14,7 @@ export class MicrofinanceLoanDashboard extends Component {
         this.disbursementChartRef = useRef("disbursementChart");
         this.repaymentChartRef = useRef("repaymentChart");
         this.defaultRateChartRef = useRef("defaultRateChart");
+        this.parChartRef = useRef("parChart");
 
         onMounted(async () => {
             await this.loadDashboard();
@@ -131,6 +132,30 @@ export class MicrofinanceLoanDashboard extends Component {
             stroke: { width: 3, curve: "smooth" },
             dataLabels: { enabled: false },
             markers: { size: 4 },
+            grid: { borderColor: "#e2e8f0" },
+        });
+
+        this.mountChart(this.parChartRef, {
+            chart: { ...baseChart, type: "bar", height: 280 },
+            series: [{ name: "PAR", data: (data.par_buckets?.values || []).map((value) => Number(value.toFixed(1))) }],
+            xaxis: { categories: data.par_buckets?.labels || [] },
+            colors: ["#22c55e", "#eab308", "#f97316", "#ef4444"],
+            plotOptions: {
+                bar: {
+                    borderRadius: 5,
+                    columnWidth: "55%",
+                    distributed: true,
+                    dataLabels: { position: "top" },
+                },
+            },
+            dataLabels: {
+                enabled: true,
+                formatter: (value) => `${value}%`,
+                offsetY: -20,
+                style: { colors: ["#475569"] },
+            },
+            legend: { show: false },
+            yaxis: { labels: { formatter: (value) => `${value}%` } },
             grid: { borderColor: "#e2e8f0" },
         });
 

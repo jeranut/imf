@@ -6,3 +6,4 @@ from . import test_eligibility
 from . import test_write_off
 from . import test_provision
 from . import test_disbursement_receipt
+from . import test_dashboard_par

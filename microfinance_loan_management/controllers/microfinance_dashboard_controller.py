@@ -78,6 +78,8 @@ class MicrofinanceDashboardController(http.Controller):
             else:
                 risk_distribution['high'] += 1
 
+        par_buckets = Loan.get_par_buckets(company.id)
+
         overdue_by_loan = defaultdict(lambda: {'amount_due': 0.0, 'days_overdue': 0})
         top_lines = Installment.search(company_domain + [('state', '=', 'overdue'), ('residual_amount', '>', 0)])
         for line in top_lines:
@@ -118,4 +120,5 @@ class MicrofinanceDashboardController(http.Controller):
             },
             'risk_distribution': risk_distribution,
             'top_overdue_loans': top_overdue_loans,
+            'par_buckets': par_buckets,
         }

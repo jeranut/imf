@@ -134,6 +134,32 @@ class MicrofinanceLoan(models.Model):
             score = min(100, int(loan.overdue_installment_count * 15 + max_days * 1.2 + amount_ratio * 40 + partial_count * 5))
             loan.risk_score = max(score, 0)
 
+    @api.model
+    def get_par_buckets(self, company_id):
+        """PAR (portefeuille à risque) par tranche d'ancienneté d'arriéré, pour le
+        dashboard. Portée sur les crédits actifs/en défaut de la société (les crédits
+        written_off/closed en sont donc déjà exclus). Extrait en méthode de modèle
+        (plutôt que gardé dans le contrôleur HTTP) pour rester testable directement."""
+        tranches = [('1-30', 1, 30), ('31-60', 31, 60), ('61-90', 61, 90), ('90+', 91, None)]
+        portfolio_loans = self.search([('company_id', '=', company_id), ('state', 'in', ('active', 'defaulted'))])
+        outstanding_amount = sum(portfolio_loans.mapped('balance_total'))
+        amounts = dict.fromkeys([label for label, _, _ in tranches], 0.0)
+        for loan in portfolio_loans:
+            max_days = loan._get_max_overdue_days()
+            if max_days <= 0:
+                continue
+            for label, min_days, max_days_bound in tranches:
+                if max_days >= min_days and (max_days_bound is None or max_days <= max_days_bound):
+                    amounts[label] += loan.balance_total
+                    break
+        return {
+            'labels': ['PAR %s' % label for label, _, _ in tranches],
+            'values': [
+                (amounts[label] / outstanding_amount * 100.0) if outstanding_amount else 0.0
+                for label, _, _ in tranches
+            ],
+        }
+
     @api.depends('state', 'balance_total', 'company_id', 'installment_ids.due_date', 'installment_ids.state')
     def _compute_provision(self):
         Rule = self.env['microfinance.provision.rule']
