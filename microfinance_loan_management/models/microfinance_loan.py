@@ -106,7 +106,10 @@ class MicrofinanceLoan(models.Model):
             loan.interest_total = sum(loan.installment_ids.mapped('interest_amount'))
             loan.penalty_total = sum(loan.installment_ids.mapped('penalty_amount'))
             loan.paid_total = sum(loan.installment_ids.mapped('paid_principal')) + sum(loan.installment_ids.mapped('paid_interest')) + sum(loan.installment_ids.mapped('paid_penalty'))
-            loan.balance_total = sum(loan.installment_ids.mapped('residual_amount')) or loan.loan_amount
+            # Before a schedule exists, fall back to the nominal loan amount; once installments
+            # exist, a fully repaid loan legitimately sums to 0 and must not fall back to
+            # loan_amount (a plain "or" would treat that 0 as falsy and mask it).
+            loan.balance_total = sum(loan.installment_ids.mapped('residual_amount')) if loan.installment_ids else loan.loan_amount
             overdue = loan.installment_ids.filtered(lambda l: l.state == 'overdue')
             loan.overdue_amount = sum(overdue.mapped('residual_amount'))
             loan.overdue_installment_count = len(overdue)

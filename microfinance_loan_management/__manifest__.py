@@ -27,6 +27,7 @@
         'wizard/microfinance_loan_payment_wizard_views.xml',
         'wizard/microfinance_loan_reschedule_wizard_views.xml',
         'wizard/microfinance_loan_writeoff_wizard_views.xml',
+        'wizard/microfinance_loan_payment_cancel_wizard_views.xml',
         'views/microfinance_dashboard_views.xml',
         'views/microfinance_menus.xml',
     ],

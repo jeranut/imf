@@ -21,6 +21,7 @@ class MicrofinanceLoanPayment(models.Model):
     allocated_interest = fields.Monetary(readonly=True)
     allocated_principal = fields.Monetary(readonly=True)
     move_id = fields.Many2one('account.move', readonly=True, copy=False)
+    reversal_move_id = fields.Many2one('account.move', readonly=True, copy=False, string='Écriture de contre-passation')
     state = fields.Selection([('draft', 'Brouillon'), ('posted', 'Comptabilisé'), ('cancelled', 'Annulé')], default='draft', tracking=True)
     installment_ids = fields.Many2many('microfinance.loan.installment', 'microfinance_installment_payment_rel', 'payment_id', 'installment_id', readonly=True)
     note = fields.Text()
@@ -122,8 +123,72 @@ class MicrofinanceLoanPayment(models.Model):
                 payment.loan_id.state = 'closed'
         return True
 
-    def action_cancel(self):
+    def action_open_cancel_wizard(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Annuler le remboursement'),
+            'res_model': 'microfinance.loan.payment.cancel.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_payment_id': self.id},
+        }
+
+    def action_cancel(self, reason=None):
         for payment in self:
             if payment.state == 'posted':
-                raise UserError(_('Annulation comptable non gérée dans cette V1. Créez une contre-écriture si nécessaire.'))
-            payment.state = 'cancelled'
+                payment._reverse_posted_payment(reason or _('Non renseigné'))
+            else:
+                payment.state = 'cancelled'
+        return True
+
+    def _reverse_posted_payment(self, reason):
+        self.ensure_one()
+        # No separate group check needed here: ir.model.access.csv already restricts write
+        # access on this model to the manager/finance groups (agents only have read access),
+        # same convention as action_reschedule/action_confirm_write_off.
+        move = self.move_id
+        # Raises a clear UserError itself if the original entry's date falls within a locked
+        # period (period_lock_date/fiscalyear_lock_date) — no reversal is attempted in that case.
+        move._check_fiscalyear_lock_date()
+
+        reversal_move = move._reverse_moves(default_values_list=[{
+            'date': fields.Date.context_today(self),
+            'ref': _('Contre-passation remboursement %s') % self.name,
+        }], cancel=True)
+
+        # Give back, per touched installment (most recently touched first, mirroring the
+        # penalty -> interest -> principal order of the original allocation), the amounts this
+        # payment had allocated to it.
+        remaining_penalty = self.allocated_penalty
+        remaining_interest = self.allocated_interest
+        remaining_principal = self.allocated_principal
+        for inst in self.installment_ids.sorted(lambda i: (i.due_date, i.sequence), reverse=True):
+            penalty_back = min(remaining_penalty, inst.paid_penalty)
+            interest_back = min(remaining_interest, inst.paid_interest)
+            principal_back = min(remaining_principal, inst.paid_principal)
+            if penalty_back or interest_back or principal_back:
+                inst.write({
+                    'paid_penalty': inst.paid_penalty - penalty_back,
+                    'paid_interest': inst.paid_interest - interest_back,
+                    'paid_principal': inst.paid_principal - principal_back,
+                })
+            remaining_penalty -= penalty_back
+            remaining_interest -= interest_back
+            remaining_principal -= principal_back
+
+        loan = self.loan_id
+        reopened = loan.state == 'closed'
+        if reopened:
+            loan.state = 'active'
+
+        self.write({'state': 'cancelled', 'reversal_move_id': reversal_move.id})
+        loan.message_post(body=_(
+            'Remboursement %(name)s annulé. Motif : %(reason)s. Écriture de contre-passation : %(move)s.%(reopened)s'
+        ) % {
+            'name': self.name,
+            'reason': reason,
+            'move': reversal_move.name,
+            'reopened': _(' Le crédit repasse en actif.') if reopened else '',
+        })
+        return reversal_move
