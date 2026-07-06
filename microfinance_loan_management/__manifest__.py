@@ -8,7 +8,7 @@
     'author': 'SysAdaptPro',
     'website': 'https://sysadaptpro.com',
     'license': 'LGPL-3',
-    'depends': ['base', 'mail', 'account', 'contacts', 'hr', 'calendar'],
+    'depends': ['base', 'mail', 'account', 'contacts', 'hr', 'calendar', 'base_accounting_kit'],
     'data': [
         'security/groups.xml',
         'security/ir.model.access.csv',

@@ -1,5 +1,13 @@
 # Analyse préalable — `base_accounting_kit` et `custom_paid_totals`
 
+> **`custom_paid_totals` hors scope** : constaté le 2026-07-06, disparition
+> complète du dossier `/opt/odoo17/imf_git/custom_paid_totals` du disque
+> alors qu'il reste suivi par git (module métier du projet EAT,
+> point de vente/clôture de caisse, sans rapport avec le crédit
+> microfinance) — à traiter séparément avec un accès root, aucune action
+> de ma part, ce module n'est plus analysé ni référencé au-delà de cette
+> ligne.
+
 Analyse effectuée avant l'implémentation de la priorité 2 de
 `microfinance_loan_management` (provisionnement selon ancienneté, reçu de
 décaissement imprimable, PAR par tranches dans le dashboard, annulation
@@ -298,3 +306,132 @@ l'architecture actuelle du module.
 
 **Aucune implémentation n'a été faite pour ce point — en attente de
 confirmation avant de choisir une approche.**
+
+## 4. Intégration avec les états financiers de `base_accounting_kit` (obligatoire, confirmé)
+
+`base_accounting_kit` est désormais traité comme une **dépendance
+impérative** de `microfinance_loan_management` (Odoo 17 Community n'a pas
+nativement de bilan/compte de résultat/balance sans ce module). Cette
+section répond aux 5 questions posées avant l'implémentation des points
+1 à 4.
+
+### 4.1. Mécanisme de génération des états financiers
+
+**Basé entièrement sur le champ standard `account.account.account_type`**,
+pas sur une classification manuelle propre au module. Le modèle
+`account.financial.report` (`base_accounting_kit/report/report_financial.py`)
+définit des lignes de rapport hiérarchiques ; celles de type
+`type='account_type'` portent un champ `account_type_ids` qui est la
+**même** `Selection` que le `account_type` natif d'Odoo (`asset_receivable`,
+`asset_current`, `income`, `expense`, etc.). Une ligne de ce type agrège
+automatiquement **tous les comptes dont `account_type` correspond**, sans
+aucune configuration compte par compte. Conséquence directe : il suffit
+que nos comptes (`loan_account_id`, `interest_account_id`, etc.) aient le
+bon `account_type` standard pour apparaître correctement classés dans le
+Bilan et le Compte de résultat générés par `base_accounting_kit`, sans
+aucune configuration additionnelle côté `base_accounting_kit`.
+
+### 4.2. Correspondance `account_type` recommandée pour nos comptes
+
+Déduite de `base_accounting_kit/data/account_financial_report_data.xml`,
+qui rattache chaque `account_type` à une ligne précise du Bilan / Compte
+de résultat :
+
+| Champ (produit de crédit) | Rôle | `account_type` recommandé | Ligne de rapport résultante |
+|---|---|---|---|
+| `loan_account_id` | Encours prêts clients | **`asset_receivable`** | Bilan → Actifs → Comptes recevables ("Receivable Accounts") |
+| `interest_account_id` | Produits d'intérêts | **`income`** | Compte de résultat → Revenus → "Operating Income" (revenu d'exploitation cœur de métier) |
+| `penalty_account_id` | Produits de pénalités | **`income_other`** | Compte de résultat → Revenus → "Other Income" (revenu accessoire, distinct de l'intérêt) |
+| `fee_account_id` | Frais de dossier (optionnel) | **`income`** ou **`income_other`** selon que l'institution les traite comme revenu d'exploitation ou accessoire — à trancher avec la politique comptable de l'institution, aucun impact technique | idem |
+| `write_off_account_id` (livré priorité 1) | Perte sur créance radiée | **`expense`** | Compte de résultat → Charges → "Expenses" |
+| `provision_account_id` (priorité 2) | Dotation aux provisions | **`expense`** | Compte de résultat → Charges → "Expenses" (Odoo n'a pas de sous-type "dotations" dédié — `expense` est la seule option correcte parmi les types standard) |
+| `provision_contra_account_id` (priorité 2) | Contrepartie provision (dépréciation du portefeuille) | **`asset_current`** (recommandé) | Bilan → Actifs → "Current Assets" |
+
+Note sur `provision_contra_account_id` : Odoo n'a pas de notion native de
+compte "contra-actif" (dépréciation venant en déduction d'un poste
+d'actif). Deux conventions sont possibles :
+- **Recommandée ici** : `asset_current`, pour que le compte apparaisse
+  dans la même section Bilan ("Current Assets") que les prêts, à
+  proximité visuelle du poste qu'il déprécie, avec un solde créditeur
+  qui vient mécaniquement réduire le sous-total de cette section.
+- **Alternative** si l'institution/le régulateur exige une présentation
+  en provision distincte au passif : `liability_current`. Purement une
+  convention de présentation, sans impact sur le calcul du
+  provisionnement lui-même (point 1) — à confirmer avec l'institution si
+  une norme précise l'impose.
+
+### 4.3. Relance/suivi des impayés (`account.followup`)
+
+`base_accounting_kit` fournit `account.followup`/`followup.line` (délais
+de relance nommés) et un calcul `res.partner._compute_for_followup()`
+(`total_due`, `total_overdue`, `followup_status`, `next_reminder_date`).
+**Non facilement réutilisable en l'état** pour les arriérés de crédit :
+`_compute_for_followup()` est câblé en dur sur
+`invoice_list = account.move avec move_type = 'out_invoice'` — nos
+écritures de décaissement/remboursement sont en `move_type = 'entry'`,
+donc **jamais incluses** dans ce calcul, quel que soit le compte utilisé.
+Le réutiliser demanderait soit de faire émettre de vraies factures
+(`out_invoice`) par échéance de crédit (changement d'architecture majeur,
+de la même famille que l'option `account.payment` déjà documentée et
+laissée en attente ci-dessus), soit de modifier
+`_compute_for_followup()` dans `base_accounting_kit` lui-même (hors
+périmètre de ce module). **Non implémenté** — noté ici comme piste
+possible pour une itération future si une vraie automatisation des
+relances est souhaitée, avec le coût d'architecture à évaluer à ce
+moment-là.
+
+### 4.4. Dépendance déclarée dans le manifest
+
+`base_accounting_kit` n'était pas listé dans les `depends` du manifest —
+**corrigé** : ajouté à `depends` pour qu'Odoo empêche l'installation de
+`microfinance_loan_management` sans cette dépendance.
+
+### 4.5. Journaux dans les rapports consolidés
+
+Les assistants de rapport de `base_accounting_kit` (`account.balance.report`
+/ Trial Balance, `account.common.journal.report` / General Ledger, etc.)
+sélectionnent leurs journaux via un champ `journal_ids` (Many2many) **sans
+domaine restrictif** : soit pré-rempli avec tous les journaux de la
+société (mixin `account.report`), soit à sélection manuelle vide par
+défaut (Trial Balance/General Ledger, `default=[]`, mais liste de choix
+non filtrée). Dans les deux cas, **les journaux de décaissement et de
+remboursement du crédit microfinance apparaîtront normalement** dans ces
+sélecteurs comme n'importe quel autre journal de la société — aucune
+configuration supplémentaire requise de notre côté.
+
+### Conclusion étape 0 (priorité 2)
+
+Aucun ajustement structurel requis avant d'implémenter les points 1 à 4,
+au-delà de :
+1. Ajouter `base_accounting_kit` aux `depends` du manifest (fait).
+2. Utiliser les `account_type` recommandés en 4.2 pour
+   `provision_account_id` / `provision_contra_account_id` (nouveaux champs
+   de cette itération) au moment de la configuration réelle des comptes
+   par l'institution — ce sont des choix de configuration comptable, pas
+   de code : le module ne force pas de valeur, l'institution configure ses
+   comptes avec le type recommandé.
+
+### Bug bloquant découvert et corrigé : `account_financial_report_data.xml`
+
+En ajoutant `base_accounting_kit` aux `depends`, l'installation du module
+échouait entièrement (`ValueError: External ID not found in the system:
+base_accounting_kit.financial_report_gross_profit`), sur n'importe quelle
+base, y compris `base_accounting_kit` installé seul. Cause : dans
+`base_accounting_kit/data/account_financial_report_data.xml`,
+l'enregistrement `account_financial_report_operating_income0` référence
+`parent_id ref="financial_report_gross_profit"` **avant** que ce dernier
+ne soit défini plus loin dans le même fichier — référence en avant,
+invalide pour le chargeur XML d'Odoo. Bug préexistant du module tiers,
+identique dans les deux copies présentes sur la machine.
+
+Correctif appliqué (réordonnancement pur, aucun changement de
+comportement) : uniquement dans `/opt/odoo17/eat_git/base_accounting_kit`
+(accessible en écriture). La copie sous
+`imf_git/base_accounting_kit/data/account_financial_report_data.xml`
+appartient à `root` et n'a **pas** pu être corrigée (`Permission denied`) ;
+elle reste bugguée sur le disque en l'état. Cela ne bloque pas les tests
+ici car `addons_path` liste `eat_git` avant `imf_git`, donc c'est la copie
+corrigée d'`eat_git` qu'Odoo charge réellement. Si l'ordre d'`addons_path`
+change un jour, ou si `imf_git` est utilisé seul dans un autre
+environnement, ce même correctif devra être réappliqué à la copie
+`imf_git` avec un accès root.
