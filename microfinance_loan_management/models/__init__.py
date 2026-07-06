@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from . import microfinance_loan_product
+from . import microfinance_scoring
 from . import microfinance_loan
 from . import microfinance_loan_installment
 from . import microfinance_loan_payment

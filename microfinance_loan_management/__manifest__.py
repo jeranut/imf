@@ -16,6 +16,7 @@
         'data/cron.xml',
         'views/microfinance_loan_product_views.xml',
         'views/microfinance_loan_views.xml',
+        'views/microfinance_scoring_views.xml',
         'views/microfinance_loan_installment_views.xml',
         'views/microfinance_loan_payment_views.xml',
         'views/microfinance_collection_visit_views.xml',

@@ -28,4 +28,26 @@
         <field name="name">Auditeur microfinance</field>
         <field name="category_id" ref="module_category_microfinance"/>
     </record>
+
+    <record id="rule_microfinance_scoring_profile_company" model="ir.rule">
+        <field name="name">Scoring profiles by company</field>
+        <field name="model_id" ref="model_microfinance_scoring_profile"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user')), (4, ref('group_microfinance_manager')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_auditor'))]"/>
+    </record>
+
+    <record id="rule_microfinance_scoring_rule_company" model="ir.rule">
+        <field name="name">Scoring rules by company</field>
+        <field name="model_id" ref="model_microfinance_scoring_rule"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user')), (4, ref('group_microfinance_manager')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_auditor'))]"/>
+    </record>
+
+    <record id="rule_microfinance_scoring_line_company" model="ir.rule">
+        <field name="name">Scoring lines by company</field>
+        <field name="model_id" ref="model_microfinance_scoring_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user')), (4, ref('group_microfinance_manager')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_auditor'))]"/>
+    </record>
+
 </odoo>

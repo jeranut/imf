@@ -49,6 +49,27 @@ class MicrofinanceLoan(models.Model):
     overdue_amount = fields.Monetary(compute='_compute_totals', store=True)
     overdue_installment_count = fields.Integer(compute='_compute_totals', store=True)
     risk_score = fields.Integer(compute='_compute_risk_score', store=True)
+    scoring_profile_id = fields.Many2one(
+        'microfinance.scoring.profile',
+        string='Profil de scoring',
+        domain="['|', ('product_id', '=', False), ('product_id', '=', product_id)]",
+        copy=False,
+        tracking=True,
+    )
+    internal_score = fields.Float(string='Score interne', copy=False, readonly=True, tracking=True)
+    risk_level = fields.Selection([
+        ('low', 'Faible'),
+        ('medium', 'Moyen'),
+        ('high', 'Élevé'),
+        ('critical', 'Critique'),
+    ], string='Niveau de risque', copy=False, readonly=True, tracking=True)
+    scoring_decision = fields.Selection([
+        ('recommended', 'Recommandé'),
+        ('manual_review', 'Revue manuelle'),
+        ('reject_recommended', 'Risqué / Rejet recommandé'),
+    ], string='Décision scoring', copy=False, readonly=True, tracking=True)
+    scoring_line_ids = fields.One2many('microfinance.scoring.line', 'loan_id', string='Règles appliquées', copy=False, readonly=True)
+    scoring_line_count = fields.Integer(compute='_compute_counts')
     note = fields.Text()
     installment_count = fields.Integer(compute='_compute_counts')
     payment_count = fields.Integer(compute='_compute_counts')
@@ -105,8 +126,114 @@ class MicrofinanceLoan(models.Model):
             loan.payment_count = len(loan.payment_ids)
             loan.visit_count = len(loan.visit_ids)
             loan.move_count = len(loan.move_ids)
+            loan.scoring_line_count = len(loan.scoring_line_ids)
+
+    def _get_scoring_profile(self):
+        self.ensure_one()
+        if self.scoring_profile_id and self.scoring_profile_id.active:
+            return self.scoring_profile_id
+        domain = [('company_id', '=', self.company_id.id), ('active', '=', True)]
+        product_profile = self.env['microfinance.scoring.profile'].search(domain + [('product_id', '=', self.product_id.id)], limit=1)
+        if product_profile:
+            return product_profile
+        return self.env['microfinance.scoring.profile'].search(domain + [('product_id', '=', False)], limit=1)
+
+    def _get_external_scoring_metrics(self):
+        self.ensure_one()
+        return {}
+
+    def _get_scoring_metrics(self):
+        self.ensure_one()
+        Loan = self.env['microfinance.loan']
+        Payment = self.env['microfinance.loan.payment']
+        today = fields.Date.context_today(self)
+        loan_domain = [('company_id', '=', self.company_id.id), ('partner_id', '=', self.partner_id.id)]
+        loans = Loan.search(loan_domain)
+        posted_payments = Payment.search([
+            ('company_id', '=', self.company_id.id),
+            ('partner_id', '=', self.partner_id.id),
+            ('state', '=', 'posted'),
+        ])
+        installments = loans.mapped('installment_ids')
+        overdue_installments = installments.filtered(lambda line: line.state == 'overdue')
+        overdue_days = []
+        for line in overdue_installments:
+            if line.due_date:
+                overdue_days.append(max((today - line.due_date).days, 0))
+        total_due = sum(installments.mapped('total_amount'))
+        total_paid = sum(posted_payments.mapped('amount'))
+        partner_create_date = self.partner_id.create_date.date() if self.partner_id.create_date else today
+        customer_age_months = max((today.year - partner_create_date.year) * 12 + today.month - partner_create_date.month, 0)
+        metrics = {
+            'total_loans': len(loans),
+            'active_loans': len(loans.filtered(lambda loan: loan.state == 'active')),
+            'closed_loans': len(loans.filtered(lambda loan: loan.state == 'closed')),
+            'defaulted_loans': len(loans.filtered(lambda loan: loan.state == 'defaulted')),
+            'overdue_installments': len(overdue_installments),
+            'max_days_overdue': max(overdue_days) if overdue_days else 0.0,
+            'average_days_overdue': sum(overdue_days) / len(overdue_days) if overdue_days else 0.0,
+            'repayment_rate': total_due and (total_paid / total_due * 100.0) or 0.0,
+            'total_borrowed_amount': sum(loans.mapped('loan_amount')),
+            'total_paid_amount': total_paid,
+            'partial_payment_count': len(installments.filtered(lambda line: line.state == 'partial')),
+            'customer_age_months': customer_age_months,
+        }
+        metrics.update(self._get_external_scoring_metrics())
+        return metrics
+
+    def _get_scoring_decision(self, profile, score):
+        self.ensure_one()
+        if score >= profile.approve_threshold:
+            return 'recommended'
+        if score >= profile.manual_review_threshold:
+            return 'manual_review'
+        return 'reject_recommended'
+
+    def _get_scoring_risk_level(self, profile, score):
+        self.ensure_one()
+        span = max(profile.max_score - profile.min_score, 1.0)
+        ratio = (score - profile.min_score) / span
+        if ratio >= 0.75:
+            return 'low'
+        if ratio >= 0.5:
+            return 'medium'
+        if score >= profile.reject_threshold:
+            return 'high'
+        return 'critical'
+
+    def action_calculate_scoring(self, silent=False):
+        for loan in self:
+            profile = loan._get_scoring_profile()
+            if not profile:
+                if silent:
+                    continue
+                raise UserError(_('Configurez un profil de scoring crédit pour cette société ou ce produit.'))
+            metrics = loan._get_scoring_metrics()
+            score = 0.0
+            line_values = []
+            for rule in profile.rule_ids.filtered(lambda item: item.active).sorted(lambda item: (item.sequence, item.id)):
+                metric_value = metrics.get(rule.metric, 0.0)
+                if rule._matches(metric_value):
+                    points = rule._get_signed_points()
+                    score += points
+                    line_values.append((0, 0, {
+                        'rule_id': rule.id,
+                        'metric_value': metric_value,
+                        'points_applied': points,
+                        'note': rule.description or rule.name,
+                    }))
+            score = min(max(score, profile.min_score), profile.max_score)
+            loan.write({
+                'scoring_profile_id': profile.id,
+                'internal_score': score,
+                'risk_level': loan._get_scoring_risk_level(profile, score),
+                'scoring_decision': loan._get_scoring_decision(profile, score),
+                'scoring_line_ids': [(5, 0, 0)] + line_values,
+            })
+        return True
 
     def action_submit(self):
+        self.action_calculate_scoring(silent=True)
         self.write({'state': 'submitted'})
 
     def action_manager_validate(self):
@@ -184,7 +311,10 @@ class MicrofinanceLoan(models.Model):
                 raise UserError(_('Le crédit doit être approuvé avant décaissement.'))
             if not loan.installment_ids:
                 loan.action_generate_schedule()
-            move = self.env['account.move'].create(loan._prepare_disbursement_move())
+            move = self.env['account.move'].with_context(
+                default_loan_id=False,
+                default_loan_line_id=False,
+            ).create(loan._prepare_disbursement_move())
             move.action_post()
             loan.write({'state': 'active', 'disbursement_date': fields.Date.context_today(loan)})
             loan.message_post(body=_('Crédit décaissé. Écriture : %s') % move.name)
@@ -212,6 +342,10 @@ class MicrofinanceLoan(models.Model):
     def action_view_moves(self):
         self.ensure_one()
         return {'type': 'ir.actions.act_window', 'name': _('Écritures'), 'res_model': 'account.move', 'view_mode': 'tree,form', 'domain': [('microfinance_loan_id', '=', self.id)]}
+
+    def action_view_scoring_lines(self):
+        self.ensure_one()
+        return {'type': 'ir.actions.act_window', 'name': _('Scoring'), 'res_model': 'microfinance.scoring.line', 'view_mode': 'tree,form', 'domain': [('loan_id', '=', self.id)], 'context': {'default_loan_id': self.id}}
 
     @api.model
     def cron_update_overdue_and_penalties(self):

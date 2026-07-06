@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_scoring_profile_tree" model="ir.ui.view">
+        <field name="name">microfinance.scoring.profile.tree</field>
+        <field name="model">microfinance.scoring.profile</field>
+        <field name="arch" type="xml">
+            <tree decoration-muted="not active">
+                <field name="name"/>
+                <field name="company_id"/>
+                <field name="product_id"/>
+                <field name="min_score"/>
+                <field name="max_score"/>
+                <field name="approve_threshold"/>
+                <field name="manual_review_threshold"/>
+                <field name="reject_threshold"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_scoring_profile_form" model="ir.ui.view">
+        <field name="name">microfinance.scoring.profile.form</field>
+        <field name="model">microfinance.scoring.profile</field>
+        <field name="arch" type="xml">
+            <form string="Profil de scoring crédit">
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" placeholder="Profil scoring standard"/></h1>
+                    </div>
+                    <group>
+                        <group string="Périmètre">
+                            <field name="active"/>
+                            <field name="company_id"/>
+                            <field name="product_id"/>
+                        </group>
+                        <group string="Seuils">
+                            <field name="min_score"/>
+                            <field name="max_score"/>
+                            <field name="approve_threshold"/>
+                            <field name="manual_review_threshold"/>
+                            <field name="reject_threshold"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Règles">
+                            <field name="rule_ids">
+                                <tree editable="bottom" decoration-danger="rule_type == 'malus'" decoration-success="rule_type == 'bonus'">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="active" widget="boolean_toggle"/>
+                                    <field name="name"/>
+                                    <field name="metric"/>
+                                    <field name="operator"/>
+                                    <field name="value"/>
+                                    <field name="rule_type"/>
+                                    <field name="points"/>
+                                    <field name="description"/>
+                                </tree>
+                                <form>
+                                    <sheet>
+                                        <group>
+                                            <group>
+                                                <field name="profile_id"/>
+                                                <field name="active"/>
+                                                <field name="sequence"/>
+                                                <field name="name"/>
+                                            </group>
+                                            <group>
+                                                <field name="metric"/>
+                                                <field name="operator"/>
+                                                <field name="value"/>
+                                                <field name="rule_type"/>
+                                                <field name="points"/>
+                                            </group>
+                                        </group>
+                                        <group string="Description">
+                                            <field name="description" nolabel="1"/>
+                                        </group>
+                                    </sheet>
+                                </form>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_scoring_profile_search" model="ir.ui.view">
+        <field name="name">microfinance.scoring.profile.search</field>
+        <field name="model">microfinance.scoring.profile</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="product_id"/>
+                <filter name="active" string="Actifs" domain="[('active','=',True)]"/>
+                <filter name="generic" string="Génériques" domain="[('product_id','=',False)]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_product" string="Produit" context="{'group_by':'product_id'}"/>
+                    <filter name="group_company" string="Société" context="{'group_by':'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_scoring_profile" model="ir.actions.act_window">
+        <field name="name">Scoring crédit</field>
+        <field name="res_model">microfinance.scoring.profile</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_active': 1}</field>
+    </record>
+
+    <record id="view_microfinance_scoring_line_tree" model="ir.ui.view">
+        <field name="name">microfinance.scoring.line.tree</field>
+        <field name="model">microfinance.scoring.line</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0" decoration-danger="points_applied &lt; 0" decoration-success="points_applied &gt; 0">
+                <field name="loan_id"/>
+                <field name="rule_id"/>
+                <field name="metric_value"/>
+                <field name="points_applied"/>
+                <field name="note"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_scoring_line_form" model="ir.ui.view">
+        <field name="name">microfinance.scoring.line.form</field>
+        <field name="model">microfinance.scoring.line</field>
+        <field name="arch" type="xml">
+            <form create="0" edit="0" delete="0">
+                <sheet>
+                    <group>
+                        <field name="loan_id"/>
+                        <field name="rule_id"/>
+                        <field name="metric_value"/>
+                        <field name="points_applied"/>
+                        <field name="note"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_tree_scoring_inherit" model="ir.ui.view">
+        <field name="name">microfinance.loan.tree.scoring.inherit</field>
+        <field name="model">microfinance.loan</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//tree/field[@name='risk_score']" position="after">
+                <field name="internal_score"/>
+                <field name="risk_level" widget="badge" decoration-success="risk_level == 'low'" decoration-warning="risk_level == 'medium'" decoration-danger="risk_level in ('high','critical')"/>
+                <field name="scoring_decision" widget="badge" decoration-success="scoring_decision == 'recommended'" decoration-warning="scoring_decision == 'manual_review'" decoration-danger="scoring_decision == 'reject_recommended'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_kanban_scoring_inherit" model="ir.ui.view">
+        <field name="name">microfinance.loan.kanban.scoring.inherit</field>
+        <field name="model">microfinance.loan</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_kanban"/>
+        <field name="arch" type="xml">
+            <xpath expr="//kanban/field[@name='risk_score']" position="after">
+                <field name="internal_score"/>
+                <field name="risk_level"/>
+                <field name="scoring_decision"/>
+            </xpath>
+            <xpath expr="//t[@t-name='kanban-box']/div" position="inside">
+                <div>Score interne : <field name="internal_score"/></div>
+                <div>Décision : <field name="scoring_decision"/></div>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_form_scoring_inherit" model="ir.ui.view">
+        <field name="name">microfinance.loan.form.scoring.inherit</field>
+        <field name="model">microfinance.loan</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header/button[@name='action_recompute_risk']" position="after">
+                <button name="action_calculate_scoring" string="Calculer scoring" type="object"/>
+            </xpath>
+            <xpath expr="//div[@name='button_box']/button[@name='action_view_moves']" position="after">
+                <button name="action_view_scoring_lines" type="object" class="oe_stat_button" icon="fa-sliders">
+                    <field name="scoring_line_count" widget="statinfo" string="Scoring"/>
+                </button>
+            </xpath>
+            <xpath expr="//field[@name='risk_score']/parent::group" position="after">
+                <group string="Scoring interne">
+                    <field name="scoring_profile_id"/>
+                    <field name="internal_score" readonly="1"/>
+                    <field name="risk_level" widget="badge" readonly="1" decoration-success="risk_level == 'low'" decoration-warning="risk_level == 'medium'" decoration-danger="risk_level in ('high','critical')"/>
+                    <field name="scoring_decision" widget="badge" readonly="1" decoration-success="scoring_decision == 'recommended'" decoration-warning="scoring_decision == 'manual_review'" decoration-danger="scoring_decision == 'reject_recommended'"/>
+                </group>
+            </xpath>
+            <xpath expr="//field[@name='note']/parent::page" position="before">
+                <page string="Scoring">
+                    <group>
+                        <group string="Résultat">
+                            <field name="scoring_profile_id"/>
+                            <field name="internal_score" readonly="1"/>
+                            <field name="risk_level" widget="badge" readonly="1"/>
+                            <field name="scoring_decision" widget="badge" readonly="1"/>
+                        </group>
+                    </group>
+                    <field name="scoring_line_ids" readonly="1">
+                        <tree decoration-danger="points_applied &lt; 0" decoration-success="points_applied &gt; 0">
+                            <field name="rule_id"/>
+                            <field name="metric_value"/>
+                            <field name="points_applied"/>
+                            <field name="note"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+</odoo>

@@ -2,13 +2,14 @@
 
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
-import { Component, onMounted, onWillUnmount, useRef, useState } from "@odoo/owl";
+import { Component, onMounted, onPatched, onWillUnmount, useRef, useState } from "@odoo/owl";
 
 export class MicrofinanceLoanDashboard extends Component {
     setup() {
         this.rpc = useService("rpc");
         this.state = useState({ loading: true, error: false, data: null });
         this.charts = [];
+        this.shouldRenderCharts = false;
         this.stateChartRef = useRef("stateChart");
         this.disbursementChartRef = useRef("disbursementChart");
         this.repaymentChartRef = useRef("repaymentChart");
@@ -16,6 +17,13 @@ export class MicrofinanceLoanDashboard extends Component {
 
         onMounted(async () => {
             await this.loadDashboard();
+        });
+
+        onPatched(() => {
+            if (this.shouldRenderCharts) {
+                this.shouldRenderCharts = false;
+                this.renderCharts();
+            }
         });
 
         onWillUnmount(() => {
@@ -26,8 +34,8 @@ export class MicrofinanceLoanDashboard extends Component {
     async loadDashboard() {
         try {
             this.state.data = await this.rpc("/microfinance/dashboard/data", {});
+            this.shouldRenderCharts = true;
             this.state.loading = false;
-            this.renderCharts();
         } catch (error) {
             this.state.loading = false;
             this.state.error = true;

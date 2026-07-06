@@ -111,7 +111,10 @@ class MicrofinanceLoanPayment(models.Model):
             if payment.state != 'draft':
                 continue
             payment._allocate_to_installments()
-            move = self.env['account.move'].create(payment._prepare_payment_move())
+            move = self.env['account.move'].with_context(
+                default_loan_id=False,
+                default_loan_line_id=False,
+            ).create(payment._prepare_payment_move())
             move.action_post()
             payment.write({'move_id': move.id, 'state': 'posted'})
             payment.loan_id.message_post(body=_('Remboursement %s comptabilisé : %s') % (payment.name, move.name))

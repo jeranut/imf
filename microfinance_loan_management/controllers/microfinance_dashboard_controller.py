@@ -44,7 +44,7 @@ class MicrofinanceDashboardController(http.Controller):
         state_selection = dict(Loan._fields['state'].selection)
         loans_by_state = {
             'labels': [state_selection.get(row['state'], row['state'] or '') for row in state_rows],
-            'values': [row['state_count'] for row in state_rows],
+            'values': [row.get('__count', row.get('state_count', 0)) for row in state_rows],
         }
 
         monthly_disbursement = dict.fromkeys(month_keys, 0.0)
