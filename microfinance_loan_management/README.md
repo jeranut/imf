@@ -14,6 +14,10 @@ Module créé from scratch pour gérer les crédits clients d'une institution de
 - Rééchelonnement de crédit actif (nouvelle durée et/ou nouvelle date de première échéance restante), historisé via `reschedule_count` et le chatter
 - Règles de blocage à la demande de crédit : ancienneté client minimum, second crédit actif autorisé ou non, blocage si arriérés, blocage si le co-emprunteur a déjà un crédit actif
 - Radiation / passage en perte d'un crédit actif ou en défaut, avec écriture comptable dédiée et exclusion du calcul de risque/PAR actif
+- Provisionnement selon l'ancienneté des arriérés (`microfinance.provision.rule`, tranches paramétrables par société), écriture de régularisation par crédit via `action_post_provisions`, cron mensuel optionnel
+- Reçu de décaissement imprimable (PDF, QWeb) depuis le crédit actif
+- Portefeuille à risque (PAR) par tranche d'ancienneté (1-30/31-60/61-90/90+) dans le tableau de bord
+- Annulation comptable propre d'un remboursement posté (contre-passation, restauration des échéances, réouverture du crédit si nécessaire)
 - Visites de recouvrement
 - Score de risque simple
 - Groupes de sécurité : agent crédit, manager, finance, auditeur, recouvrement
@@ -22,6 +26,17 @@ Module créé from scratch pour gérer les crédits clients d'une institution de
 ## Installation
 
 Copier le dossier `microfinance_loan_management` dans votre `addons_path`, redémarrer Odoo, mettre à jour la liste des applications puis installer le module.
+
+### Dépendance à `base_accounting_kit`
+
+Le module dépend désormais de `base_accounting_kit` (dépendance obligatoire dans le
+manifest) : Odoo 17 Community n'a pas nativement de bilan / compte de résultat / balance,
+et c'est ce module qui les fournit. Les comptes comptables de `microfinance_loan_management`
+(`loan_account_id`, `interest_account_id`, `penalty_account_id`, `fee_account_id`,
+`write_off_account_id`, `provision_account_id`, `provision_contra_account_id`) doivent donc
+être configurés avec le `account_type` standard Odoo adapté pour apparaître correctement
+classés dans ces états financiers (voir le détail et la correspondance recommandée dans
+`docs/analyse_modules_comptables.md`).
 
 ## Configuration minimale
 
@@ -38,6 +53,40 @@ Les journaux doivent avoir un compte par défaut.
 Le compte de pertes sur créances irrécouvrables (`write_off_account_id`) est optionnel à la
 configuration du produit, mais devient obligatoire au moment de radier un crédit de ce produit
 (un journal des opérations diverses doit aussi exister pour la société).
+
+De même, `provision_account_id` (charge de dotation) et `provision_contra_account_id`
+(contrepartie bilan) sont optionnels à la configuration du produit, mais deviennent
+obligatoires au moment de comptabiliser une provision pour ce produit
+(`action_post_provisions`, même journal des opérations diverses que la radiation).
+
+### Logique de provisionnement retenue
+
+Les tranches d'ancienneté d'arriéré (`microfinance.provision.rule` : `min_days`/`max_days`/
+`provision_rate`, par société, sans chevauchement) déterminent le taux de provision appliqué
+au solde restant dû (`balance_total`) du crédit, selon le nombre de jours de retard de sa pire
+échéance impayée. Le module livre des tranches indicatives par défaut pour la société
+principale (0-30j : 0 %, 31-60j : 25 %, 61-90j : 50 %, 91-180j : 75 %, 181j+ : 100 %),
+éditables sans redéploiement dans Microfinance > Configuration > Règles de provisionnement —
+**à ajuster avec l'institution si une norme réglementaire précise s'applique** (ex. normes
+BCEAO/COBAC pour la microfinance en zone UEMOA).
+
+`action_post_provisions` comptabilise **une écriture par crédit** (plutôt qu'une écriture
+consolidée pour tout le portefeuille) : plus simple à tracer et auditer individuellement dans
+le chatter de chaque crédit, au prix d'un nombre d'écritures plus élevé lors d'une campagne
+mensuelle sur tout le portefeuille. Chaque écriture ne comptabilise que le delta entre la
+provision déjà comptabilisée (`provision_posted_amount`) et la provision recalculée
+(`provision_amount`), jamais plus que le solde restant dû. Un cron mensuel optionnel
+(désactivé par défaut) peut automatiser cette comptabilisation sur tout le portefeuille actif.
+
+### Non-intégration avec `custom_paid_totals`
+
+`custom_paid_totals` (clôture de caisse journalière du projet EAT, point de vente) est hors
+scope de ce module : sans rapport fonctionnel avec le crédit microfinance, et son mécanisme
+d'ingestion ne capte que des `account.payment` réconciliés à des factures/notes de frais — nos
+décaissements/remboursements créent des `account.move` directement, donc invisibles de ce
+module de toute façon. Voir `docs/analyse_modules_comptables.md` pour le détail (y compris un
+angle mort de trésorerie si un même journal caisse était partagé, non traité ici) et une
+anomalie de disque constatée sur ce module, sans lien avec ce module-ci.
 
 ## Workflow conseillé
 
@@ -64,11 +113,14 @@ configuration du produit, mais devient obligatoire au moment de radier un crédi
 - Rééchelonnement d'un crédit actif (durée et/ou date de première échéance restante)
 - Règles de blocage à la soumission (ancienneté, second crédit, arriérés, co-emprunteur)
 - Radiation d'un crédit actif avec solde restant
+- Comptabilisation des provisions selon l'ancienneté des arriérés, delta par rapport à la provision déjà comptabilisée
+- Impression du reçu de décaissement
+- PAR par tranche d'ancienneté dans le tableau de bord
+- Annulation d'un remboursement posté (partiel, ayant clôturé le crédit, bloqué par période verrouillée)
 
 ## Limites V1
 
 - Pas encore de garanties/cautions
 - Pas encore de gestion des groupes solidaires
 - Pas encore de frais de dossier automatisés
-- Annulation comptable des remboursements postés non automatisée
 - Dashboard simple, améliorable en OWL ou client action
