@@ -72,6 +72,7 @@
                     <button name="action_mark_default" string="Marquer en défaut" type="object" invisible="state != 'active'"/>
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
                     <button name="action_write_off" string="Radier" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state not in ('active','defaulted')"/>
+                    <button name="%(action_report_microfinance_loan_disbursement_receipt)d" string="Imprimer le reçu" type="action" invisible="state in ('draft','submitted','manager_validated','finance_validated','approved','cancelled')"/>
                     <button name="action_recompute_risk" string="Recalculer risque" type="object"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,submitted,manager_validated,finance_validated,approved,active,closed,defaulted,written_off"/>
                 </header>

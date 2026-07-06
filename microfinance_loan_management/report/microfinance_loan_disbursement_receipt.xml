@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_report_microfinance_loan_disbursement_receipt" model="ir.actions.report">
+        <field name="name">Reçu de décaissement</field>
+        <field name="model">microfinance.loan</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_microfinance_loan_disbursement_receipt_document</field>
+        <field name="report_file">microfinance_loan_management.report_microfinance_loan_disbursement_receipt_document</field>
+        <field name="print_report_name">'Reçu décaissement - %s' % (object.name)</field>
+        <field name="binding_model_id" ref="model_microfinance_loan"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <template id="report_microfinance_loan_disbursement_receipt_document">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <h2>Reçu de décaissement de crédit</h2>
+                        <p>
+                            Émis par <span t-field="o.company_id.name"/>
+                        </p>
+                        <table class="table table-sm" style="margin-top: 20px;">
+                            <tr>
+                                <td><strong>Numéro de crédit</strong></td>
+                                <td><span t-field="o.name"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Emprunteur</strong></td>
+                                <td><span t-field="o.partner_id.display_name"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Produit de crédit</strong></td>
+                                <td><span t-field="o.product_id.name"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Montant décaissé</strong></td>
+                                <td><span t-field="o.loan_amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Date de décaissement</strong></td>
+                                <td><span t-field="o.disbursement_date"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Méthode d'intérêt</strong></td>
+                                <td><span t-field="o.interest_method"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Taux d'intérêt annuel</strong></td>
+                                <td><span t-field="o.interest_rate"/> %</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Nombre d'échéances</strong></td>
+                                <td><span t-field="o.term"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Mode de décaissement</strong></td>
+                                <td><span t-field="o.product_id.disbursement_journal_id.name"/></td>
+                            </tr>
+                        </table>
+                        <div style="margin-top: 60px;" class="row">
+                            <div class="col-6">
+                                <p>Signature de l'agent de crédit</p>
+                                <br/><br/>
+                                <p>____________________________</p>
+                            </div>
+                            <div class="col-6">
+                                <p>Signature de l'emprunteur</p>
+                                <br/><br/>
+                                <p>____________________________</p>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>
