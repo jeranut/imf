@@ -120,7 +120,9 @@ class MicrofinanceLoanPayment(models.Model):
             payment.write({'move_id': move.id, 'state': 'posted'})
             payment.loan_id.message_post(body=_('Remboursement %s comptabilisé : %s') % (payment.name, move.name))
             if payment.loan_id.balance_total <= 0.01:
-                payment.loan_id.state = 'closed'
+                # Route through action_close() rather than a raw state write so its side
+                # effects (releasing guarantees, etc.) also apply on this auto-close path.
+                payment.loan_id.action_close()
         return True
 
     def action_open_cancel_wizard(self):

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_guarantee_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.guarantee.tree</field>
+        <field name="model">microfinance.loan.guarantee</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom" decoration-muted="state == 'released'">
+                <field name="loan_id" column_invisible="context.get('default_loan_id')"/>
+                <field name="guarantee_type"/>
+                <field name="description"/>
+                <field name="guarantor_partner_id" invisible="guarantee_type != 'guarantor'"/>
+                <field name="estimated_value"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="state"/>
+                <field name="document" filename="document_filename"/>
+                <field name="document_filename" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_guarantee_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.guarantee.form</field>
+        <field name="model">microfinance.loan.guarantee</field>
+        <field name="arch" type="xml">
+            <form string="Garantie">
+                <group>
+                    <field name="loan_id"/>
+                    <field name="currency_id" invisible="1"/>
+                    <field name="guarantee_type"/>
+                    <field name="description"/>
+                    <field name="guarantor_partner_id" invisible="guarantee_type != 'guarantor'"/>
+                    <field name="estimated_value"/>
+                    <field name="state"/>
+                    <field name="document" filename="document_filename"/>
+                    <field name="document_filename" invisible="1"/>
+                </group>
+            </form>
+        </field>
+    </record>
+    <record id="view_microfinance_guarantee_search" model="ir.ui.view">
+        <field name="name">microfinance.loan.guarantee.search</field>
+        <field name="model">microfinance.loan.guarantee</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="description"/>
+                <field name="loan_id"/>
+                <field name="guarantor_partner_id"/>
+                <filter name="validated" string="Validées" domain="[('state','=','validated')]"/>
+                <filter name="released" string="Libérées" domain="[('state','=','released')]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_type" string="Type" context="{'group_by':'guarantee_type'}"/>
+                    <filter name="group_state" string="État" context="{'group_by':'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="action_microfinance_guarantee" model="ir.actions.act_window">
+        <field name="name">Garanties</field>
+        <field name="res_model">microfinance.loan.guarantee</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

@@ -19,6 +19,7 @@
         'report/microfinance_loan_disbursement_receipt.xml',
         'views/microfinance_loan_product_views.xml',
         'views/microfinance_provision_rule_views.xml',
+        'views/microfinance_loan_guarantee_views.xml',
         'views/microfinance_loan_views.xml',
         'views/microfinance_scoring_views.xml',
         'views/microfinance_loan_installment_views.xml',

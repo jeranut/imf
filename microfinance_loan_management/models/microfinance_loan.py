@@ -80,6 +80,8 @@ class MicrofinanceLoan(models.Model):
     move_count = fields.Integer(compute='_compute_counts')
     reschedule_count = fields.Integer(default=0, copy=False, readonly=True, tracking=True)
     co_borrower_id = fields.Many2one('res.partner', string='Co-emprunteur', tracking=True)
+    guarantee_ids = fields.One2many('microfinance.loan.guarantee', 'loan_id', string='Garanties')
+    guarantee_total = fields.Monetary(compute='_compute_guarantee_total', store=True, string='Total garanties validées')
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -113,6 +115,12 @@ class MicrofinanceLoan(models.Model):
             overdue = loan.installment_ids.filtered(lambda l: l.state == 'overdue')
             loan.overdue_amount = sum(overdue.mapped('residual_amount'))
             loan.overdue_installment_count = len(overdue)
+
+    @api.depends('guarantee_ids.estimated_value', 'guarantee_ids.state')
+    def _compute_guarantee_total(self):
+        for loan in self:
+            validated = loan.guarantee_ids.filtered(lambda g: g.state == 'validated')
+            loan.guarantee_total = sum(validated.mapped('estimated_value'))
 
     def _get_max_overdue_days(self):
         self.ensure_one()
@@ -326,6 +334,17 @@ class MicrofinanceLoan(models.Model):
                 if co_borrower_active_loans:
                     raise UserError(_('Le co-emprunteur a déjà un crédit actif en cours.'))
 
+            if product.guarantee_required and not loan.guarantee_ids.filtered(lambda g: g.state == 'validated'):
+                raise UserError(_('Ce produit exige une garantie validée avant soumission.'))
+            if product.min_guarantee_ratio > 0:
+                required_guarantee = loan.loan_amount * product.min_guarantee_ratio / 100.0
+                if loan.guarantee_total < required_guarantee:
+                    missing = required_guarantee - loan.guarantee_total
+                    raise UserError(_(
+                        'Garanties insuffisantes : il manque %(missing).2f pour atteindre le ratio minimum requis '
+                        '(%(ratio)s%% du montant du crédit, soit %(required).2f).'
+                    ) % {'missing': missing, 'ratio': product.min_guarantee_ratio, 'required': required_guarantee})
+
     def action_submit(self):
         self._check_eligibility()
         self.action_calculate_scoring(silent=True)
@@ -348,6 +367,12 @@ class MicrofinanceLoan(models.Model):
             if loan.balance_total > 0.01:
                 raise UserError(_('Impossible de clôturer : solde restant à payer.'))
             loan.state = 'closed'
+            guarantees_to_release = loan.guarantee_ids.filtered(lambda g: g.state != 'released')
+            if guarantees_to_release:
+                guarantees_to_release.write({'state': 'released'})
+                loan.message_post(body=_('Garanties libérées suite à la clôture du crédit : %s') % (
+                    ', '.join(guarantees_to_release.mapped('description'))
+                ))
 
     def action_recompute_risk(self):
         self._compute_risk_score()
