@@ -31,6 +31,7 @@ class MicrofinanceLoan(models.Model):
         ('active', 'Actif'),
         ('closed', 'Clôturé'),
         ('defaulted', 'Défaut'),
+        ('written_off', 'Radié'),
         ('cancelled', 'Annulé'),
     ], default='draft', tracking=True, index=True)
     officer_id = fields.Many2one('res.users', default=lambda self: self.env.user, tracking=True)
@@ -108,10 +109,14 @@ class MicrofinanceLoan(models.Model):
             loan.overdue_amount = sum(overdue.mapped('residual_amount'))
             loan.overdue_installment_count = len(overdue)
 
-    @api.depends('overdue_installment_count', 'overdue_amount', 'installment_ids.due_date', 'installment_ids.state', 'payment_ids.amount')
+    @api.depends('state', 'overdue_installment_count', 'overdue_amount', 'installment_ids.due_date', 'installment_ids.state', 'payment_ids.amount')
     def _compute_risk_score(self):
         today = fields.Date.context_today(self)
         for loan in self:
+            if loan.state == 'written_off':
+                # Written-off loans are no longer part of the active risk/PAR calculations.
+                loan.risk_score = 0
+                continue
             overdue = loan.installment_ids.filtered(lambda l: l.state == 'overdue')
             max_days = 0
             for line in overdue:
@@ -461,6 +466,57 @@ class MicrofinanceLoan(models.Model):
             loan.write({'state': 'active', 'disbursement_date': fields.Date.context_today(loan)})
             loan.message_post(body=_('Crédit décaissé. Écriture : %s') % move.name)
         return True
+
+    def action_write_off(self):
+        self.ensure_one()
+        if self.state not in ('active', 'defaulted'):
+            raise UserError(_('La radiation n\'est possible que pour un crédit actif ou en défaut.'))
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Radier le crédit'),
+            'res_model': 'microfinance.loan.writeoff.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_loan_id': self.id},
+        }
+
+    def _prepare_writeoff_move(self, write_off_date):
+        self.ensure_one()
+        product = self.product_id
+        if not product.write_off_account_id:
+            raise UserError(_('Configurez le compte de pertes sur créances irrécouvrables pour ce produit avant de radier ce crédit.'))
+        journal = self.env['account.journal'].search([
+            ('company_id', '=', self.company_id.id), ('type', '=', 'general'),
+        ], limit=1)
+        if not journal:
+            raise UserError(_('Aucun journal des opérations diverses n\'est configuré pour cette société.'))
+        return {
+            'date': write_off_date,
+            'journal_id': journal.id,
+            'ref': _('Radiation crédit %s') % self.name,
+            'microfinance_loan_id': self.id,
+            'line_ids': [
+                (0, 0, {'name': _('Perte sur créance %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.write_off_account_id.id, 'debit': self.balance_total, 'credit': 0.0}),
+                (0, 0, {'name': _('Sortie prêt client %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.loan_account_id.id, 'debit': 0.0, 'credit': self.balance_total}),
+            ]
+        }
+
+    def action_confirm_write_off(self, reason, write_off_date):
+        self.ensure_one()
+        if self.state not in ('active', 'defaulted'):
+            raise UserError(_('La radiation n\'est possible que pour un crédit actif ou en défaut.'))
+        if self.balance_total <= 0.01:
+            raise UserError(_('Aucun solde restant à radier. Utilisez la clôture normale.'))
+        move = self.env['account.move'].with_context(
+            default_loan_id=False,
+            default_loan_line_id=False,
+        ).create(self._prepare_writeoff_move(write_off_date))
+        move.action_post()
+        self.write({'state': 'written_off'})
+        self.message_post(body=_('Crédit radié le %(date)s. Motif : %(reason)s. Écriture : %(move)s') % {
+            'date': write_off_date, 'reason': reason, 'move': move.name,
+        })
+        return move
 
     def action_open_payment_wizard(self):
         self.ensure_one()

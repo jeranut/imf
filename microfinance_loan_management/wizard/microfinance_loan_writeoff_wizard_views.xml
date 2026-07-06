@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_writeoff_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.writeoff.wizard.form</field>
+        <field name="model">microfinance.loan.writeoff.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Radiation">
+                <group>
+                    <field name="loan_id" readonly="1"/>
+                    <field name="currency_id" invisible="1"/>
+                    <field name="balance_total" readonly="1"/>
+                    <field name="write_off_date"/>
+                    <field name="reason"/>
+                </group>
+                <footer>
+                    <button name="action_confirm" string="Radier" type="object" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

@@ -4,7 +4,7 @@
         <field name="name">microfinance.loan.tree</field>
         <field name="model">microfinance.loan</field>
         <field name="arch" type="xml">
-            <tree decoration-danger="state == 'defaulted'" decoration-success="state == 'closed'" decoration-warning="overdue_amount &gt; 0">
+            <tree decoration-danger="state == 'defaulted'" decoration-muted="state == 'written_off'" decoration-success="state == 'closed'" decoration-warning="overdue_amount &gt; 0">
                 <field name="name"/>
                 <field name="partner_id"/>
                 <field name="product_id"/>
@@ -71,8 +71,9 @@
                     <button name="action_reschedule" string="Rééchelonner" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'active'"/>
                     <button name="action_mark_default" string="Marquer en défaut" type="object" invisible="state != 'active'"/>
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
+                    <button name="action_write_off" string="Radier" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state not in ('active','defaulted')"/>
                     <button name="action_recompute_risk" string="Recalculer risque" type="object"/>
-                    <field name="state" widget="statusbar" statusbar_visible="draft,submitted,manager_validated,finance_validated,approved,active,closed,defaulted"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,submitted,manager_validated,finance_validated,approved,active,closed,defaulted,written_off"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">

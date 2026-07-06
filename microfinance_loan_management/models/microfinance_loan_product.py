@@ -41,6 +41,10 @@ class MicrofinanceLoanProduct(models.Model):
     interest_account_id = fields.Many2one('account.account', string='Compte intérêts', required=True)
     penalty_account_id = fields.Many2one('account.account', string='Compte pénalités', required=True)
     fee_account_id = fields.Many2one('account.account', string='Compte frais')
+    write_off_account_id = fields.Many2one(
+        'account.account', string='Compte pertes sur créances irrécouvrables',
+        help='Requis uniquement au moment de la radiation d\'un crédit de ce produit.',
+    )
     company_id = fields.Many2one('res.company', default=lambda self: self.env.company, required=True)
     currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)
     active = fields.Boolean(default=True)

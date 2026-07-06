@@ -68,6 +68,7 @@
                                 <field name="interest_account_id"/>
                                 <field name="penalty_account_id"/>
                                 <field name="fee_account_id"/>
+                                <field name="write_off_account_id"/>
                             </group>
                         </page>
                     </notebook>
