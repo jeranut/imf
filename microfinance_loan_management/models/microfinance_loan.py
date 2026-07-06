@@ -76,6 +76,7 @@ class MicrofinanceLoan(models.Model):
     visit_count = fields.Integer(compute='_compute_counts')
     move_count = fields.Integer(compute='_compute_counts')
     reschedule_count = fields.Integer(default=0, copy=False, readonly=True, tracking=True)
+    co_borrower_id = fields.Many2one('res.partner', string='Co-emprunteur', tracking=True)
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -233,7 +234,43 @@ class MicrofinanceLoan(models.Model):
             })
         return True
 
+    def _check_eligibility(self):
+        for loan in self:
+            product = loan.product_id
+            today = fields.Date.context_today(loan)
+            member_since = loan.partner_id.create_date.date() if loan.partner_id.create_date else today
+            membership_days = (today - member_since).days
+            if product.min_membership_days and membership_days < product.min_membership_days:
+                missing_days = product.min_membership_days - membership_days
+                raise UserError(_(
+                    'Ancienneté client insuffisante pour ce produit : il manque %(missing)s jour(s) '
+                    '(ancienneté requise : %(required)s jours, ancienneté actuelle : %(current)s jours).'
+                ) % {'missing': missing_days, 'required': product.min_membership_days, 'current': membership_days})
+
+            other_active_loans = self.search([
+                ('company_id', '=', loan.company_id.id),
+                ('partner_id', '=', loan.partner_id.id),
+                ('id', '!=', loan.id),
+                ('state', '=', 'active'),
+            ])
+            if other_active_loans:
+                if not product.allow_second_loan:
+                    raise UserError(_('Ce client a déjà un crédit actif. Ce produit n\'autorise pas de second crédit en parallèle.'))
+                if product.block_second_if_arrears and any(other.overdue_installment_count > 0 for other in other_active_loans):
+                    raise UserError(_('Ce client a déjà un crédit actif en arriérés. Un second crédit ne peut pas être soumis.'))
+
+            if loan.co_borrower_id:
+                co_borrower_active_loans = self.search([
+                    ('company_id', '=', loan.company_id.id),
+                    ('partner_id', '=', loan.co_borrower_id.id),
+                    ('id', '!=', loan.id),
+                    ('state', '=', 'active'),
+                ])
+                if co_borrower_active_loans:
+                    raise UserError(_('Le co-emprunteur a déjà un crédit actif en cours.'))
+
     def action_submit(self):
+        self._check_eligibility()
         self.action_calculate_scoring(silent=True)
         self.write({'state': 'submitted'})
 

@@ -73,3 +73,13 @@ class MicrofinanceCommon(TransactionCase):
         }
         vals.update(kwargs)
         return self.env['microfinance.loan'].create(vals)
+
+    def _activate_loan(self, **kwargs):
+        loan = self._create_loan(**kwargs)
+        loan.action_generate_schedule()
+        loan.action_submit()
+        loan.action_manager_validate()
+        loan.action_finance_validate()
+        loan.action_approve()
+        loan.action_disburse()
+        return loan

@@ -26,6 +26,9 @@ class MicrofinanceLoanProduct(models.Model):
         ('monthly', 'Mensuel'),
     ], required=True, default='monthly')
     grace_period_days = fields.Integer(string='Délai de grâce (jours)', default=0)
+    min_membership_days = fields.Integer(string='Ancienneté minimum client (jours)', default=0)
+    allow_second_loan = fields.Boolean(string='Autoriser un 2e crédit actif', default=True)
+    block_second_if_arrears = fields.Boolean(string='Bloquer le 2e crédit si le 1er a des arriérés', default=True)
     penalty_type = fields.Selection([
         ('fixed', 'Montant fixe'),
         ('percentage', 'Pourcentage'),
@@ -46,7 +49,7 @@ class MicrofinanceLoanProduct(models.Model):
         ('code_company_unique', 'unique(code, company_id)', 'Le code produit doit être unique par société.'),
     ]
 
-    @api.constrains('min_amount', 'max_amount', 'min_term', 'max_term', 'interest_rate', 'grace_period_days')
+    @api.constrains('min_amount', 'max_amount', 'min_term', 'max_term', 'interest_rate', 'grace_period_days', 'min_membership_days')
     def _check_values(self):
         for product in self:
             if product.min_amount < 0 or product.max_amount <= 0 or product.max_amount < product.min_amount:
@@ -57,3 +60,5 @@ class MicrofinanceLoanProduct(models.Model):
                 raise ValidationError(_('Le taux intérêt ne peut pas être négatif.'))
             if product.grace_period_days < 0:
                 raise ValidationError(_('Le délai de grâce ne peut pas être négatif.'))
+            if product.min_membership_days < 0:
+                raise ValidationError(_('L\'ancienneté minimum ne peut pas être négative.'))

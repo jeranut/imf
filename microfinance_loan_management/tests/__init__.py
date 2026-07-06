@@ -2,3 +2,4 @@
 from . import common
 from . import test_grace_period
 from . import test_reschedule
+from . import test_eligibility

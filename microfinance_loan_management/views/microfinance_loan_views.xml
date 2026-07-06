@@ -90,6 +90,7 @@
                             <field name="currency_id"/>
                             <field name="loan_amount"/>
                             <field name="term"/>
+                            <field name="co_borrower_id"/>
                         </group>
                         <group string="Suivi">
                             <field name="application_date"/>

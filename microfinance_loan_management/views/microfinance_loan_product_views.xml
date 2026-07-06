@@ -46,6 +46,13 @@
                                 <field name="grace_period_days"/>
                             </group>
                         </page>
+                        <page string="Éligibilité">
+                            <group>
+                                <field name="min_membership_days"/>
+                                <field name="allow_second_loan"/>
+                                <field name="block_second_if_arrears" invisible="not allow_second_loan"/>
+                            </group>
+                        </page>
                         <page string="Pénalités">
                             <group>
                                 <field name="penalty_type"/>
