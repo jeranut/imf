@@ -23,7 +23,14 @@ class MicrofinanceLoanProduct(models.Model):
     repayment_frequency = fields.Selection([
         ('daily', 'Journalier'),
         ('weekly', 'Hebdomadaire'),
+        ('biweekly', 'Quinzaine (15 jours)'),
+        ('four_weekly', 'Toutes les 4 semaines'),
         ('monthly', 'Mensuel'),
+        ('bimonthly', 'Bimestriel (2 mois)'),
+        ('quarterly', 'Trimestriel'),
+        ('four_monthly', 'Tous les 4 mois'),
+        ('semiannual', 'Semestriel'),
+        ('annual', 'Annuel'),
     ], required=True, default='monthly')
     grace_period_days = fields.Integer(string='Délai de grâce (jours)', default=0)
     min_membership_days = fields.Integer(string='Ancienneté minimum client (jours)', default=0)

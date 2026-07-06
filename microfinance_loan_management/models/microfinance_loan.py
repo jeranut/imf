@@ -392,9 +392,33 @@ class MicrofinanceLoan(models.Model):
         self._compute_risk_score()
         return True
 
+    # Each repayment frequency is either an exact number of calendar months (clean fraction of a
+    # year: the annual rate is prorated as months/12) or, when it doesn't evenly divide into
+    # months (daily/weekly/biweekly/four_weekly), a fixed number of days prorated as days/365 —
+    # the same day-based method already used for the grace-period interest bucket.
+    _PERIOD_DEFINITIONS = {
+        'daily': ('days', 1),
+        'weekly': ('days', 7),
+        'biweekly': ('days', 15),
+        'four_weekly': ('days', 28),
+        'monthly': ('months', 1),
+        'bimonthly': ('months', 2),
+        'quarterly': ('months', 3),
+        'four_monthly': ('months', 4),
+        'semiannual': ('months', 6),
+        'annual': ('months', 12),
+    }
+
     def _period_delta(self):
         self.ensure_one()
-        return {'daily': relativedelta(days=1), 'weekly': relativedelta(weeks=1), 'monthly': relativedelta(months=1)}[self.product_id.repayment_frequency]
+        kind, value = self._PERIOD_DEFINITIONS[self.product_id.repayment_frequency]
+        return relativedelta(months=value) if kind == 'months' else relativedelta(days=value)
+
+    def _period_interest_factor(self):
+        """Fraction of the annual interest rate to apply for one repayment period."""
+        self.ensure_one()
+        kind, value = self._PERIOD_DEFINITIONS[self.product_id.repayment_frequency]
+        return value / 12.0 if kind == 'months' else value / 365.0
 
     def action_generate_schedule(self):
         for loan in self:
@@ -405,6 +429,7 @@ class MicrofinanceLoan(models.Model):
             remaining = loan.loan_amount
             start = loan.approval_date or loan.application_date or fields.Date.context_today(loan)
             delta = loan._period_delta()
+            interest_factor = loan._period_interest_factor()
             grace_days = loan.product_id.grace_period_days or 0
             schedule_start = start
             vals = []
@@ -423,9 +448,9 @@ class MicrofinanceLoan(models.Model):
                     sequence_offset = 1
             for idx in range(1, loan.term + 1):
                 if loan.interest_method == 'flat':
-                    interest = loan.loan_amount * (loan.interest_rate / 100.0) / 12.0
+                    interest = loan.loan_amount * (loan.interest_rate / 100.0) * interest_factor
                 else:
-                    interest = remaining * (loan.interest_rate / 100.0) / 12.0
+                    interest = remaining * (loan.interest_rate / 100.0) * interest_factor
                 due_date = schedule_start + (delta * idx)
                 vals.append((0, 0, {
                     'sequence': idx + sequence_offset,
@@ -476,6 +501,7 @@ class MicrofinanceLoan(models.Model):
         original_first_due_date = unpaid[0].due_date
         start = new_first_due_date or original_first_due_date
         delta = self._period_delta()
+        interest_factor = self._period_interest_factor()
 
         # Partially paid installments keep their history (paid_* amounts stay untouched for
         # accounting purposes) but are locked to what was actually collected; the outstanding
@@ -505,9 +531,9 @@ class MicrofinanceLoan(models.Model):
         remaining = remaining_principal
         for idx in range(term):
             if self.interest_method == 'flat':
-                interest = remaining_principal * (self.interest_rate / 100.0) / 12.0
+                interest = remaining_principal * (self.interest_rate / 100.0) * interest_factor
             else:
-                interest = remaining * (self.interest_rate / 100.0) / 12.0
+                interest = remaining * (self.interest_rate / 100.0) * interest_factor
             due_date = start + (delta * idx)
             vals.append((0, 0, {
                 'sequence': sequence,
