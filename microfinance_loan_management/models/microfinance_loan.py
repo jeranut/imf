@@ -271,15 +271,30 @@ class MicrofinanceLoan(models.Model):
             remaining = loan.loan_amount
             start = loan.approval_date or loan.application_date or fields.Date.context_today(loan)
             delta = loan._period_delta()
+            grace_days = loan.product_id.grace_period_days or 0
+            schedule_start = start
             vals = []
+            sequence_offset = 0
+            if grace_days:
+                schedule_start = fields.Date.add(start, days=grace_days)
+                period_days = ((start + delta) - start).days
+                if grace_days > period_days:
+                    grace_interest = loan.loan_amount * (loan.interest_rate / 100.0) / 365.0 * grace_days
+                    vals.append((0, 0, {
+                        'sequence': 1,
+                        'due_date': schedule_start,
+                        'principal_amount': 0.0,
+                        'interest_amount': grace_interest,
+                    }))
+                    sequence_offset = 1
             for idx in range(1, loan.term + 1):
                 if loan.interest_method == 'flat':
                     interest = loan.loan_amount * (loan.interest_rate / 100.0) / 12.0
                 else:
                     interest = remaining * (loan.interest_rate / 100.0) / 12.0
-                due_date = start + (delta * idx)
+                due_date = schedule_start + (delta * idx)
                 vals.append((0, 0, {
-                    'sequence': idx,
+                    'sequence': idx + sequence_offset,
                     'due_date': due_date,
                     'principal_amount': principal,
                     'interest_amount': interest,
