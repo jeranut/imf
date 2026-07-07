@@ -7,7 +7,7 @@ class MicrofinanceLoanPaymentCancelWizard(models.TransientModel):
     _name = 'microfinance.loan.payment.cancel.wizard'
     _description = 'Assistant annulation remboursement comptabilisé'
 
-    payment_id = fields.Many2one('microfinance.loan.payment', required=True)
+    payment_id = fields.Many2one('microfinance.loan.payment', string='Remboursement', required=True)
     reason = fields.Text(string='Motif', required=True)
 
     def action_confirm(self):

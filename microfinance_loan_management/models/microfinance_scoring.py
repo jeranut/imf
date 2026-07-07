@@ -9,9 +9,9 @@ class MicrofinanceScoringProfile(models.Model):
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'product_id, name'
 
-    name = fields.Char(required=True, tracking=True)
-    active = fields.Boolean(default=True, tracking=True)
-    company_id = fields.Many2one('res.company', default=lambda self: self.env.company, required=True, tracking=True)
+    name = fields.Char(string='Nom', required=True, tracking=True)
+    active = fields.Boolean(string='Actif', default=True, tracking=True)
+    company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True, tracking=True)
     product_id = fields.Many2one(
         'microfinance.loan.product',
         string='Produit de crédit',
@@ -19,11 +19,11 @@ class MicrofinanceScoringProfile(models.Model):
         tracking=True,
         help='Laisser vide pour créer un profil générique de la société.',
     )
-    min_score = fields.Float(default=0.0, required=True)
-    max_score = fields.Float(default=100.0, required=True)
-    approve_threshold = fields.Float(default=70.0, required=True)
-    manual_review_threshold = fields.Float(default=45.0, required=True)
-    reject_threshold = fields.Float(default=45.0, required=True)
+    min_score = fields.Float(string='Score minimum', default=0.0, required=True)
+    max_score = fields.Float(string='Score maximum', default=100.0, required=True)
+    approve_threshold = fields.Float(string="Seuil d'approbation", default=70.0, required=True)
+    manual_review_threshold = fields.Float(string='Seuil de revue manuelle', default=45.0, required=True)
+    reject_threshold = fields.Float(string='Seuil de rejet', default=45.0, required=True)
     rule_ids = fields.One2many('microfinance.scoring.rule', 'profile_id', string='Règles')
 
     @api.constrains('active', 'company_id', 'product_id')
@@ -91,22 +91,22 @@ class MicrofinanceScoringRule(models.Model):
         ('linear', 'Linéaire (points par unité de la métrique, condition ignorée)'),
     ]
 
-    profile_id = fields.Many2one('microfinance.scoring.profile', required=True, ondelete='cascade')
+    profile_id = fields.Many2one('microfinance.scoring.profile', string='Profil de scoring', required=True, ondelete='cascade')
     company_id = fields.Many2one(related='profile_id.company_id', store=True, readonly=True)
-    name = fields.Char(required=True)
-    active = fields.Boolean(default=True)
-    sequence = fields.Integer(default=10)
-    metric = fields.Selection(METRIC_SELECTION, required=True)
+    name = fields.Char(string='Nom', required=True)
+    active = fields.Boolean(string='Actif', default=True)
+    sequence = fields.Integer(string='Séquence', default=10)
+    metric = fields.Selection(METRIC_SELECTION, string='Métrique', required=True)
     computation = fields.Selection(
         COMPUTATION_SELECTION, required=True, default='threshold', string='Mode de calcul',
         help="Seuil : les points sont appliqués tels quels si la métrique respecte l'opérateur/la valeur. "
              "Linéaire : les points sont multipliés par la valeur de la métrique (opérateur/valeur ignorés).",
     )
-    operator = fields.Selection(OPERATOR_SELECTION, default='>=')
-    value = fields.Char(help='Pour between, saisir deux nombres séparés par une virgule, par exemple : 10,30.')
-    points = fields.Float(required=True, default=0.0)
-    rule_type = fields.Selection([('bonus', 'Bonus'), ('malus', 'Malus')], required=True, default='bonus')
-    description = fields.Text()
+    operator = fields.Selection(OPERATOR_SELECTION, string='Opérateur', default='>=')
+    value = fields.Char(string='Valeur', help='Pour between, saisir deux nombres séparés par une virgule, par exemple : 10,30.')
+    points = fields.Float(string='Points', required=True, default=0.0)
+    rule_type = fields.Selection([('bonus', 'Bonus'), ('malus', 'Malus')], string='Type de règle', required=True, default='bonus')
+    description = fields.Text(string='Description')
 
     @api.constrains('computation', 'operator', 'value')
     def _check_rule_value(self):
@@ -169,10 +169,10 @@ class MicrofinanceScoringLine(models.Model):
     _description = 'Historique scoring crédit microfinance'
     _order = 'loan_id, id'
 
-    loan_id = fields.Many2one('microfinance.loan', required=True, ondelete='cascade', index=True)
+    loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True, ondelete='cascade', index=True)
     company_id = fields.Many2one(related='loan_id.company_id', store=True, readonly=True)
     currency_id = fields.Many2one(related='loan_id.currency_id', readonly=True)
-    rule_id = fields.Many2one('microfinance.scoring.rule', readonly=True, ondelete='set null')
-    metric_value = fields.Float(readonly=True)
-    points_applied = fields.Float(readonly=True)
-    note = fields.Char(readonly=True)
+    rule_id = fields.Many2one('microfinance.scoring.rule', string='Règle', readonly=True, ondelete='set null')
+    metric_value = fields.Float(string='Valeur de la métrique', readonly=True)
+    points_applied = fields.Float(string='Points appliqués', readonly=True)
+    note = fields.Char(string='Note', readonly=True)

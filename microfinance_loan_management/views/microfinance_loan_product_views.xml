@@ -11,7 +11,8 @@
                 <field name="max_amount"/>
                 <field name="interest_rate"/>
                 <field name="interest_method"/>
-                <field name="repayment_frequency"/>
+                <field name="repayment_frequency_mode"/>
+                <field name="repayment_frequency_id"/>
                 <field name="active"/>
             </tree>
         </field>
@@ -42,7 +43,9 @@
                             <group>
                                 <field name="interest_rate"/>
                                 <field name="interest_method"/>
-                                <field name="repayment_frequency"/>
+                                <field name="repayment_frequency_mode"/>
+                                <field name="repayment_frequency_id" invisible="repayment_frequency_mode != 'fixed'" required="repayment_frequency_mode == 'fixed'"/>
+                                <field name="allowed_repayment_frequency_ids" widget="many2many_tags" invisible="repayment_frequency_mode != 'client_choice'"/>
                                 <field name="grace_period_days"/>
                             </group>
                         </page>

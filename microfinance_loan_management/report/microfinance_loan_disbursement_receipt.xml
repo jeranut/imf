@@ -34,9 +34,19 @@
                                 <td><span t-field="o.product_id.name"/></td>
                             </tr>
                             <tr>
-                                <td><strong>Montant décaissé</strong></td>
+                                <td><strong>Montant accordé</strong></td>
                                 <td><span t-field="o.loan_amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
                             </tr>
+                            <t t-if="o.net_disbursed_amount != o.loan_amount">
+                                <tr>
+                                    <td><strong>Frais de dossier prélevés</strong></td>
+                                    <td><span t-field="o.fee_amount_due" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Montant net remis</strong></td>
+                                    <td><span t-field="o.net_disbursed_amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                </tr>
+                            </t>
                             <tr>
                                 <td><strong>Date de décaissement</strong></td>
                                 <td><span t-field="o.disbursement_date"/></td>

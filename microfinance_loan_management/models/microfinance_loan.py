@@ -10,18 +10,32 @@ class MicrofinanceLoan(models.Model):
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'id desc'
 
-    name = fields.Char(default='Nouveau', copy=False, readonly=True, tracking=True)
+    name = fields.Char(string='Référence', default='Nouveau', copy=False, readonly=True, tracking=True)
     partner_id = fields.Many2one('res.partner', string='Emprunteur', required=True, tracking=True)
     product_id = fields.Many2one('microfinance.loan.product', string='Produit', required=True, tracking=True)
-    company_id = fields.Many2one('res.company', default=lambda self: self.env.company, required=True, tracking=True)
-    currency_id = fields.Many2one('res.currency', default=lambda self: self.env.company.currency_id, required=True)
+    company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True, tracking=True)
+    currency_id = fields.Many2one('res.currency', string='Devise', default=lambda self: self.env.company.currency_id, required=True)
     loan_amount = fields.Monetary(string='Montant crédit', required=True, tracking=True)
     term = fields.Integer(string='Nombre échéances', required=True, default=1, tracking=True)
-    application_date = fields.Date(default=fields.Date.context_today, required=True)
-    approval_date = fields.Date(readonly=True)
-    disbursement_date = fields.Date(readonly=True)
+    application_date = fields.Date(string='Date de demande', default=fields.Date.context_today, required=True)
+    approval_date = fields.Date(string="Date d'approbation", readonly=True)
+    disbursement_date = fields.Date(string='Date de décaissement', readonly=True)
     interest_rate = fields.Float(string='Taux intérêt annuel (%)', related='product_id.interest_rate', readonly=False, store=True)
     interest_method = fields.Selection(related='product_id.interest_method', readonly=False, store=True)
+    repayment_frequency_mode = fields.Selection(
+        related='product_id.repayment_frequency_mode', string='Mode périodicité (produit)', readonly=True,
+    )
+    allowed_repayment_frequency_ids = fields.Many2many(
+        related='product_id.allowed_repayment_frequency_ids', string='Périodicités autorisées (produit)',
+    )
+    repayment_frequency_id = fields.Many2one(
+        'microfinance.repayment.frequency', string='Périodicité de remboursement',
+        compute='_compute_repayment_frequency_id', store=True, readonly=False,
+        domain="[('id', 'in', allowed_repayment_frequency_ids)] if repayment_frequency_mode == 'client_choice' else []",
+        help='Reprise automatiquement du produit si celui-ci impose une périodicité unique. '
+             "Si le produit laisse le choix au client/agent, à sélectionner obligatoirement parmi "
+             "les périodicités autorisées par le produit avant de générer l'échéancier.",
+    )
     state = fields.Selection([
         ('draft', 'Brouillon'),
         ('submitted', 'Soumis'),
@@ -33,22 +47,22 @@ class MicrofinanceLoan(models.Model):
         ('defaulted', 'Défaut'),
         ('written_off', 'Radié'),
         ('cancelled', 'Annulé'),
-    ], default='draft', tracking=True, index=True)
-    officer_id = fields.Many2one('res.users', default=lambda self: self.env.user, tracking=True)
-    manager_id = fields.Many2one('res.users', tracking=True)
-    finance_user_id = fields.Many2one('res.users', tracking=True)
-    collection_agent_id = fields.Many2one('res.users', tracking=True)
+    ], string='État', default='draft', tracking=True, index=True)
+    officer_id = fields.Many2one('res.users', string='Agent crédit', default=lambda self: self.env.user, tracking=True)
+    manager_id = fields.Many2one('res.users', string='Manager', tracking=True)
+    finance_user_id = fields.Many2one('res.users', string='Utilisateur finance', tracking=True)
+    collection_agent_id = fields.Many2one('res.users', string='Agent recouvrement', tracking=True)
     installment_ids = fields.One2many('microfinance.loan.installment', 'loan_id', string='Échéancier')
     payment_ids = fields.One2many('microfinance.loan.payment', 'loan_id', string='Remboursements')
     visit_ids = fields.One2many('microfinance.collection.visit', 'loan_id', string='Visites')
     move_ids = fields.One2many('account.move', 'microfinance_loan_id', string='Écritures comptables')
-    principal_total = fields.Monetary(compute='_compute_totals', store=True)
-    interest_total = fields.Monetary(compute='_compute_totals', store=True)
-    penalty_total = fields.Monetary(compute='_compute_totals', store=True)
-    paid_total = fields.Monetary(compute='_compute_totals', store=True)
-    balance_total = fields.Monetary(compute='_compute_totals', store=True)
-    overdue_amount = fields.Monetary(compute='_compute_totals', store=True)
-    overdue_installment_count = fields.Integer(compute='_compute_totals', store=True)
+    principal_total = fields.Monetary(string='Total capital', compute='_compute_totals', store=True)
+    interest_total = fields.Monetary(string='Total intérêts', compute='_compute_totals', store=True)
+    penalty_total = fields.Monetary(string='Total pénalités', compute='_compute_totals', store=True)
+    paid_total = fields.Monetary(string='Total payé', compute='_compute_totals', store=True)
+    balance_total = fields.Monetary(string='Solde restant', compute='_compute_totals', store=True)
+    overdue_amount = fields.Monetary(string='Montant en retard', compute='_compute_totals', store=True)
+    overdue_installment_count = fields.Integer(string="Nombre d'échéances en retard", compute='_compute_totals', store=True)
     provision_amount = fields.Monetary(compute='_compute_provision', store=True, string='Provision requise')
     provision_posted_amount = fields.Monetary(copy=False, readonly=True, default=0.0, string='Provision comptabilisée')
     scoring_profile_id = fields.Many2one(
@@ -76,13 +90,13 @@ class MicrofinanceLoan(models.Model):
         ('reject_recommended', 'Risqué / Rejet recommandé'),
     ], string='Décision scoring', copy=False, readonly=True, tracking=True)
     scoring_line_ids = fields.One2many('microfinance.scoring.line', 'loan_id', string='Règles appliquées', copy=False, readonly=True)
-    scoring_line_count = fields.Integer(compute='_compute_counts')
-    note = fields.Text()
-    installment_count = fields.Integer(compute='_compute_counts')
-    payment_count = fields.Integer(compute='_compute_counts')
-    visit_count = fields.Integer(compute='_compute_counts')
-    move_count = fields.Integer(compute='_compute_counts')
-    reschedule_count = fields.Integer(default=0, copy=False, readonly=True, tracking=True)
+    scoring_line_count = fields.Integer(string='Nombre de règles de scoring', compute='_compute_counts')
+    note = fields.Text(string='Note')
+    installment_count = fields.Integer(string="Nombre d'échéances", compute='_compute_counts')
+    payment_count = fields.Integer(string='Nombre de remboursements', compute='_compute_counts')
+    visit_count = fields.Integer(string='Nombre de visites', compute='_compute_counts')
+    move_count = fields.Integer(string="Nombre d'écritures", compute='_compute_counts')
+    reschedule_count = fields.Integer(string='Nombre de rééchelonnements', default=0, copy=False, readonly=True, tracking=True)
     reschedule_history_ids = fields.One2many(
         'microfinance.loan.reschedule.history', 'loan_id', string='Historique de rééchelonnement', readonly=True,
     )
@@ -94,8 +108,16 @@ class MicrofinanceLoan(models.Model):
              'valorisation par type) des garanties validées, pas de la valeur brute estimée.',
     )
     fee_amount_due = fields.Monetary(compute='_compute_fee_amount', store=True, string='Frais de dossier dus')
-    fee_paid = fields.Boolean(default=False, readonly=True, copy=False)
-    fee_move_id = fields.Many2one('account.move', readonly=True, copy=False)
+    fee_paid = fields.Boolean(string='Frais payés', default=False, readonly=True, copy=False)
+    fee_move_id = fields.Many2one('account.move', string='Écriture de frais', readonly=True, copy=False)
+    net_disbursed_amount = fields.Monetary(
+        compute='_compute_net_disbursed_amount', store=True, string='Montant net remis au client',
+        help='Montant réellement remis en caisse au client. Égal au montant du crédit tant que les '
+             "frais de dossier sont encaissés séparément (fee_charged_before_disbursement=True) ; "
+             "sinon égal au montant du crédit diminué des frais de dossier dus, nettés directement "
+             "dans l'écriture de décaissement. Le capital dû (loan_amount) reste toujours le montant "
+             "plein : les frais ne réduisent jamais le principal remboursable.",
+    )
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -112,6 +134,16 @@ class MicrofinanceLoan(models.Model):
                 raise ValidationError(_('Le montant doit respecter les limites du produit.'))
             if product and (loan.term < product.min_term or loan.term > product.max_term):
                 raise ValidationError(_('La durée doit respecter les limites du produit.'))
+
+    @api.constrains('repayment_frequency_id', 'product_id')
+    def _check_repayment_frequency_allowed(self):
+        for loan in self:
+            product = loan.product_id
+            if product.repayment_frequency_mode == 'client_choice' and loan.repayment_frequency_id:
+                if loan.repayment_frequency_id not in product.allowed_repayment_frequency_ids:
+                    raise ValidationError(_(
+                        'La périodicité "%(freq)s" n\'est pas autorisée par le produit "%(product)s".'
+                    ) % {'freq': loan.repayment_frequency_id.name, 'product': product.name})
 
     @api.depends('installment_ids.principal_amount', 'installment_ids.interest_amount', 'installment_ids.penalty_amount',
                  'installment_ids.paid_principal', 'installment_ids.paid_interest', 'installment_ids.paid_penalty',
@@ -146,6 +178,23 @@ class MicrofinanceLoan(models.Model):
                 loan.fee_amount_due = product.fee_amount
             else:
                 loan.fee_amount_due = loan.loan_amount * product.fee_rate / 100.0
+
+    @api.depends('product_id.repayment_frequency_mode', 'product_id.repayment_frequency_id')
+    def _compute_repayment_frequency_id(self):
+        # Uniquement pour les produits à périodicité imposée : la valeur est alors recopiée du
+        # produit et rendue readonly côté vue. Pour un produit à choix du client, on ne touche
+        # jamais ici à une valeur déjà choisie manuellement par l'agent.
+        for loan in self:
+            if loan.product_id.repayment_frequency_mode == 'fixed':
+                loan.repayment_frequency_id = loan.product_id.repayment_frequency_id
+
+    @api.depends('loan_amount', 'fee_amount_due', 'product_id.fee_charged_before_disbursement')
+    def _compute_net_disbursed_amount(self):
+        for loan in self:
+            if loan.product_id and not loan.product_id.fee_charged_before_disbursement:
+                loan.net_disbursed_amount = loan.loan_amount - loan.fee_amount_due
+            else:
+                loan.net_disbursed_amount = loan.loan_amount
 
     def _get_max_overdue_days(self):
         self.ensure_one()
@@ -407,38 +456,34 @@ class MicrofinanceLoan(models.Model):
         self.action_calculate_scoring(silent=True)
         return True
 
-    # Each repayment frequency is either an exact number of calendar months (clean fraction of a
-    # year: the annual rate is prorated as months/12) or, when it doesn't evenly divide into
-    # months (daily/weekly/biweekly/four_weekly), a fixed number of days prorated as days/365 —
-    # the same day-based method already used for the grace-period interest bucket.
-    _PERIOD_DEFINITIONS = {
-        'daily': ('days', 1),
-        'weekly': ('days', 7),
-        'biweekly': ('days', 15),
-        'four_weekly': ('days', 28),
-        'monthly': ('months', 1),
-        'bimonthly': ('months', 2),
-        'quarterly': ('months', 3),
-        'four_monthly': ('months', 4),
-        'semiannual': ('months', 6),
-        'annual': ('months', 12),
-    }
-
     def _period_delta(self):
+        """Each repayment frequency is either an exact number of calendar months (clean fraction
+        of a year: the annual rate is prorated as months/12) or, when it doesn't evenly divide
+        into months (daily/weekly/biweekly/four_weekly), a fixed number of days prorated as
+        days/365 — the same day-based method already used for the grace-period interest bucket."""
         self.ensure_one()
-        kind, value = self._PERIOD_DEFINITIONS[self.product_id.repayment_frequency]
-        return relativedelta(months=value) if kind == 'months' else relativedelta(days=value)
+        freq = self.repayment_frequency_id
+        if not freq:
+            raise UserError(_('Choisissez une périodicité de remboursement avant de générer l\'échéancier.'))
+        return relativedelta(months=freq.period_value) if freq.period_kind == 'months' else relativedelta(days=freq.period_value)
 
     def _period_interest_factor(self):
         """Fraction of the annual interest rate to apply for one repayment period."""
         self.ensure_one()
-        kind, value = self._PERIOD_DEFINITIONS[self.product_id.repayment_frequency]
-        return value / 12.0 if kind == 'months' else value / 365.0
+        freq = self.repayment_frequency_id
+        if not freq:
+            raise UserError(_('Choisissez une périodicité de remboursement avant de générer l\'échéancier.'))
+        return freq.period_value / 12.0 if freq.period_kind == 'months' else freq.period_value / 365.0
 
     def action_generate_schedule(self):
         for loan in self:
             if loan.state not in ('draft', 'submitted', 'manager_validated', 'finance_validated', 'approved'):
                 raise UserError(_('Échéancier autorisé avant activation seulement.'))
+            if not loan.repayment_frequency_id:
+                raise UserError(_(
+                    'Ce produit laisse le choix de la périodicité de remboursement : '
+                    "choisissez-en une avant de générer l'échéancier."
+                ))
             loan.installment_ids.unlink()
             principal = loan.loan_amount / loan.term
             remaining = loan.loan_amount
@@ -590,6 +635,20 @@ class MicrofinanceLoan(models.Model):
         journal = product.disbursement_journal_id
         if not journal or not product.loan_account_id or not journal.default_account_id:
             raise UserError(_('Configurez le journal de décaissement, son compte par défaut et le compte prêts clients.'))
+        credit_lines = [
+            (0, 0, {'name': _('Sortie caisse/banque %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': journal.default_account_id.id, 'debit': 0.0, 'credit': self.net_disbursed_amount}),
+        ]
+        # Frais nettés du décaissement (fee_charged_before_disbursement=False) : le capital dû
+        # (débit ci-dessous) reste plein, mais la sortie caisse est diminuée des frais, dont la
+        # contrepartie est comptabilisée ici plutôt que via une écriture d'encaissement séparée
+        # (action_charge_fee(), qui reste le mécanisme utilisé quand fee_charged_before_disbursement=True).
+        if not product.fee_charged_before_disbursement and self.fee_amount_due > 0:
+            if not product.fee_account_id:
+                raise UserError(_('Configurez le compte frais du produit pour netter les frais de dossier du décaissement.'))
+            credit_lines.append((0, 0, {
+                'name': _('Frais de dossier %s') % self.name, 'partner_id': self.partner_id.id,
+                'account_id': product.fee_account_id.id, 'debit': 0.0, 'credit': self.fee_amount_due,
+            }))
         return {
             'date': fields.Date.context_today(self),
             'journal_id': journal.id,
@@ -597,8 +656,7 @@ class MicrofinanceLoan(models.Model):
             'microfinance_loan_id': self.id,
             'line_ids': [
                 (0, 0, {'name': _('Crédit client %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.loan_account_id.id, 'debit': self.loan_amount, 'credit': 0.0}),
-                (0, 0, {'name': _('Sortie caisse/banque %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': journal.default_account_id.id, 'debit': 0.0, 'credit': self.loan_amount}),
-            ]
+            ] + credit_lines
         }
 
     def _prepare_fee_move(self):

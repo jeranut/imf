@@ -7,12 +7,12 @@ class MicrofinanceLoanPaymentWizard(models.TransientModel):
     _name = 'microfinance.loan.payment.wizard'
     _description = 'Assistant remboursement crédit'
 
-    loan_id = fields.Many2one('microfinance.loan', required=True)
-    amount = fields.Monetary(required=True)
-    payment_date = fields.Date(default=fields.Date.context_today, required=True)
-    journal_id = fields.Many2one('account.journal', required=True, domain="[('type', 'in', ('bank','cash'))]")
+    loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True)
+    amount = fields.Monetary(string='Montant', required=True)
+    payment_date = fields.Date(string='Date de remboursement', default=fields.Date.context_today, required=True)
+    journal_id = fields.Many2one('account.journal', string='Journal', required=True, domain="[('type', 'in', ('bank','cash'))]")
     currency_id = fields.Many2one(related='loan_id.currency_id', readonly=True)
-    note = fields.Text()
+    note = fields.Text(string='Note')
     post_now = fields.Boolean(string='Comptabiliser maintenant', default=True)
 
     def action_create_payment(self):

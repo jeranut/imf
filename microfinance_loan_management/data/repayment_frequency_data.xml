@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Les 10 périodicités historiquement codées dans le champ Selection repayment_frequency.
+         Les xmlids sont stables et utilisés par la migration 17.0.1.2.0 pour reprendre les
+         produits existants sans régression. -->
+    <record id="repayment_frequency_daily" model="microfinance.repayment.frequency">
+        <field name="name">Journalier</field>
+        <field name="code">daily</field>
+        <field name="period_kind">days</field>
+        <field name="period_value">1</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="repayment_frequency_weekly" model="microfinance.repayment.frequency">
+        <field name="name">Hebdomadaire</field>
+        <field name="code">weekly</field>
+        <field name="period_kind">days</field>
+        <field name="period_value">7</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="repayment_frequency_biweekly" model="microfinance.repayment.frequency">
+        <field name="name">Quinzaine (15 jours)</field>
+        <field name="code">biweekly</field>
+        <field name="period_kind">days</field>
+        <field name="period_value">15</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="repayment_frequency_four_weekly" model="microfinance.repayment.frequency">
+        <field name="name">Toutes les 4 semaines</field>
+        <field name="code">four_weekly</field>
+        <field name="period_kind">days</field>
+        <field name="period_value">28</field>
+        <field name="sequence">40</field>
+    </record>
+    <record id="repayment_frequency_monthly" model="microfinance.repayment.frequency">
+        <field name="name">Mensuel</field>
+        <field name="code">monthly</field>
+        <field name="period_kind">months</field>
+        <field name="period_value">1</field>
+        <field name="sequence">50</field>
+    </record>
+    <record id="repayment_frequency_bimonthly" model="microfinance.repayment.frequency">
+        <field name="name">Bimestriel (2 mois)</field>
+        <field name="code">bimonthly</field>
+        <field name="period_kind">months</field>
+        <field name="period_value">2</field>
+        <field name="sequence">60</field>
+    </record>
+    <record id="repayment_frequency_quarterly" model="microfinance.repayment.frequency">
+        <field name="name">Trimestriel</field>
+        <field name="code">quarterly</field>
+        <field name="period_kind">months</field>
+        <field name="period_value">3</field>
+        <field name="sequence">70</field>
+    </record>
+    <record id="repayment_frequency_four_monthly" model="microfinance.repayment.frequency">
+        <field name="name">Tous les 4 mois</field>
+        <field name="code">four_monthly</field>
+        <field name="period_kind">months</field>
+        <field name="period_value">4</field>
+        <field name="sequence">80</field>
+    </record>
+    <record id="repayment_frequency_semiannual" model="microfinance.repayment.frequency">
+        <field name="name">Semestriel</field>
+        <field name="code">semiannual</field>
+        <field name="period_kind">months</field>
+        <field name="period_value">6</field>
+        <field name="sequence">90</field>
+    </record>
+    <record id="repayment_frequency_annual" model="microfinance.repayment.frequency">
+        <field name="name">Annuel</field>
+        <field name="code">annual</field>
+        <field name="period_kind">months</field>
+        <field name="period_value">12</field>
+        <field name="sequence">100</field>
+    </record>
+</odoo>

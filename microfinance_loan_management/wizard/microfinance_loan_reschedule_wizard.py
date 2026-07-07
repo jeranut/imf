@@ -7,7 +7,7 @@ class MicrofinanceLoanRescheduleWizard(models.TransientModel):
     _name = 'microfinance.loan.reschedule.wizard'
     _description = 'Assistant rééchelonnement crédit'
 
-    loan_id = fields.Many2one('microfinance.loan', required=True)
+    loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True)
     currency_id = fields.Many2one(related='loan_id.currency_id', readonly=True)
     new_term = fields.Integer(string='Nouvelle durée restante (échéances)')
     new_first_due_date = fields.Date(string='Nouvelle date de 1ère échéance restante')

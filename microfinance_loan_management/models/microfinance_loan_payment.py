@@ -9,22 +9,22 @@ class MicrofinanceLoanPayment(models.Model):
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'id desc'
 
-    name = fields.Char(default='Nouveau', copy=False, readonly=True)
-    loan_id = fields.Many2one('microfinance.loan', required=True, ondelete='restrict', tracking=True)
+    name = fields.Char(string='Référence', default='Nouveau', copy=False, readonly=True)
+    loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True, ondelete='restrict', tracking=True)
     partner_id = fields.Many2one(related='loan_id.partner_id', store=True, readonly=True)
-    payment_date = fields.Date(default=fields.Date.context_today, required=True)
-    amount = fields.Monetary(required=True)
-    journal_id = fields.Many2one('account.journal', required=True, domain="[('type', 'in', ('bank','cash'))]")
+    payment_date = fields.Date(string='Date de remboursement', default=fields.Date.context_today, required=True)
+    amount = fields.Monetary(string='Montant', required=True)
+    journal_id = fields.Many2one('account.journal', string='Journal', required=True, domain="[('type', 'in', ('bank','cash'))]")
     currency_id = fields.Many2one(related='loan_id.currency_id', store=True, readonly=True)
     company_id = fields.Many2one(related='loan_id.company_id', store=True, readonly=True)
-    allocated_penalty = fields.Monetary(readonly=True)
-    allocated_interest = fields.Monetary(readonly=True)
-    allocated_principal = fields.Monetary(readonly=True)
-    move_id = fields.Many2one('account.move', readonly=True, copy=False)
+    allocated_penalty = fields.Monetary(string='Pénalité allouée', readonly=True)
+    allocated_interest = fields.Monetary(string='Intérêt alloué', readonly=True)
+    allocated_principal = fields.Monetary(string='Principal alloué', readonly=True)
+    move_id = fields.Many2one('account.move', string='Écriture comptable', readonly=True, copy=False)
     reversal_move_id = fields.Many2one('account.move', readonly=True, copy=False, string='Écriture de contre-passation')
-    state = fields.Selection([('draft', 'Brouillon'), ('posted', 'Comptabilisé'), ('cancelled', 'Annulé')], default='draft', tracking=True)
-    installment_ids = fields.Many2many('microfinance.loan.installment', 'microfinance_installment_payment_rel', 'payment_id', 'installment_id', readonly=True)
-    note = fields.Text()
+    state = fields.Selection([('draft', 'Brouillon'), ('posted', 'Comptabilisé'), ('cancelled', 'Annulé')], string='État', default='draft', tracking=True)
+    installment_ids = fields.Many2many('microfinance.loan.installment', 'microfinance_installment_payment_rel', 'payment_id', 'installment_id', string='Échéances', readonly=True)
+    note = fields.Text(string='Note')
 
     @api.model_create_multi
     def create(self, vals_list):

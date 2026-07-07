@@ -9,29 +9,35 @@ class MicrofinanceLoanProduct(models.Model):
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'name'
 
-    name = fields.Char(required=True, tracking=True)
-    code = fields.Char(required=True, tracking=True)
+    name = fields.Char(string='Nom', required=True, tracking=True)
+    code = fields.Char(string='Code', required=True, tracking=True)
     min_amount = fields.Monetary(string='Montant minimum', required=True, default=0.0)
     max_amount = fields.Monetary(string='Montant maximum', required=True, default=0.0)
     min_term = fields.Integer(string='Durée min.', default=1, required=True)
     max_term = fields.Integer(string='Durée max.', default=12, required=True)
     interest_rate = fields.Float(string='Taux intérêt annuel (%)', required=True, default=0.0)
     interest_method = fields.Selection([
-        ('flat', 'Flat rate'),
-        ('reducing', 'Reducing balance'),
-    ], required=True, default='flat')
-    repayment_frequency = fields.Selection([
-        ('daily', 'Journalier'),
-        ('weekly', 'Hebdomadaire'),
-        ('biweekly', 'Quinzaine (15 jours)'),
-        ('four_weekly', 'Toutes les 4 semaines'),
-        ('monthly', 'Mensuel'),
-        ('bimonthly', 'Bimestriel (2 mois)'),
-        ('quarterly', 'Trimestriel'),
-        ('four_monthly', 'Tous les 4 mois'),
-        ('semiannual', 'Semestriel'),
-        ('annual', 'Annuel'),
-    ], required=True, default='monthly')
+        ('flat', 'Taux fixe'),
+        ('reducing', 'Solde dégressif'),
+    ], string='Méthode de calcul des intérêts', required=True, default='flat')
+    repayment_frequency_mode = fields.Selection([
+        ('fixed', 'Périodicité unique imposée'),
+        ('client_choice', 'Choix du client/agent parmi une liste autorisée'),
+    ], string='Mode de périodicité de remboursement', required=True, default='fixed', tracking=True,
+        help='"Périodicité unique" : le produit impose une seule périodicité, comme un premier '
+             'prêt en zone urbaine avec remboursement hebdomadaire obligatoire. "Choix du client" : '
+             "le client/agent choisit à la création du crédit parmi une liste de périodicités "
+             'autorisées, comme un premier prêt rural où le client choisit hebdomadaire ou mensuel '
+             'selon la saisonnalité de ses revenus.')
+    repayment_frequency_id = fields.Many2one(
+        'microfinance.repayment.frequency', string='Périodicité de remboursement',
+        help='Requis si le mode est "Périodicité unique imposée".',
+    )
+    allowed_repayment_frequency_ids = fields.Many2many(
+        'microfinance.repayment.frequency', string='Périodicités autorisées',
+        help='Utilisé si le mode est "Choix du client/agent" : liste des périodicités que le '
+             "client/agent peut choisir à la création du crédit. Au moins une requise.",
+    )
     grace_period_days = fields.Integer(string='Délai de grâce (jours)', default=0)
     min_membership_days = fields.Integer(string='Ancienneté minimum client (jours)', default=0)
     allow_second_loan = fields.Boolean(string='Autoriser un 2e crédit actif', default=True)
@@ -45,7 +51,7 @@ class MicrofinanceLoanProduct(models.Model):
     penalty_type = fields.Selection([
         ('fixed', 'Montant fixe'),
         ('percentage', 'Pourcentage'),
-    ], default='fixed', required=True)
+    ], string='Type de pénalité', default='fixed', required=True)
     penalty_amount = fields.Monetary(string='Pénalité fixe', default=0.0)
     penalty_rate = fields.Float(string='Taux pénalité (%)', default=0.0)
     disbursement_journal_id = fields.Many2one('account.journal', string='Journal décaissement', domain="[('type', 'in', ('bank','cash'))]")
@@ -57,7 +63,7 @@ class MicrofinanceLoanProduct(models.Model):
     fee_type = fields.Selection([
         ('fixed', 'Montant fixe'),
         ('percentage', 'Pourcentage du montant du crédit'),
-    ], default='fixed', required=True)
+    ], string='Type de frais', default='fixed', required=True)
     fee_amount = fields.Monetary(string='Frais fixes', default=0.0)
     fee_rate = fields.Float(string='Taux de frais (%)', default=0.0)
     fee_journal_id = fields.Many2one(
@@ -81,9 +87,9 @@ class MicrofinanceLoanProduct(models.Model):
         'account.account', string='Compte de contrepartie provision (bilan)',
         help='Requis uniquement au moment de comptabiliser une provision pour ce produit.',
     )
-    company_id = fields.Many2one('res.company', default=lambda self: self.env.company, required=True)
+    company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True)
     currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)
-    active = fields.Boolean(default=True)
+    active = fields.Boolean(string='Actif', default=True)
 
     _sql_constraints = [
         ('code_company_unique', 'unique(code, company_id)', 'Le code produit doit être unique par société.'),
@@ -107,3 +113,11 @@ class MicrofinanceLoanProduct(models.Model):
                 raise ValidationError(_('Le ratio minimum de garantie ne peut pas être négatif.'))
             if product.fee_amount < 0 or product.fee_rate < 0:
                 raise ValidationError(_('Les frais de dossier ne peuvent pas être négatifs.'))
+
+    @api.constrains('repayment_frequency_mode', 'repayment_frequency_id', 'allowed_repayment_frequency_ids')
+    def _check_repayment_frequency_mode(self):
+        for product in self:
+            if product.repayment_frequency_mode == 'fixed' and not product.repayment_frequency_id:
+                raise ValidationError(_('Choisissez la périodicité de remboursement imposée par ce produit.'))
+            if product.repayment_frequency_mode == 'client_choice' and not product.allowed_repayment_frequency_ids:
+                raise ValidationError(_('Autorisez au moins une périodicité pour un produit à choix du client.'))

@@ -70,3 +70,27 @@ class TestFee(MicrofinanceCommon):
         loan.action_charge_fee()
         with self.assertRaises(UserError):
             loan.action_charge_fee()
+
+    def test_net_disbursed_amount_equals_loan_amount_when_fee_charged_separately(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._create_loan(loan_amount=1000.0)
+        self.assertEqual(loan.net_disbursed_amount, 1000.0)
+
+    def test_disburse_nets_fee_in_single_move(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': False})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+
+        self.assertEqual(loan.net_disbursed_amount, 975.0)
+        loan.action_disburse()
+
+        move = loan.move_ids
+        self.assertEqual(len(move), 1)
+        debit_lines = move.line_ids.filtered(lambda l: l.debit > 0)
+        self.assertEqual(sum(debit_lines.mapped('debit')), 1000.0)
+        self.assertEqual(debit_lines.account_id, self.loan_account)
+        fee_line = move.line_ids.filtered(lambda l: l.account_id == self.fee_account)
+        self.assertEqual(fee_line.credit, 25.0)
+        cash_line = move.line_ids.filtered(lambda l: l.account_id == self.bank_account)
+        self.assertEqual(cash_line.credit, 975.0)
+        # Le capital dû reste plein : le client rembourse 1000, pas 975.
+        self.assertEqual(loan.balance_total, 1000.0)

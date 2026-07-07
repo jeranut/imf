@@ -6,12 +6,12 @@ class MicrofinanceDashboard(models.Model):
     _name = 'microfinance.dashboard'
     _description = 'Dashboard microfinance'
 
-    active_loan_count = fields.Integer(compute='_compute_dashboard')
-    disbursed_amount = fields.Monetary(compute='_compute_dashboard')
-    outstanding_amount = fields.Monetary(compute='_compute_dashboard')
-    overdue_amount = fields.Monetary(compute='_compute_dashboard')
-    default_rate = fields.Float(compute='_compute_dashboard')
-    currency_id = fields.Many2one('res.currency', default=lambda self: self.env.company.currency_id)
+    active_loan_count = fields.Integer(string='Crédits actifs', compute='_compute_dashboard')
+    disbursed_amount = fields.Monetary(string='Montant décaissé', compute='_compute_dashboard')
+    outstanding_amount = fields.Monetary(string='Encours total', compute='_compute_dashboard')
+    overdue_amount = fields.Monetary(string='Impayés', compute='_compute_dashboard')
+    default_rate = fields.Float(string='Taux de défaut (%)', compute='_compute_dashboard')
+    currency_id = fields.Many2one('res.currency', string='Devise', default=lambda self: self.env.company.currency_id)
 
     @api.depends_context('company')
     def _compute_dashboard(self):

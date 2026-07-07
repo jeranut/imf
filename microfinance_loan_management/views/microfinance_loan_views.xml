@@ -93,6 +93,9 @@
                             <field name="currency_id"/>
                             <field name="loan_amount"/>
                             <field name="term"/>
+                            <field name="repayment_frequency_mode" invisible="1"/>
+                            <field name="allowed_repayment_frequency_ids" invisible="1"/>
+                            <field name="repayment_frequency_id" readonly="repayment_frequency_mode == 'fixed'"/>
                             <field name="co_borrower_id"/>
                         </group>
                         <group string="Suivi">
@@ -121,6 +124,7 @@
                         <field name="fee_amount_due" readonly="1"/>
                         <field name="fee_paid" readonly="1"/>
                         <field name="fee_move_id" readonly="1"/>
+                        <field name="net_disbursed_amount" readonly="1"/>
                     </group>
                     <notebook>
                         <page string="Échéancier"><field name="installment_ids" readonly="1"/></page>

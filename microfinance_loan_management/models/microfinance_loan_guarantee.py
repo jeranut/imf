@@ -18,10 +18,10 @@ class MicrofinanceLoanGuarantee(models.Model):
     _description = 'Garantie / caution de crédit microfinance'
     _order = 'id desc'
 
-    loan_id = fields.Many2one('microfinance.loan', required=True, ondelete='cascade', index=True)
-    guarantee_type = fields.Selection(GUARANTEE_TYPE_SELECTION, required=True, default='other')
-    description = fields.Char(required=True)
-    estimated_value = fields.Monetary(required=True, default=0.0)
+    loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True, ondelete='cascade', index=True)
+    guarantee_type = fields.Selection(GUARANTEE_TYPE_SELECTION, string='Type de garantie', required=True, default='other')
+    description = fields.Char(string='Description', required=True)
+    estimated_value = fields.Monetary(string='Valeur estimée', required=True, default=0.0)
     recognized_value = fields.Monetary(
         compute='_compute_recognized_value', store=True, string='Valeur reconnue',
         help='Valeur estimée pondérée par le ratio de valorisation configuré pour ce type de '
@@ -31,14 +31,14 @@ class MicrofinanceLoanGuarantee(models.Model):
     )
     guarantor_partner_id = fields.Many2one('res.partner', string='Caution')
     document = fields.Binary(string='Pièce justificative')
-    document_filename = fields.Char()
+    document_filename = fields.Char(string='Nom du fichier')
     currency_id = fields.Many2one(related='loan_id.currency_id', store=True, readonly=True)
     company_id = fields.Many2one(related='loan_id.company_id', store=True, readonly=True)
     state = fields.Selection([
         ('draft', 'Brouillon'),
         ('validated', 'Validée'),
         ('released', 'Libérée'),
-    ], default='draft', required=True)
+    ], string='État', default='draft', required=True)
 
     @api.constrains('guarantee_type', 'guarantor_partner_id')
     def _check_guarantor_partner(self):
@@ -69,7 +69,7 @@ class MicrofinanceGuaranteeValuationRule(models.Model):
     _description = 'Règle de valorisation des garanties par type'
     _order = 'company_id, guarantee_type'
 
-    guarantee_type = fields.Selection(GUARANTEE_TYPE_SELECTION, required=True)
+    guarantee_type = fields.Selection(GUARANTEE_TYPE_SELECTION, string='Type de garantie', required=True)
     valuation_ratio = fields.Float(
         string='Ratio de valorisation (%)', required=True, default=100.0,
         help='Pourcentage de la valeur estimée reconnu comme garantie effective (ex. 114 pour 114%).',
@@ -78,7 +78,7 @@ class MicrofinanceGuaranteeValuationRule(models.Model):
         string='Ratio maximum (%)', required=True, default=150.0,
         help='Plafond au-delà duquel le ratio de valorisation ne peut pas être configuré pour ce type.',
     )
-    company_id = fields.Many2one('res.company', default=lambda self: self.env.company, required=True)
+    company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True)
 
     _sql_constraints = [
         ('type_company_unique', 'unique(guarantee_type, company_id)',

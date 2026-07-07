@@ -7,25 +7,25 @@ class MicrofinanceLoanInstallment(models.Model):
     _description = 'Échéance de crédit microfinance'
     _order = 'loan_id, sequence, due_date'
 
-    loan_id = fields.Many2one('microfinance.loan', required=True, ondelete='cascade', index=True)
-    sequence = fields.Integer(required=True, default=1)
-    due_date = fields.Date(required=True, index=True)
-    principal_amount = fields.Monetary(default=0.0)
-    interest_amount = fields.Monetary(default=0.0)
-    penalty_amount = fields.Monetary(default=0.0)
-    total_amount = fields.Monetary(compute='_compute_amounts', store=True)
-    paid_principal = fields.Monetary(default=0.0)
-    paid_interest = fields.Monetary(default=0.0)
-    paid_penalty = fields.Monetary(default=0.0)
-    residual_amount = fields.Monetary(compute='_compute_amounts', store=True)
+    loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True, ondelete='cascade', index=True)
+    sequence = fields.Integer(string='Séquence', required=True, default=1)
+    due_date = fields.Date(string="Date d'échéance", required=True, index=True)
+    principal_amount = fields.Monetary(string='Montant principal', default=0.0)
+    interest_amount = fields.Monetary(string='Montant intérêt', default=0.0)
+    penalty_amount = fields.Monetary(string='Montant pénalité', default=0.0)
+    total_amount = fields.Monetary(string='Montant total', compute='_compute_amounts', store=True)
+    paid_principal = fields.Monetary(string='Principal payé', default=0.0)
+    paid_interest = fields.Monetary(string='Intérêt payé', default=0.0)
+    paid_penalty = fields.Monetary(string='Pénalité payée', default=0.0)
+    residual_amount = fields.Monetary(string='Montant résiduel', compute='_compute_amounts', store=True)
     state = fields.Selection([
         ('pending', 'À payer'),
         ('partial', 'Partiel'),
         ('paid', 'Payé'),
         ('overdue', 'En retard'),
-    ], compute='_compute_state', store=True, readonly=False, default='pending')
-    penalty_applied = fields.Boolean(default=False)
-    payment_ids = fields.Many2many('microfinance.loan.payment', 'microfinance_installment_payment_rel', 'installment_id', 'payment_id')
+    ], string='État', compute='_compute_state', store=True, readonly=False, default='pending')
+    penalty_applied = fields.Boolean(string='Pénalité appliquée', default=False)
+    payment_ids = fields.Many2many('microfinance.loan.payment', 'microfinance_installment_payment_rel', 'installment_id', 'payment_id', string='Paiements')
     partner_id = fields.Many2one(related='loan_id.partner_id', store=True, readonly=True)
     company_id = fields.Many2one(related='loan_id.company_id', store=True, readonly=True)
     currency_id = fields.Many2one(related='loan_id.currency_id', store=True, readonly=True)

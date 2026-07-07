@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Loan Management',
-    'version': '17.0.1.1.0',
+    'version': '17.0.1.2.0',
     'summary': 'Gestion des crédits clients pour institutions de microfinance',
     'description': 'Produits de crédit, demandes, approbations, échéanciers, remboursements, pénalités, recouvrement et risque.',
     'category': 'Accounting/Finance',
@@ -14,11 +14,13 @@
         'security/ir.model.access.csv',
         'data/sequence.xml',
         'data/cron.xml',
+        'data/repayment_frequency_data.xml',
         'data/provision_rules_data.xml',
         'data/provision_server_action.xml',
         'data/scoring_rules_data.xml',
         'report/microfinance_loan_disbursement_receipt.xml',
         'views/microfinance_loan_product_views.xml',
+        'views/microfinance_repayment_frequency_views.xml',
         'views/microfinance_provision_rule_views.xml',
         'views/microfinance_loan_guarantee_views.xml',
         'views/microfinance_loan_views.xml',

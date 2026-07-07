@@ -205,6 +205,27 @@ anomalie de disque constatée sur ce module, sans lien avec ce module-ci.
 - Frais de dossier fixes et pourcentage, blocage du décaissement si non encaissés
 - Génération d'échéancier pour chaque nouvelle périodicité (quinzaine, 4 semaines, bimestriel, trimestriel, 4 mois, semestriel, annuel), en particulier le prorata d'intérêt trimestriel et semestriel
 - Modification d'une règle de scoring (seuil ou linéaire) : le score recalculé d'un crédit existant change en conséquence
+- Produit en mode `repayment_frequency_mode = fixed` : échéancier généré directement à partir de `repayment_frequency_id` du produit, sans saisie de l'agent
+- Produit en mode `client_choice` : génération de l'échéancier bloquée tant qu'aucune périodicité n'est choisie parmi `allowed_repayment_frequency_ids` ; choix hors liste rejeté par une contrainte serveur
+- Frais de dossier nettés du décaissement (`fee_charged_before_disbursement = False`) : écriture de décaissement à 3 lignes (capital plein au débit, frais et net caisse au crédit), `balance_total` toujours basé sur `loan_amount` plein
+
+## Lien avec le module épargne (`microfinance_savings_management`)
+
+Un module séparé, `microfinance_savings_management`, ajoute la gestion de l'épargne (produits,
+comptes, transactions, capitalisation des intérêts) et son intégration avec le crédit :
+
+- **Prélèvement automatique** sur un compte épargne pour couvrir une échéance impayée, quand le
+  produit de crédit l'autorise (`allow_savings_auto_debit`) et qu'un compte épargne est renseigné
+  sur le crédit (`savings_account_id`). Réutilise `microfinance.loan.payment` et
+  `_allocate_to_installments()` sans dupliquer la logique d'allocation.
+- **Éligibilité progressive** : un produit de crédit peut exiger une épargne cible pendant le
+  remboursement (condition pour un prêt suivant) ou un apport en amont bloquant l'approbation,
+  paramétrable par produit (`savings_requirement_type`, ratios associés).
+
+Ce module dépend de `microfinance_loan_management` (pas l'inverse) : une institution qui n'a pas
+besoin de l'épargne peut utiliser `microfinance_loan_management` seul. C'est pour cette raison que
+les champs croisés (`savings_account_id` sur le crédit, `allow_savings_auto_debit` sur le produit,
+etc.) sont ajoutés par extension (`_inherit`) depuis le module épargne, et non l'inverse.
 
 ## Limites V1
 

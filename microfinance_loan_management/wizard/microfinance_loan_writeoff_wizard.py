@@ -7,10 +7,10 @@ class MicrofinanceLoanWriteoffWizard(models.TransientModel):
     _name = 'microfinance.loan.writeoff.wizard'
     _description = 'Assistant radiation crédit'
 
-    loan_id = fields.Many2one('microfinance.loan', required=True)
+    loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True)
     currency_id = fields.Many2one(related='loan_id.currency_id', readonly=True)
     balance_total = fields.Monetary(related='loan_id.balance_total', readonly=True)
-    write_off_date = fields.Date(default=fields.Date.context_today, required=True)
+    write_off_date = fields.Date(string='Date de radiation', default=fields.Date.context_today, required=True)
     reason = fields.Text(string='Motif', required=True)
 
     def action_confirm(self):

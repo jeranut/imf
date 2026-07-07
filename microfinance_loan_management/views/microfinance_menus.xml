@@ -14,6 +14,7 @@
     <menuitem id="menu_microfinance_analysis_payments" name="Analyse paiements" parent="menu_microfinance_analysis" action="action_microfinance_payment" sequence="2"/>
     <menuitem id="menu_microfinance_config" name="Configuration" parent="menu_microfinance_root" sequence="90" groups="microfinance_loan_management.group_microfinance_manager"/>
     <menuitem id="menu_microfinance_products" name="Produits de crédit" parent="menu_microfinance_config" action="action_microfinance_loan_product" sequence="1"/>
+    <menuitem id="menu_microfinance_repayment_frequency" name="Périodicités de remboursement" parent="menu_microfinance_config" action="action_microfinance_repayment_frequency" sequence="2"/>
     <menuitem id="menu_microfinance_scoring" name="Scoring crédit" parent="menu_microfinance_config" action="action_microfinance_scoring_profile" sequence="2"/>
     <menuitem id="menu_microfinance_provision_rule" name="Règles de provisionnement" parent="menu_microfinance_config" action="action_microfinance_provision_rule" sequence="3"/>
     <menuitem id="menu_microfinance_guarantee_valuation_rule" name="Ratios de valorisation des garanties" parent="menu_microfinance_config" action="action_microfinance_guarantee_valuation_rule" sequence="4"/>

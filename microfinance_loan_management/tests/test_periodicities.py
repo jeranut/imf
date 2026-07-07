@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 from dateutil.relativedelta import relativedelta
 
+from odoo.exceptions import UserError, ValidationError
+
 from .common import MicrofinanceCommon
 
 
 class TestPeriodicities(MicrofinanceCommon):
 
     def _schedule_for(self, frequency, **kwargs):
-        self.product.repayment_frequency = frequency
+        self.product.repayment_frequency_id = self.env.ref(
+            'microfinance_loan_management.repayment_frequency_%s' % frequency
+        ).id
         loan = self._create_loan(**kwargs)
         loan.action_generate_schedule()
         return loan.installment_ids.sorted('sequence')
@@ -72,3 +76,50 @@ class TestPeriodicities(MicrofinanceCommon):
         amounts = installments.mapped('interest_amount')
         self.assertGreater(amounts[0], amounts[1])
         self.assertGreater(amounts[1], amounts[2])
+
+    def test_fixed_product_generates_schedule_without_agent_choice(self):
+        # Produit en mode 'fixed' (comportement par défaut du produit commun de test) : le crédit
+        # reprend automatiquement la périodicité du produit, aucune saisie de l'agent nécessaire.
+        loan = self._create_loan()
+        self.assertEqual(loan.repayment_frequency_id, self.env.ref('microfinance_loan_management.repayment_frequency_monthly'))
+        loan.action_generate_schedule()
+        self.assertTrue(loan.installment_ids)
+
+    def test_client_choice_product_requires_explicit_frequency(self):
+        weekly = self.env.ref('microfinance_loan_management.repayment_frequency_weekly')
+        monthly = self.env.ref('microfinance_loan_management.repayment_frequency_monthly')
+        self.product.write({
+            'repayment_frequency_mode': 'client_choice',
+            'allowed_repayment_frequency_ids': [(6, 0, (weekly | monthly).ids)],
+        })
+        loan = self._create_loan()
+        self.assertFalse(loan.repayment_frequency_id)
+        with self.assertRaises(UserError):
+            loan.action_generate_schedule()
+
+        loan.repayment_frequency_id = weekly.id
+        loan.action_generate_schedule()
+        self.assertTrue(loan.installment_ids)
+
+    def test_client_choice_rejects_frequency_outside_allowed_list(self):
+        weekly = self.env.ref('microfinance_loan_management.repayment_frequency_weekly')
+        monthly = self.env.ref('microfinance_loan_management.repayment_frequency_monthly')
+        annual = self.env.ref('microfinance_loan_management.repayment_frequency_annual')
+        self.product.write({
+            'repayment_frequency_mode': 'client_choice',
+            'allowed_repayment_frequency_ids': [(6, 0, (weekly | monthly).ids)],
+        })
+        loan = self._create_loan()
+        with self.assertRaises(ValidationError):
+            loan.repayment_frequency_id = annual.id
+
+    def test_product_fixed_mode_requires_frequency(self):
+        with self.assertRaises(ValidationError):
+            self.product.write({'repayment_frequency_mode': 'fixed', 'repayment_frequency_id': False})
+
+    def test_product_client_choice_requires_at_least_one_allowed(self):
+        with self.assertRaises(ValidationError):
+            self.product.write({
+                'repayment_frequency_mode': 'client_choice',
+                'allowed_repayment_frequency_ids': [(5, 0, 0)],
+            })

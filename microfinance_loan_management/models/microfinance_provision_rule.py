@@ -8,11 +8,11 @@ class MicrofinanceProvisionRule(models.Model):
     _description = 'Règle de provisionnement selon ancienneté des arriérés'
     _order = 'company_id, min_days'
 
-    name = fields.Char(compute='_compute_name', store=True)
+    name = fields.Char(string='Nom', compute='_compute_name', store=True)
     min_days = fields.Integer(string='Jours de retard min.', required=True, default=0)
     max_days = fields.Integer(string='Jours de retard max. (0 = illimité)', default=0)
     provision_rate = fields.Float(string='Taux de provision (%)', required=True, default=0.0)
-    company_id = fields.Many2one('res.company', default=lambda self: self.env.company, required=True)
+    company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True)
 
     @api.depends('min_days', 'max_days', 'provision_rate')
     def _compute_name(self):

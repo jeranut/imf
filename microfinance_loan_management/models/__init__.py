@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from . import microfinance_repayment_frequency
 from . import microfinance_loan_product
 from . import microfinance_scoring
 from . import microfinance_provision_rule
