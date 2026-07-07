@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="microfinance_loan_management.MicrofinanceLoanDashboard" t-inherit="microfinance_loan_management.MicrofinanceLoanDashboard" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('o_microfinance_kpi_grid')]" position="inside">
+            <article class="o_microfinance_kpi o_microfinance_kpi--purple">
+                <span>Encours épargne</span>
+                <strong t-esc="formatMoney(kpis.savings_outstanding_total)"/>
+            </article>
+            <article class="o_microfinance_kpi o_microfinance_kpi--teal">
+                <span>Comptes épargne actifs</span>
+                <strong t-esc="formatNumber(kpis.active_savings_account_count)"/>
+            </article>
+        </xpath>
+    </t>
+</templates>

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="ir_cron_microfinance_savings_capitalize_monthly" model="ir.cron">
+        <field name="name">Épargne : capitalisation mensuelle des intérêts</field>
+        <field name="model_id" ref="model_microfinance_savings_account"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_capitalize_interest('monthly')</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">months</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+    <record id="ir_cron_microfinance_savings_capitalize_quarterly" model="ir.cron">
+        <field name="name">Épargne : capitalisation trimestrielle des intérêts</field>
+        <field name="model_id" ref="model_microfinance_savings_account"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_capitalize_interest('quarterly')</field>
+        <field name="interval_number">3</field>
+        <field name="interval_type">months</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+    <record id="ir_cron_microfinance_savings_capitalize_annual" model="ir.cron">
+        <field name="name">Épargne : capitalisation annuelle des intérêts</field>
+        <field name="model_id" ref="model_microfinance_savings_account"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_capitalize_interest('annual')</field>
+        <field name="interval_number">12</field>
+        <field name="interval_type">months</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+    <record id="ir_cron_microfinance_savings_dormancy" model="ir.cron">
+        <field name="name">Épargne : détection des comptes dormants</field>
+        <field name="model_id" ref="model_microfinance_savings_account"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_detect_dormant_accounts()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+    <record id="ir_cron_microfinance_savings_auto_debit" model="ir.cron">
+        <field name="name">Épargne : prélèvement automatique sur échéance impayée</field>
+        <field name="model_id" ref="microfinance_loan_management.model_microfinance_loan"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_process_savings_auto_debit()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
+</odoo>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="group_savings_agent" model="res.groups">
+        <field name="name">Agent épargne</field>
+        <field name="category_id" ref="microfinance_loan_management.module_category_microfinance"/>
+    </record>
+    <record id="group_savings_manager" model="res.groups">
+        <field name="name">Manager épargne</field>
+        <field name="category_id" ref="microfinance_loan_management.module_category_microfinance"/>
+        <field name="implied_ids" eval="[(4, ref('group_savings_agent'))]"/>
+    </record>
+</odoo>

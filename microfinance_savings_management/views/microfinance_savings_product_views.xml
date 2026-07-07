@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_savings_product_tree" model="ir.ui.view">
+        <field name="name">microfinance.savings.product.tree</field>
+        <field name="model">microfinance.savings.product</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="product_type"/>
+                <field name="interest_rate"/>
+                <field name="capitalization_frequency"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_savings_product_form" model="ir.ui.view">
+        <field name="name">microfinance.savings.product.form</field>
+        <field name="model">microfinance.savings.product</field>
+        <field name="arch" type="xml">
+            <form string="Produit d'épargne">
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" placeholder="Nom du produit"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="currency_id"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="product_type"/>
+                            <field name="term_months" invisible="product_type != 'term_deposit'" required="product_type == 'term_deposit'"/>
+                            <field name="early_withdrawal_penalty_rate" invisible="product_type != 'term_deposit'"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Intérêts">
+                            <group>
+                                <field name="interest_rate"/>
+                                <field name="balance_method"/>
+                                <field name="capitalization_frequency"/>
+                            </group>
+                        </page>
+                        <page string="Limites">
+                            <group>
+                                <field name="min_opening_amount"/>
+                                <field name="min_balance"/>
+                                <field name="withdrawal_limit_amount"/>
+                                <field name="withdrawal_limit_period"/>
+                                <field name="maintenance_fee_amount"/>
+                                <field name="maintenance_fee_frequency"/>
+                            </group>
+                        </page>
+                        <page string="Comptabilité">
+                            <group>
+                                <field name="deposit_journal_id"/>
+                                <field name="withdrawal_journal_id"/>
+                                <field name="deposit_account_id"/>
+                                <field name="interest_expense_account_id"/>
+                                <field name="fee_income_account_id"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_savings_product" model="ir.actions.act_window">
+        <field name="name">Produits d'épargne</field>
+        <field name="res_model">microfinance.savings.product</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

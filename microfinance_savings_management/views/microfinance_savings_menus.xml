@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <menuitem id="menu_microfinance_savings_accounts"
+              name="Comptes épargne"
+              parent="microfinance_loan_management.menu_microfinance_operations"
+              action="action_microfinance_savings_account"
+              sequence="5"/>
+    <menuitem id="menu_microfinance_savings_transactions"
+              name="Transactions épargne"
+              parent="microfinance_loan_management.menu_microfinance_operations"
+              action="action_microfinance_savings_transaction"
+              sequence="6"/>
+    <menuitem id="menu_microfinance_savings_balance_report"
+              name="Balance épargne"
+              parent="microfinance_loan_management.menu_microfinance_analysis"
+              action="action_microfinance_savings_balance_report"
+              sequence="3"/>
+    <menuitem id="menu_microfinance_savings_products"
+              name="Produits d'épargne"
+              parent="microfinance_loan_management.menu_microfinance_config"
+              action="action_microfinance_savings_product"
+              sequence="5"/>
+</odoo>
