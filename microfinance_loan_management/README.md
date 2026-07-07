@@ -18,7 +18,8 @@ Module créé from scratch pour gérer les crédits clients d'une institution de
 - Reçu de décaissement imprimable (PDF, QWeb) depuis le crédit actif
 - Portefeuille à risque (PAR) par tranche d'ancienneté (1-30/31-60/61-90/90+) dans le tableau de bord
 - Annulation comptable propre d'un remboursement posté (contre-passation, restauration des échéances, réouverture du crédit si nécessaire)
-- Garanties et cautions (`microfinance.loan.guarantee` : garantie matérielle ou caution personnelle), garantie obligatoire et/ou ratio minimum de couverture configurables par produit, libération automatique à la clôture du crédit
+- Garanties et cautions (`microfinance.loan.guarantee` : terrain, véhicule, maison, meuble, salaire, garant/caution personnelle, autre), garantie obligatoire et/ou ratio minimum de couverture configurables par produit, libération automatique à la clôture du crédit
+- Valorisation des garanties par type (`microfinance.guarantee.valuation.rule` : ratio de valorisation en %, plafonné par un `max_ratio` configurable par société) ; `recognized_value` (valeur reconnue après ratio, 100% par défaut sans règle) alimente le total des garanties validées et les contrôles d'éligibilité, jamais la valeur brute estimée
 - Frais de dossier (fixes ou % du montant), encaissables via `action_charge_fee()`, décaissement bloqué tant qu'ils sont dus si le produit l'exige
 - Périodicités de remboursement étendues : quinzaine, 4 semaines, bimestriel, trimestriel, 4 mois, semestriel, annuel (en plus de journalier/hebdomadaire/mensuel), avec intérêt proraté correctement pour chacune
 - Visites de recouvrement
@@ -130,6 +131,22 @@ Le tableau de bord (répartition par risque) et les vues crédit (liste/kanban/f
 n'affichent plus que ce score unique, accompagné de `risk_level` (faible/moyen/élevé/critique)
 et `scoring_decision` (recommandé/revue manuelle/rejet) dérivés du même calcul.
 
+### Valorisation des garanties par type
+
+Chaque garantie (`microfinance.loan.guarantee`) porte un `guarantee_type` structuré (terrain,
+véhicule, maison, meuble, salaire, garant/caution personnelle, autre — l'ancienne valeur
+générique `asset` a été migrée vers `other` lors de la mise à jour). Sa `recognized_value`
+(valeur reconnue) applique le `valuation_ratio` (%) de la règle
+`microfinance.guarantee.valuation.rule` correspondant à son type et à sa société ; sans règle
+configurée pour un type, le ratio par défaut est 100% (valeur reconnue = valeur estimée,
+jamais bloquant). Chaque règle a un plafond `max_ratio` (défaut 150%) : impossible de
+configurer un `valuation_ratio` au-delà (Microfinance > Configuration > Ratios de valorisation
+des garanties).
+
+C'est **`recognized_value`**, et non `estimated_value`, qui alimente `guarantee_total` sur le
+crédit et le contrôle `min_guarantee_ratio` à la soumission : une garantie décotée (ratio <
+100%) compte donc pour moins que sa valeur brute dans la couverture exigée par le produit.
+
 ### Non-intégration avec `custom_paid_totals`
 
 `custom_paid_totals` (clôture de caisse journalière du projet EAT, point de vente) est hors
@@ -170,6 +187,7 @@ anomalie de disque constatée sur ce module, sans lien avec ce module-ci.
 - PAR par tranche d'ancienneté dans le tableau de bord
 - Annulation d'un remboursement posté (partiel, ayant clôturé le crédit, bloqué par période verrouillée)
 - Garantie/ratio de garantie obligatoire bloquant la soumission, libération à la clôture
+- Ratio de valorisation d'une garantie dépassant le plafond (`max_ratio`) : erreur de validation ; `recognized_value` (pas `estimated_value`) utilisée dans le total des garanties et l'éligibilité
 - Frais de dossier fixes et pourcentage, blocage du décaissement si non encaissés
 - Génération d'échéancier pour chaque nouvelle périodicité (quinzaine, 4 semaines, bimestriel, trimestriel, 4 mois, semestriel, annuel), en particulier le prorata d'intérêt trimestriel et semestriel
 - Modification d'une règle de scoring (seuil ou linéaire) : le score recalculé d'un crédit existant change en conséquence

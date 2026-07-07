@@ -12,7 +12,7 @@ décalage avec l'implémentation réelle.
 | 2 | Module Épargne complet | HORS PÉRIMÈTRE | — (rien trouvé) | Nouveau module séparé, pas une extension |
 | 3 | Groupes solidaires | PAS FAIT | — (rien trouvé) | Nouveau modèle dans ce module (crédit de groupe) — ampleur moyenne |
 | 4 | Scoring configurable avec pondérations | FAIT | `models/microfinance_scoring.py` (`computation` linéaire/seuil ajouté), `models/microfinance_loan.py::action_calculate_scoring/_get_scoring_metrics`, `data/scoring_rules_data.xml` (profil + règles par défaut), `views/microfinance_loan_views.xml`, `views/microfinance_scoring_views.xml`, `controllers/microfinance_dashboard_controller.py`, `tests/test_scoring.py` | `risk_score` retiré ; un seul champ `internal_score` (0-100, plus haut = plus sûr) alimenté par le moteur de règles configurable, ancien formule migrée en règles par défaut (score de base + 4 malus linéaires) |
-| 5 | Garanties + ratio de valorisation | PARTIELLEMENT FAIT | `models/microfinance_loan_guarantee.py`, `min_guarantee_ratio` sur `microfinance_loan_product.py` | Le ratio (114%, 120%...) est déjà configurable et sans plafond ; il manque des types de garantie détaillés (terrain/véhicule/maison/meuble/salaire) et une valorisation différenciée par type — petit ajustement |
+| 5 | Garanties + ratio de valorisation | FAIT | `models/microfinance_loan_guarantee.py` (`guarantee_type` étendu, `recognized_value`, nouveau modèle `microfinance.guarantee.valuation.rule`), `migrations/17.0.1.1.0/post-migrate.py`, `views/microfinance_loan_guarantee_views.xml`, `tests/test_guarantee_valuation.py` | Types de garantie détaillés (terrain/véhicule/maison/meuble/salaire/garant/autre), valorisation par type avec plafond (`max_ratio`, contrainte Python), `recognized_value` utilisée dans `guarantee_total`/éligibilité au lieu de la valeur brute |
 | 6 | Notifications SMS/WhatsApp/e-mail | PAS FAIT | — (rien trouvé) | Nouveau sous-système (mail.template + cron pour l'e-mail, reste dans ce module ; SMS/WhatsApp nécessite une passerelle/API tierce, potentiellement hors périmètre) |
 | 7 | Audit trail complet | PARTIELLEMENT FAIT | `mail.thread`/`tracking=True` sur loan/product/payment/visit/scoring.profile | Pas de `mail.thread` sur installment/guarantee/provision.rule ; tous les champs ne sont pas trackés ; pas de log exhaustif de toutes les actions — petit ajustement pour combler, mais un audit trail "complet" au sens strict dépasse `mail.thread` |
 | 8 | Décaissement automatique planifié | PAS FAIT | `models/microfinance_loan.py::action_disburse` (manuel, immédiat) | Ajouter une date planifiée + cron — ampleur petite à moyenne, reste dans ce module |
@@ -83,26 +83,27 @@ de score exposé) et `tests/test_write_off.py::test_written_off_loan_excluded_fr
 
 ---
 
-### 5. Gestion des garanties avec valorisation configurable (114%, 120%...) — PARTIELLEMENT FAIT
+### 5. Gestion des garanties avec valorisation configurable (114%, 120%...) — FAIT
 
-**Preuve — types de garantie** : `models/microfinance_loan_guarantee.py` (ligne 12) :
-```python
-guarantee_type = fields.Selection([('asset', 'Garantie matérielle'), ('guarantor', 'Caution personnelle')], ...)
-```
-Seulement deux types génériques. Le détail (terrain, véhicule, maison, meuble, salaire) n'existe qu'en texte libre dans `description` (Char), pas comme valeur structurée.
+**Résolution** : `guarantee_type` sur `microfinance.loan.guarantee` couvre désormais `land`
+(Terrain), `vehicle` (Véhicule), `house` (Maison), `furniture` (Meuble), `salary` (Salaire),
+`guarantor` (Garant / caution personnelle) et `other` (Autre). L'ancienne valeur générique
+`asset` est retirée du modèle ; `migrations/17.0.1.1.0/post-migrate.py` migre les
+enregistrements existants `asset` → `other` sans les bloquer ni les perdre.
 
-**Preuve — ratio de valorisation** : `models/microfinance_loan_product.py` (`min_guarantee_ratio`, Float, défaut 0.0, sans plafond) et son usage dans `models/microfinance_loan.py::_check_eligibility()` (ligne ~353) :
-```python
-if product.min_guarantee_ratio > 0:
-    required_guarantee = loan.loan_amount * product.min_guarantee_ratio / 100.0
-    if loan.guarantee_total < required_guarantee:
-        ...
-```
-Ce champ **peut déjà être positionné à 114.0 ou 120.0** (aucune contrainte d'upper bound dans `_check_values`) — le mécanisme de ratio de couverture configurable par produit existe donc réellement, contrairement à ce qu'un simple champ `estimated_value` brut sans ratio laisserait supposer.
+Un nouveau modèle `microfinance.guarantee.valuation.rule` (Microfinance > Configuration >
+Ratios de valorisation des garanties) porte `guarantee_type`, `valuation_ratio` (%) et
+`max_ratio` (%, défaut 150.0, requis) — une contrainte Python (`_check_ratio`) refuse
+désormais toute règle où `valuation_ratio > max_ratio`, ce qui manquait entièrement
+auparavant (`min_guarantee_ratio` sur le produit restait par ailleurs sans plafond, ce n'était
+pas le champ concerné ici).
 
-**Ce qui manque** : une valorisation différenciée par type de garantie (ex. un terrain valorisé différemment d'un véhicule), et des types de garantie structurés au-delà de asset/guarantor.
-
-**Ampleur** : petit ajustement — enrichir la `Selection` `guarantee_type` et, si une décote différente par type est voulue, ajouter un champ de type de garantie paramétrable (pas nécessairement un nouveau modèle).
+`microfinance.loan.guarantee.recognized_value` (Monetary, compute stocké) applique ce ratio à
+`estimated_value` (100% par défaut si aucune règle n'est configurée pour le type — jamais
+bloquant). `guarantee_total` sur `microfinance.loan` et le contrôle `min_guarantee_ratio` dans
+`_check_eligibility()` utilisent désormais `recognized_value`, plus `estimated_value` brute :
+un terrain décoté à 40% ne compte plus que pour 40% de sa valeur estimée dans la couverture
+exigée. Voir `tests/test_guarantee_valuation.py`.
 
 ---
 

@@ -85,7 +85,11 @@ class MicrofinanceLoan(models.Model):
     reschedule_count = fields.Integer(default=0, copy=False, readonly=True, tracking=True)
     co_borrower_id = fields.Many2one('res.partner', string='Co-emprunteur', tracking=True)
     guarantee_ids = fields.One2many('microfinance.loan.guarantee', 'loan_id', string='Garanties')
-    guarantee_total = fields.Monetary(compute='_compute_guarantee_total', store=True, string='Total garanties validées')
+    guarantee_total = fields.Monetary(
+        compute='_compute_guarantee_total', store=True, string='Total garanties validées',
+        help='Somme des valeurs reconnues (recognized_value, après application du ratio de '
+             'valorisation par type) des garanties validées, pas de la valeur brute estimée.',
+    )
     fee_amount_due = fields.Monetary(compute='_compute_fee_amount', store=True, string='Frais de dossier dus')
     fee_paid = fields.Boolean(default=False, readonly=True, copy=False)
     fee_move_id = fields.Many2one('account.move', readonly=True, copy=False)
@@ -123,11 +127,11 @@ class MicrofinanceLoan(models.Model):
             loan.overdue_amount = sum(overdue.mapped('residual_amount'))
             loan.overdue_installment_count = len(overdue)
 
-    @api.depends('guarantee_ids.estimated_value', 'guarantee_ids.state')
+    @api.depends('guarantee_ids.recognized_value', 'guarantee_ids.state')
     def _compute_guarantee_total(self):
         for loan in self:
             validated = loan.guarantee_ids.filtered(lambda g: g.state == 'validated')
-            loan.guarantee_total = sum(validated.mapped('estimated_value'))
+            loan.guarantee_total = sum(validated.mapped('recognized_value'))
 
     @api.depends('loan_amount', 'product_id.fee_type', 'product_id.fee_amount', 'product_id.fee_rate')
     def _compute_fee_amount(self):

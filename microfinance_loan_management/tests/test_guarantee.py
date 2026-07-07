@@ -27,7 +27,7 @@ class TestGuarantee(MicrofinanceCommon):
         loan = self._create_loan()
         self.env['microfinance.loan.guarantee'].create({
             'loan_id': loan.id,
-            'guarantee_type': 'asset',
+            'guarantee_type': 'land',
             'description': 'Terrain à Analamanga',
             'estimated_value': 5000.0,
             'state': 'validated',
@@ -40,7 +40,7 @@ class TestGuarantee(MicrofinanceCommon):
         loan = self._create_loan(loan_amount=1000.0)
         self.env['microfinance.loan.guarantee'].create({
             'loan_id': loan.id,
-            'guarantee_type': 'asset',
+            'guarantee_type': 'land',
             'description': 'Garantie insuffisante',
             'estimated_value': 100.0,
             'state': 'validated',
@@ -53,7 +53,7 @@ class TestGuarantee(MicrofinanceCommon):
         loan = self._create_loan(loan_amount=1000.0)
         self.env['microfinance.loan.guarantee'].create({
             'loan_id': loan.id,
-            'guarantee_type': 'asset',
+            'guarantee_type': 'land',
             'description': 'Garantie suffisante',
             'estimated_value': 600.0,
             'state': 'validated',
@@ -65,7 +65,7 @@ class TestGuarantee(MicrofinanceCommon):
         loan = self._activate_loan(loan_amount=300.0, term=1)
         guarantee = self.env['microfinance.loan.guarantee'].create({
             'loan_id': loan.id,
-            'guarantee_type': 'asset',
+            'guarantee_type': 'land',
             'description': 'Garantie à libérer',
             'estimated_value': 300.0,
             'state': 'validated',

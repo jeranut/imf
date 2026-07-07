@@ -10,6 +10,7 @@
                 <field name="description"/>
                 <field name="guarantor_partner_id" invisible="guarantee_type != 'guarantor'"/>
                 <field name="estimated_value"/>
+                <field name="recognized_value"/>
                 <field name="currency_id" column_invisible="1"/>
                 <field name="state"/>
                 <field name="document" filename="document_filename"/>
@@ -29,6 +30,7 @@
                     <field name="description"/>
                     <field name="guarantor_partner_id" invisible="guarantee_type != 'guarantor'"/>
                     <field name="estimated_value"/>
+                    <field name="recognized_value" readonly="1"/>
                     <field name="state"/>
                     <field name="document" filename="document_filename"/>
                     <field name="document_filename" invisible="1"/>
@@ -56,6 +58,38 @@
     <record id="action_microfinance_guarantee" model="ir.actions.act_window">
         <field name="name">Garanties</field>
         <field name="res_model">microfinance.loan.guarantee</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_microfinance_guarantee_valuation_rule_tree" model="ir.ui.view">
+        <field name="name">microfinance.guarantee.valuation.rule.tree</field>
+        <field name="model">microfinance.guarantee.valuation.rule</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="guarantee_type"/>
+                <field name="valuation_ratio"/>
+                <field name="max_ratio"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_guarantee_valuation_rule_form" model="ir.ui.view">
+        <field name="name">microfinance.guarantee.valuation.rule.form</field>
+        <field name="model">microfinance.guarantee.valuation.rule</field>
+        <field name="arch" type="xml">
+            <form string="Règle de valorisation de garantie">
+                <group>
+                    <field name="company_id" groups="base.group_multi_company"/>
+                    <field name="guarantee_type"/>
+                    <field name="valuation_ratio"/>
+                    <field name="max_ratio"/>
+                </group>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_guarantee_valuation_rule" model="ir.actions.act_window">
+        <field name="name">Ratios de valorisation des garanties</field>
+        <field name="res_model">microfinance.guarantee.valuation.rule</field>
         <field name="view_mode">tree,form</field>
     </record>
 </odoo>
