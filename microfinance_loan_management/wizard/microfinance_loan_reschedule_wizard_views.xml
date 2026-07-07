@@ -10,6 +10,7 @@
                     <field name="currency_id" invisible="1"/>
                     <field name="new_term"/>
                     <field name="new_first_due_date"/>
+                    <field name="reason"/>
                 </group>
                 <footer>
                     <button name="action_apply" string="Rééchelonner" type="object" class="btn-primary"/>

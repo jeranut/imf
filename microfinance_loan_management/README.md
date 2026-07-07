@@ -11,7 +11,7 @@ Module créé from scratch pour gérer les crédits clients d'une institution de
 - Remboursement avec allocation : pénalité → intérêt → capital
 - Comptabilité : décaissement et remboursement via `account.move`
 - Pénalités de retard appliquées une seule fois après délai de grâce
-- Rééchelonnement de crédit actif (nouvelle durée et/ou nouvelle date de première échéance restante), historisé via `reschedule_count` et le chatter
+- Rééchelonnement de crédit actif (nouvelle durée et/ou nouvelle date de première échéance restante), historisé via `reschedule_count`, le chatter, et un historique structuré interrogeable (`microfinance.loan.reschedule.history`/`.history.line` : ancien échéancier complet, motif, auteur, date, un enregistrement distinct par rééchelonnement)
 - Règles de blocage à la demande de crédit : ancienneté client minimum, second crédit actif autorisé ou non, blocage si arriérés, blocage si le co-emprunteur a déjà un crédit actif
 - Radiation / passage en perte d'un crédit actif ou en défaut, avec écriture comptable dédiée et exclusion du calcul de risque/PAR actif
 - Provisionnement selon l'ancienneté des arriérés (`microfinance.provision.rule`, tranches paramétrables par société), écriture de régularisation par crédit via `action_post_provisions`, cron mensuel optionnel
@@ -147,6 +147,19 @@ C'est **`recognized_value`**, et non `estimated_value`, qui alimente `guarantee_
 crédit et le contrôle `min_guarantee_ratio` à la soumission : une garantie décotée (ratio <
 100%) compte donc pour moins que sa valeur brute dans la couverture exigée par le produit.
 
+### Historique structuré du rééchelonnement
+
+Chaque rééchelonnement (`action_reschedule()` / `_reschedule_installments()`) crée, avant de
+modifier ou supprimer les échéances non soldées, un enregistrement
+`microfinance.loan.reschedule.history` (date, utilisateur, motif saisi dans l'assistant) avec
+ses lignes `microfinance.loan.reschedule.history.line` : copie figée en lecture seule de
+chaque échéance de l'ancien échéancier (montants capital/intérêt/pénalité, montants payés,
+solde résiduel). Le résumé texte dans le chatter du crédit reste produit en plus, pour une
+lecture rapide, mais n'est plus la seule trace : l'onglet "Historique de rééchelonnement" du
+formulaire crédit liste chaque rééchelonnement passé et permet de consulter l'échéancier
+historique complet de chacun individuellement, y compris après plusieurs rééchelonnements
+successifs sur le même crédit.
+
 ### Non-intégration avec `custom_paid_totals`
 
 `custom_paid_totals` (clôture de caisse journalière du projet EAT, point de vente) est hors
@@ -180,6 +193,7 @@ anomalie de disque constatée sur ce module, sans lien avec ce module-ci.
 - Application cron des pénalités
 - Clôture automatique quand le solde est zéro
 - Rééchelonnement d'un crédit actif (durée et/ou date de première échéance restante)
+- Deux rééchelonnements successifs sur le même crédit : les deux anciens échéanciers sont conservés séparément et consultables individuellement, avec les bons montants historiques
 - Règles de blocage à la soumission (ancienneté, second crédit, arriérés, co-emprunteur)
 - Radiation d'un crédit actif avec solde restant
 - Comptabilisation des provisions selon l'ancienneté des arriérés, delta par rapport à la provision déjà comptabilisée

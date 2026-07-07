@@ -127,6 +127,37 @@
                         <page string="Remboursements"><field name="payment_ids" readonly="1"/></page>
                         <page string="Garanties"><field name="guarantee_ids" context="{'default_loan_id': id}"/></page>
                         <page string="Recouvrement"><field name="visit_ids"/></page>
+                        <page string="Historique de rééchelonnement">
+                            <field name="reschedule_history_ids" readonly="1">
+                                <tree>
+                                    <field name="reschedule_date"/>
+                                    <field name="user_id"/>
+                                    <field name="reason"/>
+                                </tree>
+                                <form>
+                                    <group>
+                                        <field name="reschedule_date"/>
+                                        <field name="user_id"/>
+                                        <field name="currency_id" invisible="1"/>
+                                        <field name="reason"/>
+                                    </group>
+                                    <field name="old_installment_ids">
+                                        <tree create="0" edit="0" delete="0">
+                                            <field name="sequence"/>
+                                            <field name="due_date"/>
+                                            <field name="currency_id" column_invisible="1"/>
+                                            <field name="principal_amount"/>
+                                            <field name="interest_amount"/>
+                                            <field name="penalty_amount"/>
+                                            <field name="paid_principal"/>
+                                            <field name="paid_interest"/>
+                                            <field name="paid_penalty"/>
+                                            <field name="residual_amount"/>
+                                        </tree>
+                                    </field>
+                                </form>
+                            </field>
+                        </page>
                         <page string="Notes"><field name="note"/></page>
                     </notebook>
                 </sheet>

@@ -83,6 +83,9 @@ class MicrofinanceLoan(models.Model):
     visit_count = fields.Integer(compute='_compute_counts')
     move_count = fields.Integer(compute='_compute_counts')
     reschedule_count = fields.Integer(default=0, copy=False, readonly=True, tracking=True)
+    reschedule_history_ids = fields.One2many(
+        'microfinance.loan.reschedule.history', 'loan_id', string='Historique de rééchelonnement', readonly=True,
+    )
     co_borrower_id = fields.Many2one('res.partner', string='Co-emprunteur', tracking=True)
     guarantee_ids = fields.One2many('microfinance.loan.guarantee', 'loan_id', string='Garanties')
     guarantee_total = fields.Monetary(
@@ -489,7 +492,7 @@ class MicrofinanceLoan(models.Model):
             'context': {'default_loan_id': self.id},
         }
 
-    def _reschedule_installments(self, new_term, new_first_due_date):
+    def _reschedule_installments(self, new_term, new_first_due_date, reason=False):
         self.ensure_one()
         unpaid = self.installment_ids.filtered(lambda inst: inst.state != 'paid').sorted(lambda inst: (inst.due_date, inst.sequence))
         if not unpaid:
@@ -503,6 +506,23 @@ class MicrofinanceLoan(models.Model):
             ) or _('Aucune échéance')
 
         old_summary = _summary(unpaid)
+        # Structured snapshot of the schedule about to be dropped/rewritten below, kept
+        # queryable (ORM/report/filter) instead of only readable in the chatter message.
+        self.env['microfinance.loan.reschedule.history'].create({
+            'loan_id': self.id,
+            'reason': reason,
+            'old_installment_ids': [(0, 0, {
+                'sequence': inst.sequence,
+                'due_date': inst.due_date,
+                'principal_amount': inst.principal_amount,
+                'interest_amount': inst.interest_amount,
+                'penalty_amount': inst.penalty_amount,
+                'paid_principal': inst.paid_principal,
+                'paid_interest': inst.paid_interest,
+                'paid_penalty': inst.paid_penalty,
+                'residual_amount': inst.residual_amount,
+            }) for inst in unpaid],
+        })
         remaining_principal = sum(inst.principal_amount - inst.paid_principal for inst in unpaid)
         # Only arrears (overdue or partially paid) carry interest/penalty already accrued and due;
         # plain future pending installments have their interest recomputed fresh below.

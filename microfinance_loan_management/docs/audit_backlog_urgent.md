@@ -18,7 +18,7 @@ décalage avec l'implémentation réelle.
 | 8 | Décaissement automatique planifié | PAS FAIT | `models/microfinance_loan.py::action_disburse` (manuel, immédiat) | Ajouter une date planifiée + cron — ampleur petite à moyenne, reste dans ce module |
 | 9 | Jours ouvrables / jours fériés | PAS FAIT | `models/microfinance_loan.py::_period_delta`, `action_generate_schedule` (dates calendaires brutes) | Intégrer `resource.calendar` — ampleur moyenne, reste dans ce module |
 | 10 | Prélèvement auto arriérés sur épargne | HORS PÉRIMÈTRE | — | Dépend du point 2 (épargne), non applicable sans ce module séparé |
-| 11 | Rééchelonnement avec ancien échéancier conservé | PARTIELLEMENT FAIT | `models/microfinance_loan.py::_reschedule_installments` (`unlink()` + résumé texte via `message_post`) | Ancien échéancier supprimé, seul un résumé texte non structuré est conservé dans le chatter — ajouter un modèle d'historique/snapshot — ampleur petite à moyenne |
+| 11 | Rééchelonnement avec ancien échéancier conservé | FAIT | `models/microfinance_loan_reschedule_history.py` (nouveaux modèles `microfinance.loan.reschedule.history`/`.history.line`), `models/microfinance_loan.py::_reschedule_installments`, `wizard/microfinance_loan_reschedule_wizard.py` (champ `reason`), `views/microfinance_loan_views.xml` (onglet historique), `tests/test_reschedule_history.py` | Chaque rééchelonnement crée désormais, avant toute modification des échéances, un enregistrement d'historique structuré et interrogeable (échéances, montants payés/résiduels, motif, auteur, date) en plus du résumé texte déjà conservé dans le chatter |
 | 12 | Comité de crédit / workflow configurable | PAS FAIT | `state` (Selection figée) + `action_manager_validate`/`action_finance_validate`/`action_approve` (un seul validateur par étape) | Workflow à nombre d'étapes fixe codé en dur, aucun modèle de comité multi-validateurs ni de seuils déclenchant des étapes — ampleur moyenne à grande, reste dans ce module |
 | 13 | Fonds de crédit (bailleurs/fonds propres) | PAS FAIT | — (rien trouvé) | Nouveau modèle simple + champ sur produit/crédit — petit ajustement, reste dans ce module |
 
@@ -149,21 +149,22 @@ exigée. Voir `tests/test_guarantee_valuation.py`.
 
 ---
 
-### 11. Rééchelonnement avancé avec conservation de l'ancien échéancier — PARTIELLEMENT FAIT
+### 11. Rééchelonnement avancé avec conservation de l'ancien échéancier — FAIT
 
-**Preuve** : `models/microfinance_loan.py::_reschedule_installments()` (ligne ~480). Le compteur `reschedule_count` est bien incrémenté et tracké (`tracking=True`). Mais :
-```python
-(unpaid - partially_paid).unlink()
-```
-(ligne ~516) — les échéances non payées sont **supprimées**, pas archivées. L'ancien échéancier n'est conservé que sous forme de texte non structuré dans le chatter :
-```python
-self.message_post(body=_(
-    'Rééchelonnement n°%(count)s effectué.<br/>Ancien échéancier restant :<br/>%(old)s ...'
-))
-```
-(ligne ~549). Ce résumé texte n'est interrogeable ni par requête ORM, ni par rapport, ni par filtre — seulement lisible manuellement dans le fil de discussion.
+**Résolution** : `_reschedule_installments()` continue de supprimer/muter les échéances non
+soldées (`unpaid`), mais crée désormais, **avant** cette mutation, un enregistrement
+`microfinance.loan.reschedule.history` (date, auteur, motif saisi dans l'assistant de
+rééchelonnement, nouveau champ `reason` sur `microfinance.loan.reschedule.wizard`) avec ses
+lignes `microfinance.loan.reschedule.history.line` : copie figée en lecture seule de chaque
+échéance de l'ancien échéancier (séquence, date d'échéance, capital/intérêt/pénalité,
+montants payés, solde résiduel). Le résumé texte dans le chatter reste produit en plus, pour
+la lisibilité immédiate, mais n'est plus la seule trace.
 
-**Ampleur** : petite à moyenne — introduire un modèle d'historique (ex. `microfinance.loan.schedule.snapshot` ou un flag `active=False`/`reschedule_id` sur les anciennes lignes d'échéance au lieu de `unlink()`) pour rendre l'ancien échéancier requêtable.
+`microfinance.loan.reschedule_history_ids` (onglet "Historique de rééchelonnement" du
+formulaire crédit, lecture seule) permet de consulter chaque rééchelonnement passé
+séparément, avec son échéancier historique complet. Deux rééchelonnements successifs
+produisent deux enregistrements distincts, chacun avec ses propres lignes — voir
+`tests/test_reschedule_history.py`.
 
 ---
 
