@@ -1,6 +1,0 @@
-<odoo>
-    <record id="group_paid_totals_user" model="res.groups">
-        <field name="name">Utilisateurs Journaux Trésorerie</field>
-        <field name="category_id" ref="base.module_category_accounting"/>
-    </record>
-</odoo>
