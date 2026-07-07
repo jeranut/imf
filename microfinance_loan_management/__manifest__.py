@@ -16,6 +16,7 @@
         'data/cron.xml',
         'data/provision_rules_data.xml',
         'data/provision_server_action.xml',
+        'data/scoring_rules_data.xml',
         'report/microfinance_loan_disbursement_receipt.xml',
         'views/microfinance_loan_product_views.xml',
         'views/microfinance_provision_rule_views.xml',

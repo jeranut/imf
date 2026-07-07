@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Profil de scoring générique par défaut (société principale, tous produits).
+         Reproduit fidèlement les pondérations qui étaient codées en dur dans
+         l'ancien _compute_risk_score() : un score de base de 100 dont on retranche
+         un malus par échéance en retard (15 pts), par jour de retard maximum
+         (1.2 pt/jour), par point de pourcentage de montant en retard (0.4 pt/%)
+         et par paiement partiel (5 pts). Le résultat (0-100, plus haut = plus
+         sûr) alimente le champ unique microfinance.loan.internal_score. -->
+    <record id="scoring_profile_default" model="microfinance.scoring.profile">
+        <field name="name">Profil de scoring standard</field>
+        <field name="company_id" ref="base.main_company"/>
+        <field name="min_score">0.0</field>
+        <field name="max_score">100.0</field>
+        <field name="approve_threshold">70.0</field>
+        <field name="manual_review_threshold">45.0</field>
+        <field name="reject_threshold">45.0</field>
+    </record>
+
+    <record id="scoring_rule_default_baseline" model="microfinance.scoring.rule">
+        <field name="profile_id" ref="scoring_profile_default"/>
+        <field name="sequence">1</field>
+        <field name="name">Score de base</field>
+        <field name="metric">baseline</field>
+        <field name="computation">threshold</field>
+        <field name="operator">>=</field>
+        <field name="value">1</field>
+        <field name="rule_type">bonus</field>
+        <field name="points">100.0</field>
+        <field name="description">Score de départ avant application des malus de risque ci-dessous.</field>
+    </record>
+
+    <record id="scoring_rule_default_overdue_installments" model="microfinance.scoring.rule">
+        <field name="profile_id" ref="scoring_profile_default"/>
+        <field name="sequence">10</field>
+        <field name="name">Échéances en retard (ce crédit)</field>
+        <field name="metric">loan_overdue_installment_count</field>
+        <field name="computation">linear</field>
+        <field name="rule_type">malus</field>
+        <field name="points">15.0</field>
+        <field name="description">-15 points par échéance en retard sur ce crédit.</field>
+    </record>
+
+    <record id="scoring_rule_default_max_days_overdue" model="microfinance.scoring.rule">
+        <field name="profile_id" ref="scoring_profile_default"/>
+        <field name="sequence">20</field>
+        <field name="name">Jours de retard maximum (ce crédit)</field>
+        <field name="metric">loan_max_days_overdue</field>
+        <field name="computation">linear</field>
+        <field name="rule_type">malus</field>
+        <field name="points">1.2</field>
+        <field name="description">-1.2 point par jour du plus long retard sur ce crédit.</field>
+    </record>
+
+    <record id="scoring_rule_default_overdue_amount_ratio" model="microfinance.scoring.rule">
+        <field name="profile_id" ref="scoring_profile_default"/>
+        <field name="sequence">30</field>
+        <field name="name">Ratio montant en retard (ce crédit)</field>
+        <field name="metric">loan_overdue_amount_ratio</field>
+        <field name="computation">linear</field>
+        <field name="rule_type">malus</field>
+        <field name="points">0.4</field>
+        <field name="description">-0.4 point par % du montant du crédit actuellement en retard.</field>
+    </record>
+
+    <record id="scoring_rule_default_partial_payments" model="microfinance.scoring.rule">
+        <field name="profile_id" ref="scoring_profile_default"/>
+        <field name="sequence">40</field>
+        <field name="name">Paiements partiels (ce crédit)</field>
+        <field name="metric">loan_partial_payment_count</field>
+        <field name="computation">linear</field>
+        <field name="rule_type">malus</field>
+        <field name="points">5.0</field>
+        <field name="description">-5 points par échéance actuellement payée partiellement sur ce crédit.</field>
+    </record>
+</odoo>

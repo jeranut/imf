@@ -11,7 +11,7 @@
                 <field name="loan_amount"/>
                 <field name="balance_total"/>
                 <field name="overdue_amount"/>
-                <field name="risk_score" widget="progressbar"/>
+                <field name="internal_score" widget="progressbar"/>
                 <field name="state" widget="badge"/>
             </tree>
         </field>
@@ -21,7 +21,7 @@
         <field name="model">microfinance.loan</field>
         <field name="arch" type="xml">
             <kanban default_group_by="state">
-                <field name="name"/><field name="partner_id"/><field name="loan_amount"/><field name="balance_total"/><field name="risk_score"/><field name="state"/>
+                <field name="name"/><field name="partner_id"/><field name="loan_amount"/><field name="balance_total"/><field name="internal_score"/><field name="state"/>
                 <templates>
                     <t t-name="kanban-box">
                         <div class="oe_kanban_global_click o_kanban_record">
@@ -29,7 +29,7 @@
                             <div><field name="partner_id"/></div>
                             <div>Montant : <field name="loan_amount"/></div>
                             <div>Solde : <field name="balance_total"/></div>
-                            <div>Risque : <field name="risk_score"/>%</div>
+                            <div>Score : <field name="internal_score"/></div>
                         </div>
                     </t>
                 </templates>
@@ -74,7 +74,7 @@
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
                     <button name="action_write_off" string="Radier" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state not in ('active','defaulted')"/>
                     <button name="%(action_report_microfinance_loan_disbursement_receipt)d" string="Imprimer le reçu" type="action" invisible="state in ('draft','submitted','manager_validated','finance_validated','approved','cancelled')"/>
-                    <button name="action_recompute_risk" string="Recalculer risque" type="object"/>
+                    <button name="action_recompute_risk" string="Recalculer le score" type="object"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,submitted,manager_validated,finance_validated,approved,active,closed,defaulted,written_off"/>
                 </header>
                 <sheet>
@@ -114,7 +114,7 @@
                         <field name="balance_total" readonly="1"/>
                         <field name="overdue_amount" readonly="1"/>
                         <field name="overdue_installment_count" readonly="1"/>
-                        <field name="risk_score" widget="progressbar" readonly="1"/>
+                        <field name="internal_score" widget="progressbar" readonly="1"/>
                         <field name="provision_amount" readonly="1"/>
                         <field name="provision_posted_amount" readonly="1"/>
                         <field name="guarantee_total" readonly="1"/>

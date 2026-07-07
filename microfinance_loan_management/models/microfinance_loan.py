@@ -49,7 +49,6 @@ class MicrofinanceLoan(models.Model):
     balance_total = fields.Monetary(compute='_compute_totals', store=True)
     overdue_amount = fields.Monetary(compute='_compute_totals', store=True)
     overdue_installment_count = fields.Integer(compute='_compute_totals', store=True)
-    risk_score = fields.Integer(compute='_compute_risk_score', store=True)
     provision_amount = fields.Monetary(compute='_compute_provision', store=True, string='Provision requise')
     provision_posted_amount = fields.Monetary(copy=False, readonly=True, default=0.0, string='Provision comptabilisée')
     scoring_profile_id = fields.Many2one(
@@ -59,7 +58,12 @@ class MicrofinanceLoan(models.Model):
         copy=False,
         tracking=True,
     )
-    internal_score = fields.Float(string='Score interne', copy=False, readonly=True, tracking=True)
+    internal_score = fields.Float(
+        string='Score', copy=False, readonly=True, tracking=True,
+        help='Score de scoring unique du crédit (plus haut = plus sûr), calculé par le moteur de '
+             'scoring configurable (microfinance.scoring.profile/rule). Remplace l\'ancien score de '
+             'risque codé en dur.',
+    )
     risk_level = fields.Selection([
         ('low', 'Faible'),
         ('medium', 'Moyen'),
@@ -145,19 +149,6 @@ class MicrofinanceLoan(models.Model):
             if line.due_date:
                 max_days = max(max_days, (today - line.due_date).days)
         return max_days
-
-    @api.depends('state', 'overdue_installment_count', 'overdue_amount', 'installment_ids.due_date', 'installment_ids.state', 'payment_ids.amount')
-    def _compute_risk_score(self):
-        for loan in self:
-            if loan.state == 'written_off':
-                # Written-off loans are no longer part of the active risk/PAR calculations.
-                loan.risk_score = 0
-                continue
-            max_days = loan._get_max_overdue_days()
-            amount_ratio = loan.loan_amount and (loan.overdue_amount / loan.loan_amount) or 0.0
-            partial_count = len(loan.installment_ids.filtered(lambda l: l.state == 'partial'))
-            score = min(100, int(loan.overdue_installment_count * 15 + max_days * 1.2 + amount_ratio * 40 + partial_count * 5))
-            loan.risk_score = max(score, 0)
 
     @api.model
     def get_par_buckets(self, company_id):
@@ -246,6 +237,7 @@ class MicrofinanceLoan(models.Model):
         partner_create_date = self.partner_id.create_date.date() if self.partner_id.create_date else today
         customer_age_months = max((today.year - partner_create_date.year) * 12 + today.month - partner_create_date.month, 0)
         metrics = {
+            'baseline': 1.0,
             'total_loans': len(loans),
             'active_loans': len(loans.filtered(lambda loan: loan.state == 'active')),
             'closed_loans': len(loans.filtered(lambda loan: loan.state == 'closed')),
@@ -258,6 +250,13 @@ class MicrofinanceLoan(models.Model):
             'total_paid_amount': total_paid,
             'partial_payment_count': len(installments.filtered(lambda line: line.state == 'partial')),
             'customer_age_months': customer_age_months,
+            # Metrics scoped to this loan only (as opposed to the metrics above, aggregated over
+            # every loan of the partner) — these reproduce the weights that used to be hardcoded
+            # in the retired _compute_risk_score().
+            'loan_overdue_installment_count': self.overdue_installment_count,
+            'loan_max_days_overdue': self._get_max_overdue_days(),
+            'loan_overdue_amount_ratio': self.loan_amount and (self.overdue_amount / self.loan_amount * 100.0) or 0.0,
+            'loan_partial_payment_count': len(self.installment_ids.filtered(lambda line: line.state == 'partial')),
         }
         metrics.update(self._get_external_scoring_metrics())
         return metrics
@@ -284,6 +283,15 @@ class MicrofinanceLoan(models.Model):
 
     def action_calculate_scoring(self, silent=False):
         for loan in self:
+            if loan.state == 'written_off':
+                # Written-off loans are no longer part of the active risk/PAR calculations.
+                loan.write({
+                    'internal_score': 0.0,
+                    'risk_level': 'critical',
+                    'scoring_decision': 'reject_recommended',
+                    'scoring_line_ids': [(5, 0, 0)],
+                })
+                continue
             profile = loan._get_scoring_profile()
             if not profile:
                 if silent:
@@ -295,7 +303,7 @@ class MicrofinanceLoan(models.Model):
             for rule in profile.rule_ids.filtered(lambda item: item.active).sorted(lambda item: (item.sequence, item.id)):
                 metric_value = metrics.get(rule.metric, 0.0)
                 if rule._matches(metric_value):
-                    points = rule._get_signed_points()
+                    points = rule._get_points(metric_value)
                     score += points
                     line_values.append((0, 0, {
                         'rule_id': rule.id,
@@ -389,7 +397,7 @@ class MicrofinanceLoan(models.Model):
                 ))
 
     def action_recompute_risk(self):
-        self._compute_risk_score()
+        self.action_calculate_scoring(silent=True)
         return True
 
     # Each repayment frequency is either an exact number of calendar months (clean fraction of a
@@ -770,7 +778,7 @@ class MicrofinanceLoan(models.Model):
     @api.model
     def cron_update_overdue_and_penalties(self):
         self.env['microfinance.loan.installment'].search([('state', 'in', ('pending', 'partial', 'overdue'))]).action_apply_penalty()
-        self.search([('state', '=', 'active')])._compute_risk_score()
+        self.search([('state', '=', 'active')]).action_calculate_scoring(silent=True)
         return True
 
 

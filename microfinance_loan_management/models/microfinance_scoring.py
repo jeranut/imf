@@ -57,6 +57,7 @@ class MicrofinanceScoringRule(models.Model):
     _order = 'profile_id, sequence, id'
 
     METRIC_SELECTION = [
+        ('baseline', 'Constante (valeur 1, pour un score de base)'),
         ('total_loans', 'Total crédits'),
         ('active_loans', 'Crédits actifs'),
         ('closed_loans', 'Crédits clôturés'),
@@ -69,6 +70,10 @@ class MicrofinanceScoringRule(models.Model):
         ('total_paid_amount', 'Montant total payé'),
         ('partial_payment_count', 'Nombre paiements partiels'),
         ('customer_age_months', 'Ancienneté client en mois'),
+        ('loan_overdue_installment_count', 'Échéances en retard (ce crédit)'),
+        ('loan_max_days_overdue', 'Maximum jours de retard (ce crédit)'),
+        ('loan_overdue_amount_ratio', 'Montant en retard / montant crédit en % (ce crédit)'),
+        ('loan_partial_payment_count', 'Paiements partiels (ce crédit)'),
     ]
 
     OPERATOR_SELECTION = [
@@ -81,22 +86,35 @@ class MicrofinanceScoringRule(models.Model):
         ('between', 'between'),
     ]
 
+    COMPUTATION_SELECTION = [
+        ('threshold', 'Seuil (points fixes si la condition est vraie)'),
+        ('linear', 'Linéaire (points par unité de la métrique, condition ignorée)'),
+    ]
+
     profile_id = fields.Many2one('microfinance.scoring.profile', required=True, ondelete='cascade')
     company_id = fields.Many2one(related='profile_id.company_id', store=True, readonly=True)
     name = fields.Char(required=True)
     active = fields.Boolean(default=True)
     sequence = fields.Integer(default=10)
     metric = fields.Selection(METRIC_SELECTION, required=True)
-    operator = fields.Selection(OPERATOR_SELECTION, required=True, default='>=')
-    value = fields.Char(required=True, help='Pour between, saisir deux nombres séparés par une virgule, par exemple : 10,30.')
+    computation = fields.Selection(
+        COMPUTATION_SELECTION, required=True, default='threshold', string='Mode de calcul',
+        help="Seuil : les points sont appliqués tels quels si la métrique respecte l'opérateur/la valeur. "
+             "Linéaire : les points sont multipliés par la valeur de la métrique (opérateur/valeur ignorés).",
+    )
+    operator = fields.Selection(OPERATOR_SELECTION, default='>=')
+    value = fields.Char(help='Pour between, saisir deux nombres séparés par une virgule, par exemple : 10,30.')
     points = fields.Float(required=True, default=0.0)
     rule_type = fields.Selection([('bonus', 'Bonus'), ('malus', 'Malus')], required=True, default='bonus')
     description = fields.Text()
 
-    @api.constrains('operator', 'value')
+    @api.constrains('computation', 'operator', 'value')
     def _check_rule_value(self):
         for rule in self:
-            rule._parse_value()
+            if rule.computation == 'threshold':
+                if not rule.operator or not (rule.value or '').strip():
+                    raise ValidationError(_('Un opérateur et une valeur sont requis pour une règle à seuil.'))
+                rule._parse_value()
 
     def _parse_value(self):
         self.ensure_one()
@@ -119,6 +137,8 @@ class MicrofinanceScoringRule(models.Model):
 
     def _matches(self, metric_value):
         self.ensure_one()
+        if self.computation == 'linear':
+            return True
         expected = self._parse_value()
         if self.operator == 'between':
             return expected[0] <= metric_value <= expected[1]
@@ -136,9 +156,11 @@ class MicrofinanceScoringRule(models.Model):
             return metric_value <= expected
         return False
 
-    def _get_signed_points(self):
+    def _get_points(self, metric_value):
         self.ensure_one()
         points = abs(self.points or 0.0)
+        if self.computation == 'linear':
+            points *= metric_value
         return points if self.rule_type == 'bonus' else -points
 
 

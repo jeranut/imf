@@ -69,14 +69,16 @@ class MicrofinanceDashboardController(http.Controller):
             if key in monthly_overdue:
                 monthly_overdue[key] += installment.residual_amount
 
+        # risk_level is derived from the single unified scoring field (internal_score); critical
+        # is folded into high since the dashboard only distinguishes 3 buckets.
         risk_distribution = {'low': 0, 'medium': 0, 'high': 0}
         for loan in portfolio_loans:
-            if loan.risk_score < 35:
-                risk_distribution['low'] += 1
-            elif loan.risk_score < 70:
+            if loan.risk_level in ('high', 'critical'):
+                risk_distribution['high'] += 1
+            elif loan.risk_level == 'medium':
                 risk_distribution['medium'] += 1
             else:
-                risk_distribution['high'] += 1
+                risk_distribution['low'] += 1
 
         par_buckets = Loan.get_par_buckets(company.id)
 

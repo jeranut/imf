@@ -22,7 +22,7 @@ Module créé from scratch pour gérer les crédits clients d'une institution de
 - Frais de dossier (fixes ou % du montant), encaissables via `action_charge_fee()`, décaissement bloqué tant qu'ils sont dus si le produit l'exige
 - Périodicités de remboursement étendues : quinzaine, 4 semaines, bimestriel, trimestriel, 4 mois, semestriel, annuel (en plus de journalier/hebdomadaire/mensuel), avec intérêt proraté correctement pour chacune
 - Visites de recouvrement
-- Score de risque simple
+- Scoring crédit configurable (`microfinance.scoring.profile`/`microfinance.scoring.rule`) : un score unique (`internal_score`) par règles à seuil ou linéaires (points par unité), profils par produit ou génériques par société, décision (recommandé/revue manuelle/rejet) et niveau de risque associés
 - Groupes de sécurité : agent crédit, manager, finance, auditeur, recouvrement
 - Multi-company
 
@@ -103,6 +103,33 @@ calcul en jours déjà utilisé ailleurs dans le module (délai de grâce) :
   jours réel de la période, `nombre_de_jours / 365` — la quinzaine est un intervalle fixe de 15
   jours calendaires (pas une notion de "deux fois par mois" à dates fixes).
 
+### Scoring crédit unifié (`internal_score`)
+
+Il n'existe plus qu'**un seul score de crédit**, `internal_score` (0-100, plus haut = plus
+sûr), calculé par `action_calculate_scoring()` à partir des règles configurables de
+`microfinance.scoring.profile`/`microfinance.scoring.rule` (Microfinance > Configuration >
+Scoring crédit). L'ancien `risk_score` codé en dur (heuristique fixe non paramétrable) a été
+retiré ; ses pondérations ont été migrées telles quelles en règles par défaut du profil
+« Profil de scoring standard » (société principale) :
+
+- Score de base : +100 points
+- -15 points par échéance en retard sur ce crédit
+- -1.2 point par jour du plus long retard sur ce crédit
+- -0.4 point par % du montant du crédit en retard
+- -5 points par échéance payée partiellement sur ce crédit
+
+Les règles à mode de calcul **linéaire** (`computation = 'linear'`) multiplient les points par
+la valeur de la métrique (condition seuil/opérateur ignorée) ; c'est ce mode qui reproduit
+les anciennes pondérations proportionnelles. Les règles à mode **seuil** (comportement
+d'origine) appliquent des points fixes si la métrique respecte l'opérateur/la valeur.
+Modifier le poids d'une règle recalcule immédiatement le score des crédits concernés au
+prochain `action_calculate_scoring()` (bouton "Recalculer le score", soumission, ou cron
+quotidien `cron_update_overdue_and_penalties`).
+
+Le tableau de bord (répartition par risque) et les vues crédit (liste/kanban/formulaire)
+n'affichent plus que ce score unique, accompagné de `risk_level` (faible/moyen/élevé/critique)
+et `scoring_decision` (recommandé/revue manuelle/rejet) dérivés du même calcul.
+
 ### Non-intégration avec `custom_paid_totals`
 
 `custom_paid_totals` (clôture de caisse journalière du projet EAT, point de vente) est hors
@@ -145,6 +172,7 @@ anomalie de disque constatée sur ce module, sans lien avec ce module-ci.
 - Garantie/ratio de garantie obligatoire bloquant la soumission, libération à la clôture
 - Frais de dossier fixes et pourcentage, blocage du décaissement si non encaissés
 - Génération d'échéancier pour chaque nouvelle périodicité (quinzaine, 4 semaines, bimestriel, trimestriel, 4 mois, semestriel, annuel), en particulier le prorata d'intérêt trimestriel et semestriel
+- Modification d'une règle de scoring (seuil ou linéaire) : le score recalculé d'un crédit existant change en conséquence
 
 ## Limites V1
 

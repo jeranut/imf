@@ -11,3 +11,4 @@ from . import test_payment_cancel
 from . import test_guarantee
 from . import test_fee
 from . import test_periodicities
+from . import test_scoring

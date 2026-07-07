@@ -40,7 +40,7 @@ class TestWriteOff(MicrofinanceCommon):
         with self.assertRaises(UserError):
             loan.action_write_off()
 
-    def test_written_off_loan_excluded_from_risk_score(self):
+    def test_written_off_loan_excluded_from_scoring(self):
         writeoff_account = self.env['account.account'].create({
             'name': 'Pertes créances irrécouvrables test 2',
             'code': 'TWOF2',
@@ -50,5 +50,6 @@ class TestWriteOff(MicrofinanceCommon):
         self.product.write_off_account_id = writeoff_account.id
         loan = self._activate_loan(loan_amount=300.0, term=2)
         loan.action_confirm_write_off('Insolvabilité', loan.disbursement_date)
-        loan._compute_risk_score()
-        self.assertEqual(loan.risk_score, 0)
+        loan.action_calculate_scoring()
+        self.assertEqual(loan.internal_score, 0)
+        self.assertEqual(loan.risk_level, 'critical')

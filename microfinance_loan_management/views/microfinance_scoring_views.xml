@@ -147,8 +147,7 @@
         <field name="model">microfinance.loan</field>
         <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_tree"/>
         <field name="arch" type="xml">
-            <xpath expr="//tree/field[@name='risk_score']" position="after">
-                <field name="internal_score"/>
+            <xpath expr="//tree/field[@name='internal_score']" position="after">
                 <field name="risk_level" widget="badge" decoration-success="risk_level == 'low'" decoration-warning="risk_level == 'medium'" decoration-danger="risk_level in ('high','critical')"/>
                 <field name="scoring_decision" widget="badge" decoration-success="scoring_decision == 'recommended'" decoration-warning="scoring_decision == 'manual_review'" decoration-danger="scoring_decision == 'reject_recommended'"/>
             </xpath>
@@ -160,13 +159,11 @@
         <field name="model">microfinance.loan</field>
         <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_kanban"/>
         <field name="arch" type="xml">
-            <xpath expr="//kanban/field[@name='risk_score']" position="after">
-                <field name="internal_score"/>
+            <xpath expr="//kanban/field[@name='internal_score']" position="after">
                 <field name="risk_level"/>
                 <field name="scoring_decision"/>
             </xpath>
             <xpath expr="//t[@t-name='kanban-box']/div" position="inside">
-                <div>Score interne : <field name="internal_score"/></div>
                 <div>Décision : <field name="scoring_decision"/></div>
             </xpath>
         </field>
@@ -177,18 +174,14 @@
         <field name="model">microfinance.loan</field>
         <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_form"/>
         <field name="arch" type="xml">
-            <xpath expr="//header/button[@name='action_recompute_risk']" position="after">
-                <button name="action_calculate_scoring" string="Calculer scoring" type="object"/>
-            </xpath>
             <xpath expr="//div[@name='button_box']/button[@name='action_view_moves']" position="after">
                 <button name="action_view_scoring_lines" type="object" class="oe_stat_button" icon="fa-sliders">
                     <field name="scoring_line_count" widget="statinfo" string="Scoring"/>
                 </button>
             </xpath>
-            <xpath expr="//field[@name='risk_score']/parent::group" position="after">
+            <xpath expr="//field[@name='internal_score']/parent::group" position="after">
                 <group string="Scoring interne">
                     <field name="scoring_profile_id"/>
-                    <field name="internal_score" readonly="1"/>
                     <field name="risk_level" widget="badge" readonly="1" decoration-success="risk_level == 'low'" decoration-warning="risk_level == 'medium'" decoration-danger="risk_level in ('high','critical')"/>
                     <field name="scoring_decision" widget="badge" readonly="1" decoration-success="scoring_decision == 'recommended'" decoration-warning="scoring_decision == 'manual_review'" decoration-danger="scoring_decision == 'reject_recommended'"/>
                 </group>
