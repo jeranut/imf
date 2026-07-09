@@ -2,12 +2,12 @@
 <odoo>
     <menuitem id="menu_microfinance_savings_accounts"
               name="Comptes épargne"
-              parent="microfinance_loan_management.menu_microfinance_operations"
+              parent="microfinance_loan_management.menu_epargne_root"
               action="action_microfinance_savings_account"
               sequence="5"/>
     <menuitem id="menu_microfinance_savings_transactions"
               name="Transactions épargne"
-              parent="microfinance_loan_management.menu_microfinance_operations"
+              parent="microfinance_loan_management.menu_epargne_root"
               action="action_microfinance_savings_transaction"
               sequence="6"/>
     <menuitem id="menu_microfinance_savings_balance_report"

@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_partner_form" model="ir.ui.view">
+        <field name="name">res.partner.form.microfinance</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <!-- Smart buttons : masquer Facturé (module account), ajouter Crédit -->
+            <xpath expr="//button[@name='action_view_partner_invoices']" position="attributes">
+                <attribute name="invisible">context.get('microfinance_context')</attribute>
+            </xpath>
+            <xpath expr="//div[hasclass('oe_button_box')]" position="inside">
+                <button class="oe_stat_button" type="object" name="action_view_microfinance_loans" icon="fa-money"
+                    invisible="not context.get('microfinance_context')">
+                    <field name="microfinance_loan_count" widget="statinfo" string="Crédit"/>
+                </button>
+            </xpath>
+
+            <!-- Radio 3 boutons (Particulier/Société/Groupe) en remplacement du radio natif -->
+            <xpath expr="//field[@name='company_type']" position="replace">
+                <field name="microfinance_client_type" widget="radio" options="{'horizontal': true}"
+                    invisible="not context.get('microfinance_context')"/>
+                <field name="company_type" widget="radio" options="{'horizontal': true}"
+                    invisible="context.get('microfinance_context')"/>
+            </xpath>
+
+            <!-- Ajustements du groupe "Contact" natif -->
+            <xpath expr="//div[hasclass('o_address_format')]//field[@name='street']" position="attributes">
+                <attribute name="placeholder">Adresse...</attribute>
+            </xpath>
+            <xpath expr="//div[hasclass('o_address_format')]//field[@name='street2']" position="attributes">
+                <attribute name="placeholder">Adresse 2...</attribute>
+            </xpath>
+            <xpath expr="//div[hasclass('o_address_format')]//field[@name='state_id']" position="attributes">
+                <attribute name="invisible">context.get('microfinance_context')</attribute>
+            </xpath>
+            <xpath expr="//div[hasclass('o_address_format')]//field[@name='country_id']" position="attributes">
+                <attribute name="invisible">context.get('microfinance_context')</attribute>
+            </xpath>
+            <xpath expr="//field[@name='vat']" position="attributes">
+                <attribute name="invisible">context.get('microfinance_context')</attribute>
+            </xpath>
+
+            <!-- Blocs de champs par type, hors notebook, juste après le groupe Contact -->
+            <xpath expr="//notebook" position="before">
+
+                <group invisible="microfinance_client_type != 'individual' or not context.get('microfinance_context')">
+                    <group string="Identification">
+                        <field name="microfinance_registration_number"/>
+                        <field name="microfinance_id_type"/>
+                        <field name="microfinance_id_number" string="N° CIN" placeholder="123 122 123 123" invisible="microfinance_id_type != 'cin'"/>
+                        <field name="microfinance_id_number" string="N° pièce d'identité" invisible="microfinance_id_type == 'cin'"/>
+                        <field name="microfinance_id_issue_date" invisible="microfinance_id_type != 'cin'"/>
+                        <field name="microfinance_id_issue_place" invisible="microfinance_id_type != 'cin'"/>
+                        <field name="microfinance_birthdate"/>
+                        <field name="microfinance_gender"/>
+                        <field name="microfinance_marital_status"/>
+                        <field name="microfinance_profession"/>
+                        <field name="microfinance_education_level"/>
+                    </group>
+                    <group string="Famille et compte">
+                        <field name="microfinance_spouse_name"/>
+                        <field name="microfinance_next_of_kin_name"/>
+                        <field name="microfinance_next_of_kin_address"/>
+                        <field name="microfinance_co_holder_name"/>
+                        <field name="microfinance_required_signatures"/>
+                        <field name="microfinance_evolved_from_group"/>
+                    </group>
+                </group>
+
+                <group invisible="microfinance_client_type != 'company' or not context.get('microfinance_context')">
+                    <group string="Identité légale">
+                        <field name="microfinance_trade_name"/>
+                        <field name="microfinance_acronym"/>
+                        <field name="microfinance_enterprise_type"/>
+                        <field name="microfinance_nif" placeholder="123 122 123 123"/>
+                        <field name="microfinance_stat" placeholder="12345 11 2020 0 12345"/>
+                        <field name="microfinance_rcs" placeholder="2020B00123"/>
+                        <field name="microfinance_legal_form"/>
+                        <field name="microfinance_creation_date"/>
+                    </group>
+                    <group string="Activité et finances">
+                        <field name="microfinance_business_sector"/>
+                        <field name="microfinance_main_activity"/>
+                        <field name="microfinance_share_capital"/>
+                        <field name="microfinance_estimated_turnover"/>
+                        <field name="microfinance_employee_count"/>
+                    </group>
+                </group>
+                <group invisible="microfinance_client_type != 'company' or not context.get('microfinance_context')">
+                    <group string="Localisation étendue">
+                        <field name="microfinance_region"/>
+                        <field name="microfinance_district"/>
+                        <field name="microfinance_commune"/>
+                        <field name="microfinance_locality"/>
+                        <field name="microfinance_gps_coordinates"/>
+                        <field name="microfinance_distance_to_branch"/>
+                    </group>
+                    <group string="Fermeture">
+                        <field name="microfinance_closure_date"/>
+                        <field name="microfinance_closure_reason"/>
+                    </group>
+                </group>
+
+                <group invisible="microfinance_client_type != 'group' or not context.get('microfinance_context')">
+                    <group string="Groupe">
+                        <field name="microfinance_sub_group_count"/>
+                    </group>
+                </group>
+
+                <group invisible="microfinance_client_type not in ('company', 'group') or not context.get('microfinance_context')" string="Comité">
+                    <field name="microfinance_representative_ids" nolabel="1" colspan="2">
+                        <tree editable="bottom">
+                            <field name="name"/>
+                            <field name="id_card_number"/>
+                            <field name="role"/>
+                            <field name="account_authorization"/>
+                        </tree>
+                    </field>
+                </group>
+                <group invisible="microfinance_client_type != 'group' or not context.get('microfinance_context')" string="Membres du groupe">
+                    <field name="microfinance_member_ids" nolabel="1" colspan="2">
+                        <tree editable="bottom">
+                            <field name="member_partner_id"/>
+                            <field name="membership_number"/>
+                            <field name="entry_date"/>
+                            <field name="exit_date"/>
+                            <field name="education_level"/>
+                            <field name="income"/>
+                            <field name="planned_periodic_savings"/>
+                        </tree>
+                    </field>
+                </group>
+
+                <group invisible="not context.get('microfinance_context')" string="Suivi (commun)">
+                    <field name="microfinance_internal_reference"/>
+                    <field name="microfinance_category_1"/>
+                    <field name="microfinance_statistical_number"/>
+                    <field name="microfinance_category_2"/>
+                    <field name="microfinance_exit_date" invisible="microfinance_client_type == 'group'"/>
+                    <field name="microfinance_category_3"/>
+                    <field name="microfinance_exit_reason" invisible="microfinance_client_type == 'group'"/>
+                </group>
+                <group invisible="not context.get('microfinance_context')" string="Liste noire">
+                    <field name="microfinance_blacklist_ids" nolabel="1" colspan="2">
+                        <tree editable="bottom">
+                            <field name="date_start"/>
+                            <field name="date_end"/>
+                            <field name="reason"/>
+                            <field name="active"/>
+                        </tree>
+                    </field>
+                </group>
+
+            </xpath>
+
+            <!-- Masquage des 3 onglets natifs en contexte microfinance -->
+            <xpath expr="//page[@name='contact_addresses']" position="attributes">
+                <attribute name="invisible">context.get('microfinance_context')</attribute>
+            </xpath>
+            <xpath expr="//page[@name='sales_purchases']" position="attributes">
+                <attribute name="invisible">context.get('microfinance_context')</attribute>
+            </xpath>
+            <xpath expr="//page[@name='accounting']" position="attributes">
+                <attribute name="invisible">context.get('microfinance_context') or (not is_company and parent_id)</attribute>
+            </xpath>
+            <xpath expr="//page[@name='accounting_disabled']" position="attributes">
+                <attribute name="invisible">context.get('microfinance_context') or (is_company or not parent_id)</attribute>
+            </xpath>
+
+            <!-- Onglets Épargne et Crédit, à côté de Notes internes -->
+            <xpath expr="//page[@name='internal_notes']" position="before">
+                <page string="Épargne" name="microfinance_savings" invisible="not context.get('microfinance_context')">
+                    <p class="text-muted">Module épargne en cours d'implémentation.</p>
+                </page>
+                <page string="Crédit" name="microfinance_credits" invisible="not context.get('microfinance_context')">
+                    <field name="microfinance_loan_ids" nolabel="1" readonly="1">
+                        <tree>
+                            <field name="name"/>
+                            <field name="loan_amount"/>
+                            <field name="state"/>
+                        </tree>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="action_microfinance_client" model="ir.actions.act_window">
+        <field name="name">Clients</field>
+        <field name="res_model">res.partner</field>
+        <field name="view_mode">tree,form,kanban</field>
+        <field name="context">{'microfinance_context': True, 'default_microfinance_client_type': 'individual'}</field>
+    </record>
+
+    <!-- Madagascar par défaut sur res.partner (instance majoritairement basée à Madagascar) -->
+    <record id="default_partner_country_mg" model="ir.default">
+        <field name="field_id" search="[('model', '=', 'res.partner'), ('name', '=', 'country_id')]"/>
+        <field name="json_value">141</field>
+    </record>
+</odoo>

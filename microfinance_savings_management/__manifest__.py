@@ -23,6 +23,7 @@
         'views/microfinance_loan_product_views_inherit.xml',
         'views/microfinance_loan_views_inherit.xml',
         'views/microfinance_loan_payment_views_inherit.xml',
+        'views/res_partner_views_inherit.xml',
         'views/microfinance_savings_menus.xml',
     ],
     'assets': {

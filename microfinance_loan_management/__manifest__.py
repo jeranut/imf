@@ -33,6 +33,7 @@
         'wizard/microfinance_loan_writeoff_wizard_views.xml',
         'wizard/microfinance_loan_payment_cancel_wizard_views.xml',
         'views/microfinance_dashboard_views.xml',
+        'views/microfinance_partner_views.xml',
         'views/microfinance_menus.xml',
     ],
     'assets': {

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_partner_form_savings" model="ir.ui.view">
+        <field name="name">res.partner.form.microfinance.savings</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('oe_button_box')]" position="inside">
+                <button class="oe_stat_button" type="object" name="action_view_microfinance_savings" icon="fa-bank"
+                    invisible="not context.get('microfinance_context')">
+                    <field name="microfinance_savings_count" widget="statinfo" string="Épargne"/>
+                </button>
+            </xpath>
+            <xpath expr="//page[@name='microfinance_savings']/p" position="replace">
+                <field name="microfinance_savings_account_ids" nolabel="1" readonly="1">
+                    <tree>
+                        <field name="name"/>
+                        <field name="product_id"/>
+                        <field name="balance"/>
+                        <field name="state"/>
+                    </tree>
+                </field>
+            </xpath>
+        </field>
+    </record>
+</odoo>

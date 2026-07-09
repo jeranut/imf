@@ -1,0 +1,143 @@
+# -*- coding: utf-8 -*-
+import re
+
+from odoo import api, fields, models, _
+from odoo.exceptions import ValidationError
+
+
+class ResPartner(models.Model):
+    _inherit = 'res.partner'
+
+    microfinance_client_type = fields.Selection([
+        ('individual', 'Particulier'),
+        ('company', 'Société'),
+        ('group', 'Groupe'),
+    ], string='Type de client', default='individual')
+
+    @api.onchange('microfinance_client_type')
+    def _onchange_microfinance_client_type(self):
+        for partner in self:
+            partner.is_company = partner.microfinance_client_type in ('company', 'group')
+
+    # --- Communs ---
+    microfinance_internal_reference = fields.Char(string='Référence interne')
+    microfinance_statistical_number = fields.Char(string='Numéro statistique')
+    microfinance_category_1 = fields.Many2one('microfinance.client.category', string='Catégorie 1')
+    microfinance_category_2 = fields.Many2one('microfinance.client.category', string='Catégorie 2')
+    microfinance_category_3 = fields.Many2one('microfinance.client.category', string='Catégorie 3')
+    microfinance_exit_date = fields.Date(string="Date de sortie")
+    microfinance_exit_reason = fields.Text(string="Motif de sortie")
+    microfinance_blacklist_ids = fields.One2many('microfinance.client.blacklist', 'partner_id', string='Liste noire')
+    microfinance_is_blacklisted = fields.Boolean(compute='_compute_microfinance_is_blacklisted', store=True)
+
+    # --- Crédit ---
+    microfinance_loan_ids = fields.One2many('microfinance.loan', 'partner_id', string='Crédits')
+    microfinance_loan_count = fields.Integer(compute='_compute_microfinance_loan_count')
+
+    @api.depends('microfinance_loan_ids')
+    def _compute_microfinance_loan_count(self):
+        for partner in self:
+            partner.microfinance_loan_count = len(partner.microfinance_loan_ids)
+
+    def action_view_microfinance_loans(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Crédits',
+            'res_model': 'microfinance.loan',
+            'view_mode': 'tree,form',
+            'domain': [('partner_id', '=', self.id)],
+            'context': {'default_partner_id': self.id},
+        }
+
+    # --- Particulier : Identification ---
+    microfinance_registration_number = fields.Char(string="N° d'enregistrement")
+    microfinance_id_type = fields.Selection([
+        ('cin', 'CIN'), ('passport', 'Passeport'), ('other', 'Autre'),
+    ], string="Type de pièce d'identité")
+    microfinance_id_number = fields.Char(string="N° pièce d'identité")
+    microfinance_id_issue_date = fields.Date(string='Date de délivrance')
+    microfinance_id_issue_place = fields.Char(string='Lieu de délivrance')
+    microfinance_birthdate = fields.Date(string='Date de naissance')
+    microfinance_gender = fields.Selection([('m', 'Masculin'), ('f', 'Féminin')], string='Genre')
+    microfinance_marital_status = fields.Selection([
+        ('single', 'Célibataire'), ('married', 'Marié(e)'), ('divorced', 'Divorcé(e)/Séparé(e)'), ('widowed', 'Veuf/Veuve'),
+    ], string='Situation matrimoniale')
+    microfinance_profession = fields.Char(string='Profession')
+    microfinance_education_level = fields.Selection([
+        ('none', 'Aucun'), ('primary', 'Primaire'), ('secondary', 'Secondaire'), ('higher', 'Supérieur'),
+    ], string="Niveau d'éducation")
+
+    # --- Particulier : Famille et compte ---
+    microfinance_spouse_name = fields.Char(string='Nom du conjoint')
+    microfinance_next_of_kin_name = fields.Char(string='Personne à contacter')
+    microfinance_next_of_kin_address = fields.Char(string='Adresse contact')
+    microfinance_co_holder_name = fields.Char(string='Co-titulaire')
+    microfinance_required_signatures = fields.Integer(string='Signatures requises', default=1)
+    microfinance_evolved_from_group = fields.Boolean(string='Issu du groupe')
+
+    # --- Société : Identité légale (NIF/STAT/RCS remplacent le N° TVA natif) ---
+    microfinance_trade_name = fields.Char(string='Nom commercial')
+    microfinance_acronym = fields.Char(string='Sigle')
+    microfinance_enterprise_type = fields.Selection([
+        ('sole_proprietorship', 'Entreprise individuelle'), ('sarl', 'SARL'), ('sa', 'SA'),
+        ('cooperative', 'Coopérative'), ('association', 'Association'), ('ngo', 'ONG'),
+        ('public', 'Institution publique'), ('other', 'Autre'),
+    ], string="Type d'entreprise")
+    microfinance_nif = fields.Char(string='NIF')
+    microfinance_stat = fields.Char(string='STAT')
+    microfinance_rcs = fields.Char(string='RCS')
+    microfinance_legal_form = fields.Char(string='Forme juridique')
+    microfinance_creation_date = fields.Date(string='Date création')
+
+    # --- Société : Activité et finances ---
+    microfinance_business_sector = fields.Char(string="Secteur d'activité")
+    microfinance_main_activity = fields.Char(string='Activité principale')
+    microfinance_share_capital = fields.Monetary(string='Capital social')
+    microfinance_estimated_turnover = fields.Monetary(string='CA estimé')
+    microfinance_employee_count = fields.Integer(string='Employés')
+
+    # --- Société : Localisation étendue ---
+    microfinance_region = fields.Char(string='Région')
+    microfinance_district = fields.Char(string='District')
+    microfinance_commune = fields.Char(string='Commune')
+    microfinance_locality = fields.Char(string='Localité')
+    microfinance_gps_coordinates = fields.Char(string='GPS')
+    microfinance_distance_to_branch = fields.Float(string='Distance succursale')
+
+    # --- Société : Fermeture ---
+    microfinance_closure_date = fields.Date(string='Date de fermeture')
+    microfinance_closure_reason = fields.Text(string='Motif')
+
+    # --- Groupe ---
+    microfinance_sub_group_count = fields.Integer(string='Nombre de sous-groupes')
+
+    # --- Comité (Société + Groupe) et Membres (Groupe) ---
+    microfinance_representative_ids = fields.One2many('microfinance.client.representative', 'partner_id', string='Comité')
+    microfinance_member_ids = fields.One2many('microfinance.client.group.member', 'group_id', string='Membres du groupe')
+
+    currency_id = fields.Many2one('res.currency', default=lambda self: self.env.company.currency_id)
+
+    @api.depends('microfinance_blacklist_ids.active', 'microfinance_blacklist_ids.date_end')
+    def _compute_microfinance_is_blacklisted(self):
+        today = fields.Date.context_today(self)
+        for partner in self:
+            partner.microfinance_is_blacklisted = any(
+                b.active and (not b.date_end or b.date_end >= today) for b in partner.microfinance_blacklist_ids
+            )
+
+    @api.constrains('microfinance_id_type', 'microfinance_id_number')
+    def _check_cin_format(self):
+        for partner in self:
+            if partner.microfinance_id_type == 'cin' and partner.microfinance_id_number:
+                digits = re.sub(r'\D', '', partner.microfinance_id_number)
+                if len(digits) != 12:
+                    raise ValidationError(_('Le numéro de CIN doit contenir exactement 12 chiffres.'))
+
+    @api.constrains('microfinance_client_type', 'microfinance_nif')
+    def _check_nif_format(self):
+        for partner in self:
+            if partner.microfinance_client_type == 'company' and partner.microfinance_nif:
+                digits = re.sub(r'\D', '', partner.microfinance_nif)
+                if len(digits) != 12:
+                    raise ValidationError(_('Le NIF doit contenir exactement 12 chiffres.'))
