@@ -49,9 +49,115 @@ class MicrofinanceSavingsProduct(models.Model):
         help='Uniquement pertinent pour un produit à terme.',
     )
     term_months = fields.Integer(string='Durée (mois)', help='Requis pour un produit à terme.')
-    deposit_account_id = fields.Many2one('account.account', string='Compte passif épargne clients', required=True)
-    interest_expense_account_id = fields.Many2one('account.account', string='Compte charge intérêts versés', required=True)
-    fee_income_account_id = fields.Many2one('account.account', string='Compte produit frais')
+
+    # --- Comptabilité : Épargne ---
+    account_epargne_individuel_id = fields.Many2one(
+        'account.account', string='Épargne - Individuel', required=True,
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+    )
+    account_epargne_groupe_id = fields.Many2one(
+        'account.account', string='Épargne - Groupe', required=True,
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+    )
+    account_epargne_entreprise_id = fields.Many2one(
+        'account.account', string='Épargne - Entreprise', required=True,
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+    )
+
+    # --- Comptabilité : Intérêts ---
+    account_interet_paye_individuel_id = fields.Many2one(
+        'account.account', string='Intérêt payé - Individuel',
+        domain="[('account_type', '=', 'expense'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_interet_paye_groupe_id = fields.Many2one(
+        'account.account', string='Intérêt payé - Groupe',
+        domain="[('account_type', '=', 'expense'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_interet_paye_entreprise_id = fields.Many2one(
+        'account.account', string='Intérêt payé - Entreprise',
+        domain="[('account_type', '=', 'expense'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_interets_avance_individuel_id = fields.Many2one(
+        'account.account', string="Intérêts comptabilisés d'avance - Individuel",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_interets_avance_groupe_id = fields.Many2one(
+        'account.account', string="Intérêts comptabilisés d'avance - Groupe",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_interets_avance_entreprise_id = fields.Many2one(
+        'account.account', string="Intérêts comptabilisés d'avance - Entreprise",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_cout_interet_payer_individuel_id = fields.Many2one(
+        'account.account', string="Coût de l'intérêt à payer - Individuel",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_cout_interet_payer_groupe_id = fields.Many2one(
+        'account.account', string="Coût de l'intérêt à payer - Groupe",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_cout_interet_payer_entreprise_id = fields.Many2one(
+        'account.account', string="Coût de l'intérêt à payer - Entreprise",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_charge_interet_negatif_individuel_id = fields.Many2one(
+        'account.account', string="Charge de l'intérêt négative - Individuel",
+        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_charge_interet_negatif_groupe_id = fields.Many2one(
+        'account.account', string="Charge de l'intérêt négative - Groupe",
+        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+    account_charge_interet_negatif_entreprise_id = fields.Many2one(
+        'account.account', string="Charge de l'intérêt négative - Entreprise",
+        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
+    )
+
+    # --- Comptabilité : Comptes partagés ---
+    account_penalites_id = fields.Many2one(
+        'account.account', string='Pénalités sur épargne',
+        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+    )
+    account_commission_id = fields.Many2one(
+        'account.account', string='Commission sur épargne',
+        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        help="Compte de comptabilisation des frais de tenue de compte. Requis uniquement si des frais sont prélevés pour ce produit.",
+    )
+    account_cheques_id = fields.Many2one(
+        'account.account', string='Comptes chèques',
+        domain="[('account_type', '=', 'asset_current'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+    )
+    account_commission_cheques_rejetes_id = fields.Many2one(
+        'account.account', string='Commission sur chèques rejetés',
+        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+    )
+    account_retenue_taxe_id = fields.Many2one(
+        'account.account', string='Retenue de taxe',
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+    )
+    account_papeterie_id = fields.Many2one(
+        'account.account', string="Papeterie pour l'épargne",
+        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+    )
+
     deposit_journal_id = fields.Many2one('account.journal', string='Journal dépôt', domain="[('type', 'in', ('bank','cash'))]")
     withdrawal_journal_id = fields.Many2one('account.journal', string='Journal retrait', domain="[('type', 'in', ('bank','cash'))]")
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True)
@@ -78,3 +184,13 @@ class MicrofinanceSavingsProduct(models.Model):
                 raise ValidationError(_('La pénalité de retrait anticipé ne peut pas être négative.'))
             if product.product_type == 'term_deposit' and not product.term_months:
                 raise ValidationError(_('Un produit à terme doit avoir une durée en mois.'))
+
+    def _get_account(self, kind, partner):
+        """Retourne le compte account_<kind>_individuel_id / _groupe_id / _entreprise_id
+        selon le type de client (les 3 variantes existent côté épargne)."""
+        self.ensure_one()
+        variant = {
+            'company': 'entreprise',
+            'group': 'groupe',
+        }.get(partner.microfinance_client_type, 'individuel')
+        return self['account_%s_%s_id' % (kind, variant)]

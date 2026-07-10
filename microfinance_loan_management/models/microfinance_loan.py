@@ -633,8 +633,9 @@ class MicrofinanceLoan(models.Model):
         self.ensure_one()
         product = self.product_id
         journal = product.disbursement_journal_id
-        if not journal or not product.loan_account_id or not journal.default_account_id:
-            raise UserError(_('Configurez le journal de décaissement, son compte par défaut et le compte prêts clients.'))
+        principal_account = product._get_account('principal', self.partner_id)
+        if not journal or not principal_account or not journal.default_account_id:
+            raise UserError(_('Configurez le journal de décaissement, son compte par défaut et le compte principal en cours du produit.'))
         credit_lines = [
             (0, 0, {'name': _('Sortie caisse/banque %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': journal.default_account_id.id, 'debit': 0.0, 'credit': self.net_disbursed_amount}),
         ]
@@ -643,11 +644,11 @@ class MicrofinanceLoan(models.Model):
         # contrepartie est comptabilisée ici plutôt que via une écriture d'encaissement séparée
         # (action_charge_fee(), qui reste le mécanisme utilisé quand fee_charged_before_disbursement=True).
         if not product.fee_charged_before_disbursement and self.fee_amount_due > 0:
-            if not product.fee_account_id:
-                raise UserError(_('Configurez le compte frais du produit pour netter les frais de dossier du décaissement.'))
+            if not product.account_commission_credit_id:
+                raise UserError(_('Configurez le compte commission sur crédit du produit pour netter les frais de dossier du décaissement.'))
             credit_lines.append((0, 0, {
                 'name': _('Frais de dossier %s') % self.name, 'partner_id': self.partner_id.id,
-                'account_id': product.fee_account_id.id, 'debit': 0.0, 'credit': self.fee_amount_due,
+                'account_id': product.account_commission_credit_id.id, 'debit': 0.0, 'credit': self.fee_amount_due,
             }))
         return {
             'date': fields.Date.context_today(self),
@@ -655,7 +656,7 @@ class MicrofinanceLoan(models.Model):
             'ref': _('Décaissement crédit %s') % self.name,
             'microfinance_loan_id': self.id,
             'line_ids': [
-                (0, 0, {'name': _('Crédit client %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.loan_account_id.id, 'debit': self.loan_amount, 'credit': 0.0}),
+                (0, 0, {'name': _('Crédit client %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': principal_account.id, 'debit': self.loan_amount, 'credit': 0.0}),
             ] + credit_lines
         }
 
@@ -663,8 +664,8 @@ class MicrofinanceLoan(models.Model):
         self.ensure_one()
         product = self.product_id
         journal = product.fee_journal_id
-        if not journal or not journal.default_account_id or not product.fee_account_id:
-            raise UserError(_('Configurez le journal d\'encaissement des frais, son compte par défaut et le compte frais du produit.'))
+        if not journal or not journal.default_account_id or not product.account_commission_credit_id:
+            raise UserError(_('Configurez le journal d\'encaissement des frais, son compte par défaut et le compte commission sur crédit du produit.'))
         return {
             'date': fields.Date.context_today(self),
             'journal_id': journal.id,
@@ -672,7 +673,7 @@ class MicrofinanceLoan(models.Model):
             'microfinance_loan_id': self.id,
             'line_ids': [
                 (0, 0, {'name': _('Encaissement frais %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': journal.default_account_id.id, 'debit': self.fee_amount_due, 'credit': 0.0}),
-                (0, 0, {'name': _('Frais de dossier %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.fee_account_id.id, 'debit': 0.0, 'credit': self.fee_amount_due}),
+                (0, 0, {'name': _('Frais de dossier %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.account_commission_credit_id.id, 'debit': 0.0, 'credit': self.fee_amount_due}),
             ]
         }
 
@@ -726,8 +727,9 @@ class MicrofinanceLoan(models.Model):
     def _prepare_writeoff_move(self, write_off_date):
         self.ensure_one()
         product = self.product_id
-        if not product.write_off_account_id:
-            raise UserError(_('Configurez le compte de pertes sur créances irrécouvrables pour ce produit avant de radier ce crédit.'))
+        write_off_account = product._get_account('credits_perte', self.partner_id)
+        if not write_off_account:
+            raise UserError(_('Configurez le compte de crédits passés en perte pour ce produit avant de radier ce crédit.'))
         journal = self.env['account.journal'].search([
             ('company_id', '=', self.company_id.id), ('type', '=', 'general'),
         ], limit=1)
@@ -739,8 +741,8 @@ class MicrofinanceLoan(models.Model):
             'ref': _('Radiation crédit %s') % self.name,
             'microfinance_loan_id': self.id,
             'line_ids': [
-                (0, 0, {'name': _('Perte sur créance %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.write_off_account_id.id, 'debit': self.balance_total, 'credit': 0.0}),
-                (0, 0, {'name': _('Sortie prêt client %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.loan_account_id.id, 'debit': 0.0, 'credit': self.balance_total}),
+                (0, 0, {'name': _('Perte sur créance %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': write_off_account.id, 'debit': self.balance_total, 'credit': 0.0}),
+                (0, 0, {'name': _('Sortie prêt client %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product._get_account('principal', self.partner_id).id, 'debit': 0.0, 'credit': self.balance_total}),
             ]
         }
 
@@ -773,9 +775,11 @@ class MicrofinanceLoan(models.Model):
     def _prepare_provision_move(self, delta, as_of_date):
         self.ensure_one()
         product = self.product_id
-        if not product.provision_account_id or not product.provision_contra_account_id:
+        provision_cout_account = product._get_account('provision_cout', self.partner_id)
+        provision_contra_account = product._get_account('provision', self.partner_id)
+        if not provision_cout_account or not provision_contra_account:
             raise UserError(_(
-                'Configurez les comptes de provision (charge et contrepartie) pour le produit %s '
+                'Configurez les comptes de provision (coût et contrepartie) pour le produit %s '
                 'avant de comptabiliser une provision.'
             ) % product.display_name)
         journal = self._get_misc_operations_journal()
@@ -794,8 +798,8 @@ class MicrofinanceLoan(models.Model):
             'ref': label,
             'microfinance_loan_id': self.id,
             'line_ids': [
-                (0, 0, dict(charge_vals, name=label, partner_id=self.partner_id.id, account_id=product.provision_account_id.id)),
-                (0, 0, dict(contra_vals, name=label, partner_id=self.partner_id.id, account_id=product.provision_contra_account_id.id)),
+                (0, 0, dict(charge_vals, name=label, partner_id=self.partner_id.id, account_id=provision_cout_account.id)),
+                (0, 0, dict(contra_vals, name=label, partner_id=self.partner_id.id, account_id=provision_contra_account.id)),
             ],
         }
 

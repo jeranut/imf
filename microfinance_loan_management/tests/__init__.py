@@ -14,3 +14,4 @@ from . import test_guarantee_valuation
 from . import test_fee
 from . import test_periodicities
 from . import test_scoring
+from . import test_multi_company

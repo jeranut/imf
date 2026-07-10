@@ -76,8 +76,9 @@ class MicrofinanceSavingsTransaction(models.Model):
         self.ensure_one()
         account = self.account_id
         product = account.product_id
-        if not product.deposit_account_id:
-            raise UserError(_("Configurez le compte passif épargne clients sur le produit %s.") % product.name)
+        deposit_account = product._get_account('epargne', account.partner_id)
+        if not deposit_account:
+            raise UserError(_("Configurez le compte épargne sur le produit %s.") % product.name)
         label_by_type = {
             'deposit': _('Dépôt épargne %s') % account.name,
             'withdrawal': _('Retrait épargne %s') % account.name,
@@ -89,9 +90,10 @@ class MicrofinanceSavingsTransaction(models.Model):
         label = label_by_type[self.transaction_type]
         if self.transaction_type in CREDIT_TYPES:
             if self.transaction_type == 'interest_credit':
-                if not product.interest_expense_account_id:
-                    raise UserError(_("Configurez le compte charge intérêts versés sur le produit %s.") % product.name)
-                counterpart_account = product.interest_expense_account_id
+                interest_account = product._get_account('interet_paye', account.partner_id)
+                if not interest_account:
+                    raise UserError(_("Configurez le compte intérêt payé sur le produit %s.") % product.name)
+                counterpart_account = interest_account
             else:
                 journal = product.deposit_journal_id
                 if not journal or not journal.default_account_id:
@@ -99,20 +101,20 @@ class MicrofinanceSavingsTransaction(models.Model):
                 counterpart_account = journal.default_account_id
             lines = [
                 (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': counterpart_account.id, 'debit': self.amount, 'credit': 0.0}),
-                (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': product.deposit_account_id.id, 'debit': 0.0, 'credit': self.amount}),
+                (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': deposit_account.id, 'debit': 0.0, 'credit': self.amount}),
             ]
         else:
             if self.transaction_type == 'fee_debit':
-                if not product.fee_income_account_id:
-                    raise UserError(_('Configurez le compte produit frais sur le produit %s.') % product.name)
-                counterpart_account = product.fee_income_account_id
+                if not product.account_commission_id:
+                    raise UserError(_('Configurez le compte commission sur épargne sur le produit %s.') % product.name)
+                counterpart_account = product.account_commission_id
             else:
                 journal = product.withdrawal_journal_id
                 if not journal or not journal.default_account_id:
                     raise UserError(_('Configurez le journal de retrait et son compte par défaut sur le produit %s.') % product.name)
                 counterpart_account = journal.default_account_id
             lines = [
-                (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': product.deposit_account_id.id, 'debit': self.amount, 'credit': 0.0}),
+                (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': deposit_account.id, 'debit': self.amount, 'credit': 0.0}),
                 (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': counterpart_account.id, 'debit': 0.0, 'credit': self.amount}),
             ]
         journal_for_move = (

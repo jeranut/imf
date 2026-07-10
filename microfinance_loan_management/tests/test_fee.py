@@ -12,7 +12,7 @@ class TestFee(MicrofinanceCommon):
             'name': 'Frais de dossier test', 'code': 'TFEE', 'account_type': 'income_other', 'company_id': self.env.company.id,
         })
         self.product.write({
-            'fee_account_id': self.fee_account.id,
+            'account_commission_credit_id': self.fee_account.id,
             'fee_journal_id': self.disbursement_journal.id,
         })
 

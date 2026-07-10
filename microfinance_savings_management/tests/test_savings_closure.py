@@ -18,8 +18,10 @@ class TestSavingsClosure(SavingsCommon):
     def test_closure_blocked_when_linked_to_active_compulsory_loan(self):
         compulsory_product = self.env['microfinance.savings.product'].create({
             'name': 'Épargne obligatoire test', 'code': 'SAVCOMP', 'product_type': 'compulsory',
-            'deposit_account_id': self.savings_deposit_account.id,
-            'interest_expense_account_id': self.savings_interest_account.id,
+            'account_epargne_individuel_id': self.savings_deposit_account.id,
+            'account_epargne_groupe_id': self.savings_deposit_account_groupe.id,
+            'account_epargne_entreprise_id': self.savings_deposit_account_entreprise.id,
+            'account_interet_paye_individuel_id': self.savings_interest_account.id,
             'deposit_journal_id': self.savings_deposit_journal.id,
             'withdrawal_journal_id': self.savings_withdrawal_journal.id,
         })
@@ -34,8 +36,10 @@ class TestSavingsClosure(SavingsCommon):
     def test_closure_allowed_once_loan_closed(self):
         compulsory_product = self.env['microfinance.savings.product'].create({
             'name': 'Épargne obligatoire test 2', 'code': 'SAVCOMP2', 'product_type': 'compulsory',
-            'deposit_account_id': self.savings_deposit_account.id,
-            'interest_expense_account_id': self.savings_interest_account.id,
+            'account_epargne_individuel_id': self.savings_deposit_account.id,
+            'account_epargne_groupe_id': self.savings_deposit_account_groupe.id,
+            'account_epargne_entreprise_id': self.savings_deposit_account_entreprise.id,
+            'account_interet_paye_individuel_id': self.savings_interest_account.id,
             'deposit_journal_id': self.savings_deposit_journal.id,
             'withdrawal_journal_id': self.savings_withdrawal_journal.id,
         })

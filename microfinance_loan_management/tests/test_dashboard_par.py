@@ -14,7 +14,7 @@ class TestDashboardPar(MicrofinanceCommon):
         writeoff_account = self.env['account.account'].create({
             'name': 'Pertes test PAR', 'code': 'TWOFPAR', 'account_type': 'expense', 'company_id': self.env.company.id,
         })
-        self.product.write_off_account_id = writeoff_account.id
+        self.product.account_credits_perte_individuel_id = writeoff_account.id
         other_partner = self.env['res.partner'].create({'name': 'Client PAR radié'})
         written_off_loan = self._activate_loan(loan_amount=2000.0, term=2, partner_id=other_partner.id)
         written_off_installment = written_off_loan.installment_ids.sorted('sequence')[0]

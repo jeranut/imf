@@ -13,6 +13,7 @@
     'depends': ['base', 'mail', 'account', 'microfinance_loan_management', 'base_accounting_kit'],
     'data': [
         'security/savings_security.xml',
+        'security/microfinance_company_rules.xml',
         'security/ir.model.access.csv',
         'data/ir_sequence_data.xml',
         'data/ir_cron_data.xml',

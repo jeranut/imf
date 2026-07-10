@@ -6,3 +6,4 @@ from . import test_savings_closure
 from . import test_auto_debit
 from . import test_progressive_eligibility
 from . import test_upfront_apport
+from . import test_multi_company

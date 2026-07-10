@@ -11,6 +11,7 @@
     'depends': ['base', 'mail', 'account', 'contacts', 'hr', 'calendar', 'base_accounting_kit'],
     'data': [
         'security/groups.xml',
+        'security/microfinance_company_rules.xml',
         'security/ir.model.access.csv',
         'data/sequence.xml',
         'data/cron.xml',

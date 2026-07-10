@@ -8,7 +8,7 @@ class TestWriteOff(MicrofinanceCommon):
 
     def test_write_off_requires_product_account_configured(self):
         loan = self._activate_loan()
-        self.assertFalse(self.product.write_off_account_id)
+        self.assertFalse(self.product.account_credits_perte_individuel_id)
         with self.assertRaises(UserError):
             loan.action_confirm_write_off('Client introuvable', loan.disbursement_date)
 
@@ -19,7 +19,7 @@ class TestWriteOff(MicrofinanceCommon):
             'account_type': 'expense',
             'company_id': self.env.company.id,
         })
-        self.product.write_off_account_id = writeoff_account.id
+        self.product.account_credits_perte_individuel_id = writeoff_account.id
         loan = self._activate_loan(loan_amount=600.0, term=3)
         balance_before = loan.balance_total
         self.assertGreater(balance_before, 0.0)
@@ -47,7 +47,7 @@ class TestWriteOff(MicrofinanceCommon):
             'account_type': 'expense',
             'company_id': self.env.company.id,
         })
-        self.product.write_off_account_id = writeoff_account.id
+        self.product.account_credits_perte_individuel_id = writeoff_account.id
         loan = self._activate_loan(loan_amount=300.0, term=2)
         loan.action_confirm_write_off('Insolvabilité', loan.disbursement_date)
         loan.action_calculate_scoring()

@@ -133,6 +133,7 @@
                 </group>
 
                 <group invisible="not context.get('microfinance_context')" string="Suivi (commun)">
+                    <field name="company_id" groups="base.group_multi_company"/>
                     <field name="microfinance_internal_reference"/>
                     <field name="microfinance_category_1"/>
                     <field name="microfinance_statistical_number"/>

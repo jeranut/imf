@@ -11,6 +11,12 @@ class SavingsCommon(MicrofinanceCommon):
         cls.savings_deposit_account = cls.env['account.account'].create({
             'name': 'Passif épargne clients test', 'code': 'TSAV', 'account_type': 'liability_current', 'company_id': company.id,
         })
+        cls.savings_deposit_account_groupe = cls.env['account.account'].create({
+            'name': 'Passif épargne groupe test', 'code': 'TSAVG', 'account_type': 'liability_current', 'company_id': company.id,
+        })
+        cls.savings_deposit_account_entreprise = cls.env['account.account'].create({
+            'name': 'Passif épargne entreprise test', 'code': 'TSAVE', 'account_type': 'liability_current', 'company_id': company.id,
+        })
         cls.savings_interest_account = cls.env['account.account'].create({
             'name': 'Charge intérêts épargne test', 'code': 'TSAVINT', 'account_type': 'expense', 'company_id': company.id,
         })
@@ -29,9 +35,11 @@ class SavingsCommon(MicrofinanceCommon):
             'name': 'Épargne Test', 'code': 'SAVTEST', 'product_type': 'voluntary',
             'interest_rate': 6.0, 'balance_method': 'min_balance', 'capitalization_frequency': 'monthly',
             'min_opening_amount': 0.0, 'min_balance': 50.0,
-            'deposit_account_id': cls.savings_deposit_account.id,
-            'interest_expense_account_id': cls.savings_interest_account.id,
-            'fee_income_account_id': cls.savings_fee_account.id,
+            'account_epargne_individuel_id': cls.savings_deposit_account.id,
+            'account_epargne_groupe_id': cls.savings_deposit_account_groupe.id,
+            'account_epargne_entreprise_id': cls.savings_deposit_account_entreprise.id,
+            'account_interet_paye_individuel_id': cls.savings_interest_account.id,
+            'account_commission_id': cls.savings_fee_account.id,
             'deposit_journal_id': cls.savings_deposit_journal.id,
             'withdrawal_journal_id': cls.savings_withdrawal_journal.id,
         })

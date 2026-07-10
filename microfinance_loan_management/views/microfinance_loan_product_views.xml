@@ -27,7 +27,10 @@
                     <group>
                         <group>
                             <field name="code"/>
-                            <field name="company_id" groups="base.group_multi_company"/>
+                            <!-- Pas de groups="base.group_multi_company" : les domaines des
+                                 champs account.account ci-dessous référencent company_id, qui
+                                 doit donc rester présent dans la vue quel que soit le groupe. -->
+                            <field name="company_id"/>
                             <field name="currency_id"/>
                             <field name="active"/>
                         </group>
@@ -64,21 +67,55 @@
                             </group>
                         </page>
                         <page string="Comptabilité">
-                            <group>
+                            <group string="Journaux et frais">
                                 <field name="disbursement_journal_id"/>
                                 <field name="payment_journal_id"/>
-                                <field name="loan_account_id"/>
-                                <field name="interest_account_id"/>
-                                <field name="penalty_account_id"/>
-                                <field name="fee_account_id"/>
                                 <field name="fee_type"/>
                                 <field name="fee_amount" invisible="fee_type != 'fixed'"/>
                                 <field name="fee_rate" invisible="fee_type != 'percentage'"/>
                                 <field name="fee_journal_id"/>
                                 <field name="fee_charged_before_disbursement"/>
-                                <field name="write_off_account_id"/>
-                                <field name="provision_account_id"/>
-                                <field name="provision_contra_account_id"/>
+                            </group>
+                            <group string="Principal">
+                                <field name="account_principal_individuel_id"/>
+                                <field name="account_principal_groupe_id"/>
+                                <field name="account_credits_perte_individuel_id"/>
+                                <field name="account_credits_perte_groupe_id"/>
+                                <field name="account_arrieres_declassifies_individuel_id"/>
+                                <field name="account_arrieres_declassifies_groupe_id"/>
+                            </group>
+                            <group string="Provisions">
+                                <field name="account_provision_individuel_id"/>
+                                <field name="account_provision_groupe_id"/>
+                                <field name="account_provision_cout_individuel_id"/>
+                                <field name="account_provision_cout_groupe_id"/>
+                            </group>
+                            <group string="Intérêts">
+                                <field name="account_interets_recus_individuel_id"/>
+                                <field name="account_interets_recus_groupe_id"/>
+                                <field name="account_interets_echus_individuel_id"/>
+                                <field name="account_interets_echus_groupe_id"/>
+                                <field name="account_interets_echus_recevoir_individuel_id"/>
+                                <field name="account_interets_echus_recevoir_groupe_id"/>
+                            </group>
+                            <group string="Pénalités et commissions">
+                                <field name="account_penalites_id"/>
+                                <field name="account_penalites_avance_individuel_id"/>
+                                <field name="account_penalites_avance_groupe_id"/>
+                                <field name="account_revenu_penalites_avance_individuel_id"/>
+                                <field name="account_revenu_penalites_avance_groupe_id"/>
+                                <field name="account_commission_credit_id"/>
+                                <field name="account_commissions_echues_individuel_id"/>
+                                <field name="account_commissions_echues_groupe_id"/>
+                                <field name="account_commissions_accumulees_individuel_id"/>
+                                <field name="account_commissions_accumulees_groupe_id"/>
+                            </group>
+                            <group string="Comptes partagés">
+                                <field name="account_recouvrement_id"/>
+                                <field name="account_papeterie_id"/>
+                                <field name="account_cheques_id"/>
+                                <field name="account_surpaiement_id"/>
+                                <field name="account_diff_monnaie_id"/>
                             </group>
                         </page>
                     </notebook>

@@ -14,9 +14,21 @@ class MicrofinanceCommon(TransactionCase):
             'account_type': 'asset_current',
             'company_id': company.id,
         })
+        cls.loan_account_groupe = cls.env['account.account'].create({
+            'name': 'Prêts clients groupe test',
+            'code': 'TPRETG',
+            'account_type': 'asset_current',
+            'company_id': company.id,
+        })
         cls.interest_account = cls.env['account.account'].create({
             'name': 'Produits intérêts test',
             'code': 'TINT',
+            'account_type': 'income',
+            'company_id': company.id,
+        })
+        cls.interest_account_groupe = cls.env['account.account'].create({
+            'name': 'Produits intérêts groupe test',
+            'code': 'TINTG',
             'account_type': 'income',
             'company_id': company.id,
         })
@@ -60,9 +72,11 @@ class MicrofinanceCommon(TransactionCase):
             'repayment_frequency_id': cls.env.ref('microfinance_loan_management.repayment_frequency_monthly').id,
             'disbursement_journal_id': cls.disbursement_journal.id,
             'payment_journal_id': cls.payment_journal.id,
-            'loan_account_id': cls.loan_account.id,
-            'interest_account_id': cls.interest_account.id,
-            'penalty_account_id': cls.penalty_account.id,
+            'account_principal_individuel_id': cls.loan_account.id,
+            'account_principal_groupe_id': cls.loan_account_groupe.id,
+            'account_interets_recus_individuel_id': cls.interest_account.id,
+            'account_interets_recus_groupe_id': cls.interest_account_groupe.id,
+            'account_penalites_id': cls.penalty_account.id,
         })
 
     def _create_loan(self, **kwargs):

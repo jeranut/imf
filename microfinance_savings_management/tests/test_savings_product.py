@@ -9,8 +9,10 @@ class TestSavingsProduct(SavingsCommon):
     def _product_vals(self, **kwargs):
         vals = {
             'name': 'Produit', 'code': 'PVAL',
-            'deposit_account_id': self.savings_deposit_account.id,
-            'interest_expense_account_id': self.savings_interest_account.id,
+            'account_epargne_individuel_id': self.savings_deposit_account.id,
+            'account_epargne_groupe_id': self.savings_deposit_account_groupe.id,
+            'account_epargne_entreprise_id': self.savings_deposit_account_entreprise.id,
+            'account_interet_paye_individuel_id': self.savings_interest_account.id,
             'deposit_journal_id': self.savings_deposit_journal.id,
             'withdrawal_journal_id': self.savings_withdrawal_journal.id,
         }

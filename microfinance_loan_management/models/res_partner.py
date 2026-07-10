@@ -14,10 +14,32 @@ class ResPartner(models.Model):
         ('group', 'Groupe'),
     ], string='Type de client', default='individual')
 
+    # Champ natif res.partner.company_id (déjà filtré par la règle multi-société standard
+    # base.res_partner_rule) : un client microfinance est rattaché à une seule agence, pas
+    # de partage entre sociétés. Non requis au niveau du champ pour ne pas impacter les
+    # partenaires des autres usages de l'instance (EAT, immobilier...) qui restent partagés ;
+    # le caractère obligatoire n'est appliqué qu'en contexte microfinance (cf. contrainte
+    # _check_microfinance_company_required ci-dessous).
+    company_id = fields.Many2one(
+        'res.company', string='Société (agence)',
+        default=lambda self: self.env.company if self.env.context.get('microfinance_context') else False,
+        help="Agence à laquelle ce client est rattaché de façon exclusive. Obligatoire pour "
+             "les clients microfinance, laissé vide pour les partenaires partagés entre "
+             "sociétés (usages hors microfinance de l'instance).",
+    )
+
     @api.onchange('microfinance_client_type')
     def _onchange_microfinance_client_type(self):
         for partner in self:
             partner.is_company = partner.microfinance_client_type in ('company', 'group')
+
+    @api.constrains('company_id', 'microfinance_client_type')
+    def _check_microfinance_company_required(self):
+        if not self.env.context.get('microfinance_context'):
+            return
+        for partner in self:
+            if not partner.company_id:
+                raise ValidationError(_('La société (agence) est obligatoire pour un client microfinance.'))
 
     # --- Communs ---
     microfinance_internal_reference = fields.Char(string='Référence interne')

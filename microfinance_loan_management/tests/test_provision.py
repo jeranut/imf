@@ -56,8 +56,8 @@ class TestProvision(MicrofinanceCommon):
             loan.action_post_provisions()
 
     def test_post_provisions_generates_move_and_tracks_posted_amount(self):
-        self.product.provision_account_id = self.provision_account.id
-        self.product.provision_contra_account_id = self.provision_contra_account.id
+        self.product.account_provision_cout_individuel_id = self.provision_account.id
+        self.product.account_provision_individuel_id = self.provision_contra_account.id
         loan = self._activate_loan(loan_amount=1000.0, term=4)
         first = loan.installment_ids.sorted('sequence')[0]
         first.due_date = fields.Date.subtract(fields.Date.context_today(loan), days=45)
@@ -81,8 +81,8 @@ class TestProvision(MicrofinanceCommon):
         self.assertEqual(len(moves_after), 1)
 
     def test_post_provisions_reversal_when_arrears_clear(self):
-        self.product.provision_account_id = self.provision_account.id
-        self.product.provision_contra_account_id = self.provision_contra_account.id
+        self.product.account_provision_cout_individuel_id = self.provision_account.id
+        self.product.account_provision_individuel_id = self.provision_contra_account.id
         loan = self._activate_loan(loan_amount=1000.0, term=4)
         first = loan.installment_ids.sorted('sequence')[0]
         first.due_date = fields.Date.subtract(fields.Date.context_today(loan), days=45)

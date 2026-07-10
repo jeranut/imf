@@ -1,233 +1,131 @@
-# Microfinance Loan Management - Odoo 17 Community
+# Gestion des crédits microfinance
 
-Module créé from scratch pour gérer les crédits clients d'une institution de microfinance.
-
-## Fonctionnalités V1
-
-- Produits de crédit configurables
-- Méthodes d'intérêt : flat rate et reducing balance
-- Workflow : brouillon, soumis, validation manager, validation finance, approbation, actif, clôturé, défaut, radié
-- Génération d'échéancier automatique, avec prise en compte du délai de grâce (`grace_period_days`) : première échéance décalée d'autant, et intérêt couru pendant un délai de grâce supérieur à une période capturé dans une échéance dédiée
-- Remboursement avec allocation : pénalité → intérêt → capital
-- Comptabilité : décaissement et remboursement via `account.move`
-- Pénalités de retard appliquées une seule fois après délai de grâce
-- Rééchelonnement de crédit actif (nouvelle durée et/ou nouvelle date de première échéance restante), historisé via `reschedule_count`, le chatter, et un historique structuré interrogeable (`microfinance.loan.reschedule.history`/`.history.line` : ancien échéancier complet, motif, auteur, date, un enregistrement distinct par rééchelonnement)
-- Règles de blocage à la demande de crédit : ancienneté client minimum, second crédit actif autorisé ou non, blocage si arriérés, blocage si le co-emprunteur a déjà un crédit actif
-- Radiation / passage en perte d'un crédit actif ou en défaut, avec écriture comptable dédiée et exclusion du calcul de risque/PAR actif
-- Provisionnement selon l'ancienneté des arriérés (`microfinance.provision.rule`, tranches paramétrables par société), écriture de régularisation par crédit via `action_post_provisions`, cron mensuel optionnel
-- Reçu de décaissement imprimable (PDF, QWeb) depuis le crédit actif
-- Portefeuille à risque (PAR) par tranche d'ancienneté (1-30/31-60/61-90/90+) dans le tableau de bord
-- Annulation comptable propre d'un remboursement posté (contre-passation, restauration des échéances, réouverture du crédit si nécessaire)
-- Garanties et cautions (`microfinance.loan.guarantee` : terrain, véhicule, maison, meuble, salaire, garant/caution personnelle, autre), garantie obligatoire et/ou ratio minimum de couverture configurables par produit, libération automatique à la clôture du crédit
-- Valorisation des garanties par type (`microfinance.guarantee.valuation.rule` : ratio de valorisation en %, plafonné par un `max_ratio` configurable par société) ; `recognized_value` (valeur reconnue après ratio, 100% par défaut sans règle) alimente le total des garanties validées et les contrôles d'éligibilité, jamais la valeur brute estimée
-- Frais de dossier (fixes ou % du montant), encaissables via `action_charge_fee()`, décaissement bloqué tant qu'ils sont dus si le produit l'exige
-- Périodicités de remboursement étendues : quinzaine, 4 semaines, bimestriel, trimestriel, 4 mois, semestriel, annuel (en plus de journalier/hebdomadaire/mensuel), avec intérêt proraté correctement pour chacune
-- Visites de recouvrement
-- Scoring crédit configurable (`microfinance.scoring.profile`/`microfinance.scoring.rule`) : un score unique (`internal_score`) par règles à seuil ou linéaires (points par unité), profils par produit ou génériques par société, décision (recommandé/revue manuelle/rejet) et niveau de risque associés
-- Groupes de sécurité : agent crédit, manager, finance, auditeur, recouvrement
-- Multi-company
+Ce module permet à une institution de microfinance de gérer l'ensemble du cycle de vie
+d'un crédit : configuration des produits, instruction du dossier, validation, décaissement,
+suivi des remboursements, incidents (retard, rééchelonnement, radiation) et pilotage du
+portefeuille.
 
 ## Installation
 
-Copier le dossier `microfinance_loan_management` dans votre `addons_path`, redémarrer Odoo, mettre à jour la liste des applications puis installer le module.
+Depuis Apps, rechercher « Gestion des crédits microfinance » et cliquer sur Installer.
 
-### Dépendance à `base_accounting_kit`
+Ce module s'appuie sur les états financiers fournis par le module **Comptabilité** installé
+avec Odoo. Avant de créer vos produits de crédit, assurez-vous que votre plan comptable
+général est en place (comptes de créances, de produits d'intérêts, de charges, etc.).
 
-Le module dépend désormais de `base_accounting_kit` (dépendance obligatoire dans le
-manifest) : Odoo 17 Community n'a pas nativement de bilan / compte de résultat / balance,
-et c'est ce module qui les fournit. Les comptes comptables de `microfinance_loan_management`
-(`loan_account_id`, `interest_account_id`, `penalty_account_id`, `fee_account_id`,
-`write_off_account_id`, `provision_account_id`, `provision_contra_account_id`) doivent donc
-être configurés avec le `account_type` standard Odoo adapté pour apparaître correctement
-classés dans ces états financiers (voir le détail et la correspondance recommandée dans
-`docs/analyse_modules_comptables.md`).
+## Mettre en place un produit de crédit
 
-## Configuration minimale
+Menu **Microfinance > Configuration > Produits de crédit**.
 
-Créer un produit de crédit et renseigner :
+Un produit de crédit regroupe toutes les règles qui s'appliqueront aux dossiers créés à
+partir de lui (un « crédit express », un « crédit agricole », etc.).
 
-- Journal de décaissement
-- Journal de remboursement
-- Compte prêts clients
-- Compte produits intérêts
-- Compte produits pénalités
+**Onglet Calcul crédit**
+- Taux d'intérêt annuel, et méthode de calcul (taux fixe ou solde dégressif)
+- Périodicité de remboursement : soit imposée par le produit (ex. toujours hebdomadaire),
+  soit au choix de l'agent parmi une liste de périodicités autorisées à la création du crédit
+- Délai de grâce éventuel avant la première échéance
 
-Les journaux doivent avoir un compte par défaut.
+**Onglet Éligibilité**
+- Ancienneté minimum exigée du client
+- Autoriser ou non un second crédit actif en parallèle, et le bloquer si le premier a des
+  arriérés
 
-Le compte de pertes sur créances irrécouvrables (`write_off_account_id`) est optionnel à la
-configuration du produit, mais devient obligatoire au moment de radier un crédit de ce produit
-(un journal des opérations diverses doit aussi exister pour la société).
+**Onglet Pénalités**
+- Pénalité de retard fixe ou en pourcentage
 
-De même, `provision_account_id` (charge de dotation) et `provision_contra_account_id`
-(contrepartie bilan) sont optionnels à la configuration du produit, mais deviennent
-obligatoires au moment de comptabiliser une provision pour ce produit
-(`action_post_provisions`, même journal des opérations diverses que la radiation).
+**Onglet Comptabilité**
 
-Les frais de dossier (`fee_type`/`fee_amount`/`fee_rate`, `fee_account_id`,
-`fee_journal_id`) sont optionnels : par défaut `fee_amount`/`fee_rate` valent 0 (aucun frais).
-Si activés et que `fee_charged_before_disbursement` est coché (par défaut), `fee_journal_id`
-et `fee_account_id` doivent être configurés avant de pouvoir décaisser un crédit de ce
-produit.
+C'est ici que le service comptable/finance configure, pour ce produit, quels comptes du
+plan comptable général recevoir les écritures générées automatiquement par les opérations
+de crédit (décaissement, remboursement, frais, pénalités, radiation, provisions). La plupart
+des postes sont **ventilés séparément pour les clients individuels et pour les groupes**
+(un crédit accordé à un groupe solidaire est comptabilisé sur ses propres comptes), certains
+comptes restant communs à tous les types de client (frais, pénalités, chèques, etc.).
 
-### Logique de provisionnement retenue
+Seuls le compte du principal en cours et le compte des intérêts reçus sont obligatoires pour
+pouvoir enregistrer le premier crédit sur ce produit ; tous les autres postes (provisions,
+crédits en perte, intérêts échus, commissions, comptes partagés) peuvent rester vides tant
+que l'institution n'utilise pas le mécanisme correspondant — un message d'aide l'indique sur
+chaque champ. Ces comptes doivent déjà exister dans votre plan comptable avant de les
+sélectionner ici.
 
-Les tranches d'ancienneté d'arriéré (`microfinance.provision.rule` : `min_days`/`max_days`/
-`provision_rate`, par société, sans chevauchement) déterminent le taux de provision appliqué
-au solde restant dû (`balance_total`) du crédit, selon le nombre de jours de retard de sa pire
-échéance impayée. Le module livre des tranches indicatives par défaut pour la société
-principale (0-30j : 0 %, 31-60j : 25 %, 61-90j : 50 %, 91-180j : 75 %, 181j+ : 100 %),
-éditables sans redéploiement dans Microfinance > Configuration > Règles de provisionnement —
-**à ajuster avec l'institution si une norme réglementaire précise s'applique** (ex. normes
-BCEAO/COBAC pour la microfinance en zone UEMOA).
+Renseignez également les journaux de décaissement et de remboursement (avec un compte par
+défaut sur chacun).
 
-`action_post_provisions` comptabilise **une écriture par crédit** (plutôt qu'une écriture
-consolidée pour tout le portefeuille) : plus simple à tracer et auditer individuellement dans
-le chatter de chaque crédit, au prix d'un nombre d'écritures plus élevé lors d'une campagne
-mensuelle sur tout le portefeuille. Chaque écriture ne comptabilise que le delta entre la
-provision déjà comptabilisée (`provision_posted_amount`) et la provision recalculée
-(`provision_amount`), jamais plus que le solde restant dû. Un cron mensuel optionnel
-(désactivé par défaut) peut automatiser cette comptabilisation sur tout le portefeuille actif.
+## Le parcours d'un dossier de crédit
 
-### Méthode de calcul d'intérêt au prorata selon la périodicité
+1. **Création du dossier** : sélection du client, du produit, du montant et de la durée.
+2. **Soumission** : le système vérifie automatiquement les règles d'éligibilité du produit
+   (ancienneté, second crédit, arriérés du co-emprunteur…) et calcule le score de crédit.
+3. **Validation manager**, puis **validation finance**.
+4. **Approbation**.
+5. **Génération de l'échéancier** et **décaissement** : si des frais de dossier sont dus et
+   exigés avant décaissement, ils doivent d'abord être encaissés.
+6. **Remboursements** : chaque versement est automatiquement réparti entre pénalité, intérêt
+   et capital de l'échéance la plus ancienne encore due. Un remboursement comptabilisé peut
+   être annulé (contre-passation) si besoin, par exemple en cas d'erreur de saisie.
+7. **Clôture automatique** dès que le solde restant dû atteint zéro.
 
-`repayment_frequency` accepte désormais journalier, hebdomadaire, quinzaine (15 jours fixes),
-4 semaines, mensuel, bimestriel, trimestriel, 4 mois, semestriel et annuel. Le taux annuel du
-produit est proratisé par période selon deux méthodes, choisies pour rester cohérentes avec le
-calcul en jours déjà utilisé ailleurs dans le module (délai de grâce) :
+En cours de route, un crédit actif peut être **rééchelonné** (nouvelle durée et/ou nouvelle
+date de première échéance restante) : l'ancien échéancier reste consultable dans l'historique
+du crédit, avec le motif et l'auteur de chaque rééchelonnement.
 
-- **Périodicités qui correspondent à un nombre exact de mois calendaires** (mensuel,
-  bimestriel, trimestriel, 4 mois, semestriel, annuel) : le taux annuel est proratisé par
-  `nombre_de_mois / 12` (ex. trimestriel = taux annuel / 4, semestriel = taux annuel / 2,
-  annuel = taux annuel complet).
-- **Périodicités qui ne correspondent pas à un nombre entier de mois** (journalier,
-  hebdomadaire, quinzaine, 4 semaines) : le taux annuel est proratisé au prorata du nombre de
-  jours réel de la période, `nombre_de_jours / 365` — la quinzaine est un intervalle fixe de 15
-  jours calendaires (pas une notion de "deux fois par mois" à dates fixes).
+Un crédit qui devient irrécouvrable peut être **radié** (passé en perte) : il sort alors du
+suivi de risque actif.
 
-### Scoring crédit unifié (`internal_score`)
+## Garanties
 
-Il n'existe plus qu'**un seul score de crédit**, `internal_score` (0-100, plus haut = plus
-sûr), calculé par `action_calculate_scoring()` à partir des règles configurables de
-`microfinance.scoring.profile`/`microfinance.scoring.rule` (Microfinance > Configuration >
-Scoring crédit). L'ancien `risk_score` codé en dur (heuristique fixe non paramétrable) a été
-retiré ; ses pondérations ont été migrées telles quelles en règles par défaut du profil
-« Profil de scoring standard » (société principale) :
+Un crédit peut être adossé à une ou plusieurs garanties (terrain, véhicule, maison, meuble,
+salaire, caution personnelle, autre). Le produit de crédit peut exiger qu'au moins une
+garantie soit validée avant soumission, et/ou qu'un ratio minimum du montant du crédit soit
+couvert. Chaque type de garantie peut être décoté par une règle de valorisation (par exemple,
+un véhicule n'est reconnu qu'à 70 % de sa valeur estimée) ; c'est cette valeur reconnue,
+et non la valeur brute déclarée, qui sert au calcul de la couverture exigée. Les garanties
+sont automatiquement libérées à la clôture du crédit.
 
-- Score de base : +100 points
-- -15 points par échéance en retard sur ce crédit
-- -1.2 point par jour du plus long retard sur ce crédit
-- -0.4 point par % du montant du crédit en retard
-- -5 points par échéance payée partiellement sur ce crédit
+## Score de crédit et portefeuille à risque
 
-Les règles à mode de calcul **linéaire** (`computation = 'linear'`) multiplient les points par
-la valeur de la métrique (condition seuil/opérateur ignorée) ; c'est ce mode qui reproduit
-les anciennes pondérations proportionnelles. Les règles à mode **seuil** (comportement
-d'origine) appliquent des points fixes si la métrique respecte l'opérateur/la valeur.
-Modifier le poids d'une règle recalcule immédiatement le score des crédits concernés au
-prochain `action_calculate_scoring()` (bouton "Recalculer le score", soumission, ou cron
-quotidien `cron_update_overdue_and_penalties`).
+Chaque crédit reçoit un score sur 100 (plus il est élevé, plus le risque est faible), calculé
+à partir de règles configurables (Microfinance > Configuration > Scoring crédit) : retards,
+montants en retard, échéances partiellement payées, etc. Ce score détermine un niveau de
+risque (faible/moyen/élevé/critique) et une recommandation (accord recommandé, revue
+manuelle, rejet), visibles sur le crédit et dans le tableau de bord.
 
-Le tableau de bord (répartition par risque) et les vues crédit (liste/kanban/formulaire)
-n'affichent plus que ce score unique, accompagné de `risk_level` (faible/moyen/élevé/critique)
-et `scoring_decision` (recommandé/revue manuelle/rejet) dérivés du même calcul.
+Le tableau de bord Microfinance affiche également le **portefeuille à risque (PAR)**, réparti
+par ancienneté de retard (1-30, 31-60, 61-90, plus de 90 jours), pour suivre la qualité du
+portefeuille dans le temps.
 
-### Valorisation des garanties par type
+## Provisionnement des créances douteuses
 
-Chaque garantie (`microfinance.loan.guarantee`) porte un `guarantee_type` structuré (terrain,
-véhicule, maison, meuble, salaire, garant/caution personnelle, autre — l'ancienne valeur
-générique `asset` a été migrée vers `other` lors de la mise à jour). Sa `recognized_value`
-(valeur reconnue) applique le `valuation_ratio` (%) de la règle
-`microfinance.guarantee.valuation.rule` correspondant à son type et à sa société ; sans règle
-configurée pour un type, le ratio par défaut est 100% (valeur reconnue = valeur estimée,
-jamais bloquant). Chaque règle a un plafond `max_ratio` (défaut 150%) : impossible de
-configurer un `valuation_ratio` au-delà (Microfinance > Configuration > Ratios de valorisation
-des garanties).
+Selon l'ancienneté du retard de chaque crédit, un taux de provision est appliqué au solde
+restant dû (règles configurables par tranche d'ancienneté, Microfinance > Configuration >
+Règles de provisionnement). Ces tranches sont livrées avec des valeurs indicatives par défaut
+et doivent être ajustées avec votre institution si une norme réglementaire spécifique
+s'applique. La comptabilisation de la provision (dotation ou reprise) se fait crédit par
+crédit, pour rester facilement traçable, et peut être automatisée par une tâche planifiée
+mensuelle.
 
-C'est **`recognized_value`**, et non `estimated_value`, qui alimente `guarantee_total` sur le
-crédit et le contrôle `min_guarantee_ratio` à la soumission : une garantie décotée (ratio <
-100%) compte donc pour moins que sa valeur brute dans la couverture exigée par le produit.
+## Visites de recouvrement
 
-### Historique structuré du rééchelonnement
+Les agents de recouvrement peuvent enregistrer leurs visites clients directement dans le
+module, pour garder une trace du suivi effectué sur les dossiers en difficulté.
 
-Chaque rééchelonnement (`action_reschedule()` / `_reschedule_installments()`) crée, avant de
-modifier ou supprimer les échéances non soldées, un enregistrement
-`microfinance.loan.reschedule.history` (date, utilisateur, motif saisi dans l'assistant) avec
-ses lignes `microfinance.loan.reschedule.history.line` : copie figée en lecture seule de
-chaque échéance de l'ancien échéancier (montants capital/intérêt/pénalité, montants payés,
-solde résiduel). Le résumé texte dans le chatter du crédit reste produit en plus, pour une
-lecture rapide, mais n'est plus la seule trace : l'onglet "Historique de rééchelonnement" du
-formulaire crédit liste chaque rééchelonnement passé et permet de consulter l'échéancier
-historique complet de chacun individuellement, y compris après plusieurs rééchelonnements
-successifs sur le même crédit.
+## Qui peut faire quoi
 
-### Non-intégration avec `custom_paid_totals`
+Le module définit des groupes d'accès dédiés : **Agent crédit** (saisie des dossiers),
+**Manager crédit** et **Finance microfinance** (validations), **Agent recouvrement**
+(visites de recouvrement) et **Auditeur microfinance** (consultation). Le module fonctionne
+également en environnement multi-société.
 
-`custom_paid_totals` (clôture de caisse journalière du projet EAT, point de vente) est hors
-scope de ce module : sans rapport fonctionnel avec le crédit microfinance, et son mécanisme
-d'ingestion ne capte que des `account.payment` réconciliés à des factures/notes de frais — nos
-décaissements/remboursements créent des `account.move` directement, donc invisibles de ce
-module de toute façon. Voir `docs/analyse_modules_comptables.md` pour le détail (y compris un
-angle mort de trésorerie si un même journal caisse était partagé, non traité ici) et une
-anomalie de disque constatée sur ce module, sans lien avec ce module-ci.
+## Module complémentaire : Épargne
 
-## Workflow conseillé
+Le module **Gestion de l'épargne microfinance** (`microfinance_savings_management`), à
+installer séparément si votre institution propose des produits d'épargne, ajoute notamment
+le prélèvement automatique sur épargne pour couvrir une échéance de crédit impayée, ainsi que
+des conditions d'éligibilité au crédit basées sur l'épargne du client.
 
-1. Créer le produit de crédit
-2. Créer le dossier crédit
-3. Soumettre
-4. Valider manager
-5. Valider finance
-6. Approuver
-7. Générer échéancier
-8. Activer / Décaisser
-9. Enregistrer les remboursements
+## À venir
 
-## Points à tester en priorité
-
-- Installation sur base Odoo 17 Community propre
-- Création produit avec comptes comptables valides
-- Génération échéancier flat et reducing, avec et sans délai de grâce
-- Décaissement comptable
-- Remboursement partiel
-- Allocation automatique pénalité / intérêt / capital
-- Application cron des pénalités
-- Clôture automatique quand le solde est zéro
-- Rééchelonnement d'un crédit actif (durée et/ou date de première échéance restante)
-- Deux rééchelonnements successifs sur le même crédit : les deux anciens échéanciers sont conservés séparément et consultables individuellement, avec les bons montants historiques
-- Règles de blocage à la soumission (ancienneté, second crédit, arriérés, co-emprunteur)
-- Radiation d'un crédit actif avec solde restant
-- Comptabilisation des provisions selon l'ancienneté des arriérés, delta par rapport à la provision déjà comptabilisée
-- Impression du reçu de décaissement
-- PAR par tranche d'ancienneté dans le tableau de bord
-- Annulation d'un remboursement posté (partiel, ayant clôturé le crédit, bloqué par période verrouillée)
-- Garantie/ratio de garantie obligatoire bloquant la soumission, libération à la clôture
-- Ratio de valorisation d'une garantie dépassant le plafond (`max_ratio`) : erreur de validation ; `recognized_value` (pas `estimated_value`) utilisée dans le total des garanties et l'éligibilité
-- Frais de dossier fixes et pourcentage, blocage du décaissement si non encaissés
-- Génération d'échéancier pour chaque nouvelle périodicité (quinzaine, 4 semaines, bimestriel, trimestriel, 4 mois, semestriel, annuel), en particulier le prorata d'intérêt trimestriel et semestriel
-- Modification d'une règle de scoring (seuil ou linéaire) : le score recalculé d'un crédit existant change en conséquence
-- Produit en mode `repayment_frequency_mode = fixed` : échéancier généré directement à partir de `repayment_frequency_id` du produit, sans saisie de l'agent
-- Produit en mode `client_choice` : génération de l'échéancier bloquée tant qu'aucune périodicité n'est choisie parmi `allowed_repayment_frequency_ids` ; choix hors liste rejeté par une contrainte serveur
-- Frais de dossier nettés du décaissement (`fee_charged_before_disbursement = False`) : écriture de décaissement à 3 lignes (capital plein au débit, frais et net caisse au crédit), `balance_total` toujours basé sur `loan_amount` plein
-
-## Lien avec le module épargne (`microfinance_savings_management`)
-
-Un module séparé, `microfinance_savings_management`, ajoute la gestion de l'épargne (produits,
-comptes, transactions, capitalisation des intérêts) et son intégration avec le crédit :
-
-- **Prélèvement automatique** sur un compte épargne pour couvrir une échéance impayée, quand le
-  produit de crédit l'autorise (`allow_savings_auto_debit`) et qu'un compte épargne est renseigné
-  sur le crédit (`savings_account_id`). Réutilise `microfinance.loan.payment` et
-  `_allocate_to_installments()` sans dupliquer la logique d'allocation.
-- **Éligibilité progressive** : un produit de crédit peut exiger une épargne cible pendant le
-  remboursement (condition pour un prêt suivant) ou un apport en amont bloquant l'approbation,
-  paramétrable par produit (`savings_requirement_type`, ratios associés).
-
-Ce module dépend de `microfinance_loan_management` (pas l'inverse) : une institution qui n'a pas
-besoin de l'épargne peut utiliser `microfinance_loan_management` seul. C'est pour cette raison que
-les champs croisés (`savings_account_id` sur le crédit, `allow_savings_auto_debit` sur le produit,
-etc.) sont ajoutés par extension (`_inherit`) depuis le module épargne, et non l'inverse.
-
-## Limites V1
-
-- Pas encore de gestion des groupes solidaires
-- Dashboard simple, améliorable en OWL ou client action
+La gestion dédiée des groupes solidaires (au-delà de la ventilation comptable déjà disponible
+par type de client) fait partie des évolutions prévues.

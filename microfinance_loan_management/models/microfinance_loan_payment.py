@@ -93,11 +93,15 @@ class MicrofinanceLoanPayment(models.Model):
             'credit': 0.0,
         })]
         if self.allocated_principal:
-            lines.append((0, 0, {'name': _('Capital %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.loan_account_id.id, 'debit': 0.0, 'credit': self.allocated_principal}))
+            principal_account = product._get_account('principal', self.partner_id)
+            lines.append((0, 0, {'name': _('Capital %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': principal_account.id, 'debit': 0.0, 'credit': self.allocated_principal}))
         if self.allocated_interest:
-            lines.append((0, 0, {'name': _('Intérêt %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.interest_account_id.id, 'debit': 0.0, 'credit': self.allocated_interest}))
+            interest_account = product._get_account('interets_recus', self.partner_id)
+            lines.append((0, 0, {'name': _('Intérêt %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': interest_account.id, 'debit': 0.0, 'credit': self.allocated_interest}))
         if self.allocated_penalty:
-            lines.append((0, 0, {'name': _('Pénalité %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.penalty_account_id.id, 'debit': 0.0, 'credit': self.allocated_penalty}))
+            if not product.account_penalites_id:
+                raise UserError(_('Configurez le compte pénalités crédits du produit pour comptabiliser ce remboursement.'))
+            lines.append((0, 0, {'name': _('Pénalité %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.account_penalites_id.id, 'debit': 0.0, 'credit': self.allocated_penalty}))
         return {
             'date': self.payment_date,
             'journal_id': self.journal_id.id,

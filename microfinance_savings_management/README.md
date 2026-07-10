@@ -1,51 +1,61 @@
-# Microfinance Savings Management
+# Gestion de l'épargne microfinance
 
-Module épargne pour institutions de microfinance (Odoo 17 Community), complémentaire à
-`microfinance_loan_management` (dont il dépend). Couvre :
+Ce module ajoute la gestion des comptes d'épargne à une institution de microfinance déjà
+équipée du module **Gestion des crédits microfinance**, dont il dépend.
 
-- **Produits d'épargne** (`microfinance.savings.product`) : obligatoire / volontaire / à terme,
-  méthode de calcul du solde de référence (minimum / moyen / clôture), périodicité de
-  capitalisation des intérêts, montants minimums, plafonds de retrait, frais de tenue de compte,
-  pénalité de retrait anticipé (dépôt à terme).
-- **Comptes épargne** (`microfinance.savings.account`) : cycle de vie brouillon → actif →
-  dormant → clôturé, solde calculé depuis les transactions, détection automatique de dormance
-  (cron), lien optionnel vers un crédit pour une épargne obligatoire.
-- **Transactions** (`microfinance.savings.transaction`) : dépôt, retrait, intérêt crédité, frais
-  prélevés, prélèvement automatique, virement. Chaque transaction comptabilisée génère une
-  écriture (`account.move`), et un retrait ne peut pas descendre sous le solde minimum du produit
-  sauf dérogation explicite (`bypass_min_balance`).
-- **Intégration crédit** (ajoutée par extension sur les modèles de `microfinance_loan_management`,
-  jamais l'inverse — voir la section dédiée dans le README de ce dernier) :
-  - Prélèvement automatique sur épargne pour couvrir une échéance impayée (cron quotidien),
-    réutilisant `microfinance.loan.payment._allocate_to_installments()` sans dupliquer
-    l'allocation pénalité → intérêt → capital.
-  - Éligibilité progressive au crédit basée sur l'épargne (cible pendant le remboursement, ou
-    apport en amont bloquant l'approbation), paramétrable par produit de crédit.
+## Installation
 
-## Prérequis de configuration
+Depuis Apps, rechercher « Gestion de l'épargne microfinance » et cliquer sur Installer. Le
+module **Gestion des crédits microfinance** doit déjà être installé.
 
-Pour chaque produit d'épargne : compte passif épargne clients et compte charge intérêts versés
-(obligatoires), journal de dépôt et de retrait, compte produit frais si des frais sont prélevés.
+## Mettre en place un produit d'épargne
 
-Pour activer le prélèvement automatique sur un produit de crédit : `allow_savings_auto_debit`,
-`auto_debit_grace_days`, `auto_debit_respect_minimum_balance`, puis renseigner
-`savings_account_id` sur le crédit concerné.
+Menu **Microfinance > Configuration > Produits d'épargne**.
 
-## Points à tester en priorité
+Trois types de produits sont disponibles : obligatoire (liée à un crédit), volontaire, ou à
+terme (dépôt bloqué sur une durée fixe).
 
-Voir la section « Points à tester en priorité » du prompt de spécification — couverts par les
-tests automatisés du dossier `tests/` : cycle de vie du compte, blocage du solde minimum, les 3
-méthodes de calcul d'intérêt, clôture (blocage crédit lié actif / retrait total automatique),
-comptabilisation par type de transaction, prélèvement automatique (nominal / partiel / solde nul,
-avec et sans dérogation au solde minimum, isolation multi-société, non-propagation d'un échec sur
-un crédit aux autres traités par le même cron), éligibilité progressive et apport en amont
-(indépendants l'un de l'autre).
+**Onglet Intérêts** : taux d'intérêt annuel, méthode de calcul du solde de référence pour la
+capitalisation (solde minimum, moyen, ou de clôture de période) et fréquence de
+capitalisation (mensuelle, trimestrielle, annuelle).
 
-## Limites V1
+**Onglet Limites** : montant minimum d'ouverture, solde minimum à maintenir (un retrait ne
+peut pas faire descendre le compte en dessous, sauf dérogation explicite), plafond de retrait,
+frais de tenue de compte, pénalité de retrait anticipé pour un produit à terme.
 
-- Le type de transaction `transfer` (virement entre comptes épargne) est prévu dans le modèle
-  mais ne dispose pas encore d'un assistant dédié créant les deux écritures pairées
-  (source/destination) : à compléter si ce besoin se confirme.
-- Les ratios/seuils par défaut de l'éligibilité progressive (`savings_target_ratio`,
-  `savings_apport_ratio`, `savings_amount_threshold`) sont des hypothèses de configuration à
-  valider avec l'institution avant mise en production, pas des constantes métier universelles.
+**Onglet Comptabilité** : configuration, par le service comptable/finance, des comptes du
+plan comptable général qui recevront les écritures générées par les opérations d'épargne
+(dépôts, retraits, intérêts, frais). Comme pour les produits de crédit, la plupart des postes
+sont ventilés séparément pour les clients individuels, les groupes et les entreprises ; seul
+le compte d'épargne (compte passif recevant les dépôts des clients) est obligatoire pour
+pouvoir activer le produit, les autres postes restant optionnels tant que le mécanisme
+correspondant n'est pas utilisé par l'institution. Renseignez également les journaux de
+dépôt et de retrait.
+
+## Gérer un compte d'épargne
+
+Un compte d'épargne suit un cycle de vie simple : brouillon → actif → clôturé, avec détection
+automatique des comptes devenus dormants (sans mouvement depuis longtemps). Le solde est
+recalculé automatiquement à partir des transactions (dépôt, retrait, intérêt crédité, frais
+prélevés, prélèvement automatique, virement) ; chaque transaction validée génère
+automatiquement son écriture comptable.
+
+## Intégration avec le crédit
+
+- **Prélèvement automatique sur épargne** : si le produit de crédit l'autorise, une échéance
+  de crédit impayée peut être prélevée automatiquement sur le compte d'épargne du client
+  (tâche planifiée quotidienne), en respectant le solde minimum du produit d'épargne sauf
+  dérogation explicite pour ce produit de crédit.
+- **Éligibilité progressive au crédit basée sur l'épargne** : un produit de crédit peut exiger
+  une épargne cible à atteindre pendant le remboursement (condition pour un prêt suivant), ou
+  un apport en amont bloquant l'approbation du dossier, chacun paramétrable indépendamment sur
+  le produit de crédit.
+
+## À venir
+
+Le virement entre deux comptes d'épargne est prévu dans le modèle de données mais ne
+dispose pas encore d'un assistant dédié dans l'interface ; à mettre en place si ce besoin se
+confirme auprès de l'institution.
+
+Les seuils par défaut de l'éligibilité progressive sont des valeurs de départ à valider et
+ajuster avec l'institution avant mise en production.
