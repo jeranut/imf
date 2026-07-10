@@ -1,7 +1,7 @@
 # Audit multi-société avant déploiement sur 25 agences (CEFOR)
 
 **Périmètre** : `microfinance_loan_management`, `microfinance_savings_management`.
-**Hors périmètre** : `softeam_l10n_mg_pcec` (traité séparément).
+**Hors périmètre** : `plan_compta_pcec` (traité séparément).
 **Nature** : audit uniquement — aucune modification de code, vue ou donnée effectuée.
 **Date** : 2026-07-10.
 

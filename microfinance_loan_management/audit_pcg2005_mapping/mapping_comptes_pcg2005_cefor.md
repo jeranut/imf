@@ -7,7 +7,7 @@
 - **Pack de localisation identifié** : module tiers **`softeam_l10n_mg`** (éditeur Softeam, version `17.0.1.0.0`), installé avec son module compagnon `softeam_l10n_mg_reports`. Il s'agit bien du pack "Madagascar - PCG 2005" visible dans Comptabilité / Configuration / Paramètres / Localisation fiscale. Fichiers source : `/opt/odoo17/imf_git/softeam_l10n_mg/`.
 - **Base inspectée** : la base Postgres **`SEFOR`** est la seule instance où les trois modules `softeam_l10n_mg`, `microfinance_loan_management` et `microfinance_savings_management` sont à l'état `installed` simultanément — c'est donc l'instance opérationnelle de CEFOR (la société y est encore nommée "My Company", à renommer séparément si besoin). Les autres bases présentes sur le serveur (`BASE`, `DATA`, `EATDA`, `CEFOR`, `PACKIMMO`, `PACKS`, `imf_test_dev`, etc.) n'ont pas cette combinaison complète et n'ont pas été retenues.
 - **Extraction** : requête directe sur la table `account_account` de `SEFOR` (société id=1), 474 comptes, tous actifs (`deprecated = false`). Résultat complet dans [`plan_comptable_extrait.md`](./plan_comptable_extrait.md), trié par code.
-- **Champs recensés** : lecture intégrale de `microfinance_loan_management/models/microfinance_loan_product.py` (31 champs `account.account` : 24 segmentés Individuel/Groupe + 7 partagés) et `microfinance_savings_management/models/microfinance_savings_product.py` (21 champs : 15 segmentés Individuel/Groupe/Entreprise + 6 partagés).
+- **Champs recensés** : lecture intégrale de `microfinance_loan_management/models/microfinance_loan_product.py` (29 champs `account.account` : 24 segmentés Individuel/Groupe + 5 partagés) et `microfinance_savings_management/models/microfinance_savings_product.py` (17 champs : 12 segmentés Individuel/Groupe/Entreprise + 5 partagés). *(Comptage mis à jour après suppression de 5 champs sans compte PCEC viable lors d'un chantier ultérieur.)*
 
 ## Constat majeur (à lire avant le tableau)
 
@@ -52,9 +52,7 @@ Le plan comptable réellement chargé par `softeam_l10n_mg` est une **transposit
 | `account_commission_credit_id` | Commission sur crédit | income | Non (requis si frais encaissés) | 708200 Commissions et courtages (income) | Moyenne |
 | `account_papeterie_id` | Papeterie | income | Non | Aucun compte candidat clair — aucun compte de produit « frais de dossier/papeterie » distinct ; repli possible sur 708800 Autres produits des activités annexes (income) | À confirmer |
 | `account_penalites_id` | Pénalités crédits | income | Non (requis si pénalités perçues) | Aucun compte candidat direct — repli possible sur 757000 Produits exceptionnels sur opérations de gestion (income, classe 75) | À confirmer |
-| `account_cheques_id` | Comptes chèques | asset_current | Non | **Incohérence de domaine** : les comptes chèques réels du PCG (511200 Chèques à encaisser, 517100 Centre Chèques Postaux) sont de type `asset_cash`, pas `asset_current`. Aucun compte `asset_current` ne correspond au libellé « chèques ». À arbitrer : élargir le domaine du champ ou créer un compte intermédiaire dédié | À confirmer |
 | `account_surpaiement_id` | Surpaiement | liability_current | Non | Aucun compte candidat — création nécessaire | À confirmer |
-| `account_diff_monnaie_id` | Différences de monnaie | income, expense | Non | 766000 Gains de change (income) / 666000 Pertes de change (expense) — le champ est unique alors qu'il faudrait un compte de gain **et** un compte de perte distincts | À confirmer |
 
 ## 2. Tableau de correspondance — Épargne (`microfinance.savings.product`)
 
@@ -72,12 +70,8 @@ Le plan comptable réellement chargé par `softeam_l10n_mg` est une **transposit
 | `account_cout_interet_payer_individuel_id` | Coût de l'intérêt à payer - Individuel | liability_current | Non | 168800 Intérêts courus (liability_current, classe 16 Emprunts et dettes assimilés) | Moyenne |
 | `account_cout_interet_payer_groupe_id` | Coût de l'intérêt à payer - Groupe | liability_current | Non | 168800 Intérêts courus (liability_current) — même compte | À confirmer |
 | `account_cout_interet_payer_entreprise_id` | Coût de l'intérêt à payer - Entreprise | liability_current | Non | 168800 Intérêts courus (liability_current) — même compte | À confirmer |
-| `account_charge_interet_negatif_individuel_id` | Charge de l'intérêt négative - Individuel | income | Non | Aucun compte candidat — mécanisme spécifique (taux négatif) absent du PCG standard, création nécessaire | À confirmer |
-| `account_charge_interet_negatif_groupe_id` | Charge de l'intérêt négative - Groupe | income | Non | Aucun compte candidat — création nécessaire | À confirmer |
-| `account_charge_interet_negatif_entreprise_id` | Charge de l'intérêt négative - Entreprise | income | Non | Aucun compte candidat — création nécessaire | À confirmer |
 | `account_penalites_id` | Pénalités sur épargne | income | Non | Repli possible sur 757000 Produits exceptionnels sur opérations de gestion (income) | À confirmer |
 | `account_commission_id` | Commission sur épargne | income | Non (requis si frais prélevés) | 708200 Commissions et courtages (income) | Moyenne |
-| `account_cheques_id` | Comptes chèques | asset_current | Non | Même incohérence de domaine que côté crédit (comptes chèques réels = `asset_cash`) — à arbitrer | À confirmer |
 | `account_commission_cheques_rejetes_id` | Commission sur chèques rejetés | income | Non | Repli possible sur 708400 Frais accessoires refacturés (income) | À confirmer |
 | `account_retenue_taxe_id` | Retenue de taxe | liability_current | Non | 447000 Autres impôts, taxes et versements assimilés (liability_current, lettrable, classe 44) | Moyenne |
 | `account_papeterie_id` | Papeterie pour l'épargne | income | Non | Repli possible sur 708800 Autres produits des activités annexes (income) | À confirmer |
@@ -95,7 +89,6 @@ Aucun intitulé du plan chargé ne correspond, même approximativement, à ces p
 - `account_revenu_penalites_avance_individuel_id`, `account_revenu_penalites_avance_groupe_id`
 - `account_commissions_echues_groupe_id`
 - `account_surpaiement_id`
-- `account_charge_interet_negatif_individuel_id`, `_groupe_id`, `_entreprise_id` (épargne)
 
 Ces champs devront recevoir un compte dédié créé par le comptable CEFOR, en cohérence avec le plan comptable réel plutôt qu'avec des repères théoriques.
 
@@ -104,9 +97,9 @@ Ces champs devront recevoir un compte dédié créé par le comptable CEFOR, en 
 1. **Granularité Individuel / Groupe / Entreprise absente du PCG chargé.** Pour presque tous les postes segmentés, le plan ne propose qu'un seul compte générique candidat par type de mouvement (ex. 411100 pour tout le principal, 165000 pour toute l'épargne, 708200 pour toute commission). CEFOR doit décider : (a) créer de véritables sous-comptes par segment (ex. 411110/411120, sur le modèle historique LPF évoqué), ou (b) accepter que plusieurs champs du module pointent temporairement vers le même compte PCG en distinguant les segments uniquement par analytique/dimension Odoo. Cette décision structure tout le paramétrage à venir.
 2. **Absence totale de comptes « épargne »/« encours de crédit » dédiés.** Le pack `softeam_l10n_mg` est un plan comptable général ; il n'a manifestement pas été enrichi pour une activité de microfinance. Le comptable doit valider s'il faut demander une extension du plan (nouveaux comptes sous 41x, 45x ou une classe dédiée) plutôt que de forcer les mouvements de crédit/épargne dans des comptes « Clients »/« Fournisseurs » génériques dont les libellés ne correspondent pas à l'activité.
 3. **Faux-ami classe 45 « Groupe et Associés ».** À écarter explicitly des comptes de « crédit de groupe » — signalé dans le constat majeur pour éviter toute confusion lors de la validation.
-4. **Domaine `asset_current` des champs "Comptes chèques"** (crédit et épargne) ne correspond à aucun compte réel : les comptes chèques du PCG chargé sont typés `asset_cash`. À trancher : élargir le domaine du champ (nécessite une modification de code, hors périmètre de cet audit) ou faire créer par le comptable un compte de transit `asset_current` dédié.
-5. **Champ unique `account_diff_monnaie_id` pour gains et pertes de change.** Le PCG distingue 766000 (gain) et 666000 (perte) ; le module n'a qu'un seul champ. À arbitrer entre extension du modèle (hors périmètre ici) ou usage d'un compte de transit unique.
-6. **Chevauchements potentiels** entre plusieurs champs pointant vers le même compte candidat générique (ex. 487000 pour « pénalités d'avance » ET « commissions échues » côté crédit, et « intérêts d'avance » côté épargne ; 708200 pour plusieurs lignes de commission) : si CEFOR active plusieurs de ces mécanismes simultanément sur un même produit, un compte partagé empêchera la ventilation analytique fine — à surveiller lors de la validation finale.
+4. **Chevauchements potentiels** entre plusieurs champs pointant vers le même compte candidat générique (ex. 487000 pour « pénalités d'avance » ET « commissions échues » côté crédit, et « intérêts d'avance » côté épargne ; 708200 pour plusieurs lignes de commission) : si CEFOR active plusieurs de ces mécanismes simultanément sur un même produit, un compte partagé empêchera la ventilation analytique fine — à surveiller lors de la validation finale.
+
+*(Deux points d'arbitrage propres à des champs depuis supprimés du modèle, faute de compte PCEC viable, ont été retirés de cette liste lors d'un chantier ultérieur.)*
 
 ---
 

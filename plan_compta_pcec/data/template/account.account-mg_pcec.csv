@@ -1,0 +1,306 @@
+id,name,code,account_type,reconcile
+pcec_101,Billets et monnaies,101000,asset_cash,False
+pcec_102,Valeurs à compenser,102000,asset_cash,False
+pcec_109,Autres valeurs en caisse,109000,asset_cash,False
+pcec_111,Compte-courant Banque Centrale,111000,asset_cash,False
+pcec_112,Prêts/placements jour le jour - Banque Centrale,112000,asset_current,False
+pcec_113,Prêts/placements à terme - Banque Centrale,113000,asset_current,False
+pcec_115,Emprunts jour le jour - Banque Centrale,115000,liability_current,False
+pcec_116,Emprunts à terme - Banque Centrale,116000,liability_current,False
+pcec_1186,Comptes rattachés Banque Centrale - Charges à payer,118600,liability_current,False
+pcec_1187,Comptes rattachés Banque Centrale - Produits à recevoir,118700,asset_current,False
+pcec_121,Bons du Trésor *,121000,asset_current,False
+pcec_122,Autres titres assimilés au Trésor *,122000,asset_current,False
+pcec_1286,Comptes rattachés Bons du Trésor - Charges à payer *,128600,liability_current,False
+pcec_1287,Comptes rattachés Bons du Trésor - Produits à recevoir *,128700,asset_current,False
+pcec_129,Autres bons du Trésor et titres assimilés *,129000,asset_current,False
+pcec_131,Comptes ordinaires débiteurs - Établissements de crédit,131000,asset_cash,False
+pcec_132,Prêts/placements jour le jour - Établissements de crédit,132000,asset_current,False
+pcec_133,Prêts/placements à terme - Établissements de crédit,133000,asset_current,False
+pcec_135,Comptes ordinaires créditeurs - Établissements de crédit,135000,liability_current,False
+pcec_136,Emprunts jour le jour - Établissements de crédit,136000,liability_current,False
+pcec_137,Emprunts à terme - Établissements de crédit,137000,liability_current,False
+pcec_1386,Comptes rattachés Établissements de crédit - Charges à payer,138600,liability_current,False
+pcec_1387,Comptes rattachés Établissements de crédit - Produits à recevoir,138700,asset_current,False
+pcec_1391,Autres sommes dues par les établissements de crédit,139100,asset_current,False
+pcec_1395,Autres sommes dues aux établissements de crédit,139500,liability_current,False
+pcec_141,Comptes ordinaires débiteurs - Autres institutions financières *,141000,asset_cash,False
+pcec_142,Prêts/placements - Autres institutions financières *,142000,asset_current,False
+pcec_145,Comptes ordinaires créditeurs - Autres institutions financières *,145000,liability_current,False
+pcec_146,Emprunts - Autres institutions financières *,146000,liability_current,False
+pcec_1486,Comptes rattachés Autres institutions financières - Charges à payer *,148600,liability_current,False
+pcec_1487,Comptes rattachés Autres institutions financières - Produits à recevoir *,148700,asset_current,False
+pcec_1491,Autres sommes dues par les autres institutions financières *,149100,asset_current,False
+pcec_1492,Autres sommes dues aux autres institutions financières *,149200,liability_current,False
+pcec_161,Comptes ordinaires débiteurs - réseau *,161000,asset_cash,False
+pcec_162,Prêts/placements jour le jour - réseau *,162000,asset_current,False
+pcec_163,Prêts/placements à terme - réseau *,163000,asset_current,False
+pcec_165,Comptes ordinaires créditeurs - réseau *,165000,liability_current,False
+pcec_166,Emprunts jour le jour - réseau *,166000,liability_current,False
+pcec_167,Emprunts à terme - réseau *,167000,liability_current,False
+pcec_1686,Comptes rattachés réseau - Charges à payer *,168600,liability_current,False
+pcec_1687,Comptes rattachés réseau - Produits à recevoir *,168700,asset_current,False
+pcec_1691,Autres sommes dues par le réseau *,169100,asset_current,False
+pcec_1695,Autres sommes dues au réseau *,169500,liability_current,False
+pcec_170,"Créances litigieuses, douteuses ou contentieuses - trésorerie *",170000,asset_current,False
+pcec_191,Pertes de valeur sur comptes Banque Centrale *,191000,asset_current,False
+pcec_193,Pertes de valeur sur comptes Établissements de crédit *,193000,asset_current,False
+pcec_194,Pertes de valeur sur comptes Autres institutions financières *,194000,asset_current,False
+pcec_196,Pertes de valeur sur opérations internes de trésorerie - réseau *,196000,asset_current,False
+pcec_199,Autres pertes de valeur sur comptes de trésorerie *,199000,asset_current,False
+pcec_201,Créances commerciales,201000,asset_receivable,True
+pcec_202,Crédits à l'exportation,202000,asset_receivable,True
+pcec_203,Crédits de trésorerie,203000,asset_receivable,True
+pcec_204,Crédits d'équipement,204000,asset_receivable,True
+pcec_205,Crédits à l'habitat,205000,asset_receivable,True
+pcec_206,Crédit bail,206000,asset_receivable,True
+pcec_207,Valeurs non imputées,207000,asset_current,True
+pcec_208,Produits à recevoir - Prêts et avances à la clientèle,208000,asset_current,False
+pcec_211,Comptes ordinaires de la clientèle,211000,liability_current,True
+pcec_212,Dépôts à terme,212000,liability_current,True
+pcec_213,Compte d'épargne à régime spécial,213000,liability_current,True
+pcec_214,Bons de caisse,214000,liability_current,True
+pcec_215,Dépôts de garantie,215000,liability_current,True
+pcec_216,Autres fonds empruntés,216000,liability_current,True
+pcec_218,Charges à payer - Comptes de la clientèle,218000,liability_current,False
+pcec_219,Autres sommes dues à la clientèle,219000,liability_current,True
+pcec_240,Opérations sur fonds privés affectés *,240000,liability_current,False
+pcec_250,Opérations sur fonds publics affectés *,250000,liability_current,False
+pcec_261,Créances immobilisées - Créances commerciales *,261000,asset_current,True
+pcec_262,Créances immobilisées - Crédits à l'exportation *,262000,asset_current,True
+pcec_263,Créances immobilisées - Crédits de trésorerie *,263000,asset_current,True
+pcec_264,Créances immobilisées - Crédits d'équipement *,264000,asset_current,True
+pcec_265,Créances immobilisées - Crédits à l'habitat *,265000,asset_current,True
+pcec_266,Créances immobilisées - Crédit bail *,266000,asset_current,True
+pcec_267,Créances immobilisées - Intérêts *,267000,asset_current,False
+pcec_271,Créances douteuses - Créances commerciales *,271000,asset_current,True
+pcec_272,Créances douteuses - Crédits à l'exportation *,272000,asset_current,True
+pcec_273,Créances douteuses - Crédits de trésorerie *,273000,asset_current,True
+pcec_274,Créances douteuses - Crédits d'équipement *,274000,asset_current,True
+pcec_275,Créances douteuses - Crédits à l'habitat *,275000,asset_current,True
+pcec_276,Créances douteuses - Crédit bail *,276000,asset_current,True
+pcec_291,Pertes de valeur - Créances commerciales *,291000,asset_current,False
+pcec_292,Pertes de valeur - Crédits à l'exportation *,292000,asset_current,False
+pcec_293,Pertes de valeur - Crédits de trésorerie *,293000,asset_current,False
+pcec_294,Pertes de valeur - Crédits d'équipement *,294000,asset_current,False
+pcec_295,Pertes de valeur - Crédits à l'habitat *,295000,asset_current,False
+pcec_296,Pertes de valeur - Crédit bail *,296000,asset_current,False
+pcec_301,Opérations entre siège et succursales/agences *,301000,asset_current,True
+pcec_302,Opérations entre succursales/agences *,302000,asset_current,True
+pcec_303,Comptes rattachés - Succursales et agences *,303000,asset_current,False
+pcec_311,Débiteurs divers *,311000,asset_current,True
+pcec_315,Créditeurs divers *,315000,liability_current,True
+pcec_316,Personnel *,316000,asset_current,True
+pcec_317,"État, organismes sociaux *",317000,asset_current,True
+pcec_3171,État - TVA collectée *,317100,liability_current,False
+pcec_3172,État - TVA déductible sur biens et services *,317200,asset_current,False
+pcec_3173,État - TVA déductible sur immobilisations *,317300,asset_current,False
+pcec_3174,État - Taxes sur le chiffre d'affaires à décaisser *,317400,liability_current,False
+pcec_3175,État - Crédit de TVA à reporter *,317500,asset_current,False
+pcec_318,Comptes rattachés - Débiteurs/créditeurs divers *,318000,asset_current,False
+pcec_3186,Charges à payer - Débiteurs/créditeurs divers *,318600,liability_current,False
+pcec_3187,Produits à recevoir - Débiteurs/créditeurs divers *,318700,asset_current,False
+pcec_319,Autres débiteurs et créditeurs divers *,319000,asset_current,True
+pcec_321,Charges et produits constatés d'avance *,321000,asset_current,False
+pcec_324,Charges à répartir *,324000,asset_current,False
+pcec_325,Produits reçus ou constatés d'avance,325000,liability_current,False
+pcec_326,Comptes d'ajustement - passif *,326000,liability_current,False
+pcec_3261,Produits réservés sur échéances de crédit non imputées,326100,income,False
+pcec_3262,Comptes d'ajustement devises - passif *,326200,liability_current,False
+pcec_329,Autres comptes de régularisation *,329000,asset_current,False
+pcec_3291,Autres comptes de régularisation - actif *,329100,asset_current,False
+pcec_3292,Autres comptes de régularisation - passif *,329200,liability_current,False
+pcec_3293,Autres comptes de régularisation - divers *,329300,asset_current,False
+pcec_331,Valeurs à l'encaissement *,331000,asset_current,True
+pcec_3311,Chèques à encaisser *,331100,asset_current,True
+pcec_33111,Chèques à encaisser sur place *,331110,asset_current,True
+pcec_33112,Chèques à encaisser hors place *,331120,asset_current,True
+pcec_3312,Effets à encaisser *,331200,asset_current,True
+pcec_332,Valeurs à l'encaissement - autres instruments *,332000,asset_current,True
+pcec_3321,Autres valeurs à encaisser *,332100,asset_current,True
+pcec_33211,Autres valeurs à encaisser sur place *,332110,asset_current,True
+pcec_33212,Autres valeurs à encaisser hors place *,332120,asset_current,True
+pcec_3322,Effets à l'encaissement - autres *,332200,asset_current,True
+pcec_335,Virements internes *,335000,asset_current,True
+pcec_336,Comptes de liaison - encaissement *,336000,asset_current,True
+pcec_341,Position de change *,341000,asset_current,False
+pcec_342,Contre-valeur de position de change *,342000,liability_current,False
+pcec_351,Titres de transaction *,351000,asset_current,False
+pcec_3511,Titres de transaction - obligations *,351100,asset_current,False
+pcec_3512,Titres de transaction - actions *,351200,asset_current,False
+pcec_352,Instruments de transaction *,352000,asset_current,False
+pcec_353,Comptes rattachés - Portefeuille de transaction *,353000,asset_current,False
+pcec_354,Résultats sur portefeuille de transaction *,354000,asset_current,False
+pcec_360,Versements restant à effectuer sur titres non libérés *,360000,liability_current,False
+pcec_370,Créances douteuses sur autres comptes financiers *,370000,asset_current,True
+pcec_391,Pertes de valeur sur débiteurs divers *,391000,asset_current,False
+pcec_396,Pertes de valeur sur autres comptes financiers *,396000,asset_current,False
+pcec_4011,Titres d'investissement - Effets publics *,401100,asset_fixed,False
+pcec_4019,Titres d'investissement - Effets publics - Comptes rattachés *,401900,asset_fixed,False
+pcec_4021,Titres d'investissement - Autres titres *,402100,asset_fixed,False
+pcec_4022,Titres d'investissement - Autres titres - Comptes rattachés *,402200,asset_fixed,False
+pcec_412,Prêts subordonnés à durée déterminée *,412000,asset_fixed,False
+pcec_413,Prêts subordonnés à durée indéterminée *,413000,asset_fixed,False
+pcec_416,Comptes rattachés - Prêts subordonnés *,416000,asset_fixed,False
+pcec_4211,Immobilisations incorporelles - Logiciels *,421100,asset_fixed,False
+pcec_4212,Immobilisations incorporelles - Autres *,421200,asset_fixed,False
+pcec_4219,Immobilisations incorporelles - Autres droits *,421900,asset_fixed,False
+pcec_4221,Immobilisations corporelles - Terrains *,422100,asset_fixed,False
+pcec_4222,Immobilisations corporelles - Constructions *,422200,asset_fixed,False
+pcec_4229,Immobilisations corporelles - Autres *,422900,asset_fixed,False
+pcec_423,Immobilisations données en location simple *,423000,asset_fixed,False
+pcec_432,Immobilisations incorporelles en cours *,432000,asset_fixed,False
+pcec_437,Immobilisations corporelles en cours *,437000,asset_fixed,False
+pcec_438,Avances et acomptes sur immobilisations *,438000,asset_fixed,False
+pcec_470,Créances douteuses en valeurs immobilisées *,470000,asset_fixed,False
+pcec_482,Amortissements des immobilisations *,482000,asset_fixed,False
+pcec_491,Pertes de valeur - Titres d'investissement *,491000,asset_fixed,False
+pcec_492,Pertes de valeur - Prêts subordonnés *,492000,asset_fixed,False
+pcec_493,Pertes de valeur - Immobilisations *,493000,asset_fixed,False
+pcec_499,Pertes de valeur - Autres valeurs immobilisées *,499000,asset_fixed,False
+pcec_5011,Charges différées hors cycle d'exploitation *,501100,asset_current,False
+pcec_5019,Charges différées hors cycle d'exploitation - Autres *,501900,asset_current,False
+pcec_502,Produits différés hors cycle d'exploitation *,502000,liability_current,False
+pcec_503,Comptes de liaison - Produits/charges différés *,503000,liability_current,False
+pcec_504,Comptes d'ajustement - Produits/charges différés *,504000,liability_current,False
+pcec_509,Autres produits et charges différés *,509000,liability_current,False
+pcec_521,Fonds de garantie - Dépôts *,521000,liability_non_current,False
+pcec_522,Fonds de garantie - Crédits *,522000,liability_non_current,False
+pcec_523,Autres fonds de garantie *,523000,liability_non_current,False
+pcec_541,Emprunts subordonnés à durée déterminée *,541000,liability_non_current,False
+pcec_542,Emprunts subordonnés à durée indéterminée *,542000,liability_non_current,False
+pcec_543,Titres subordonnés à durée déterminée *,543000,liability_non_current,False
+pcec_544,Titres subordonnés à durée indéterminée *,544000,liability_non_current,False
+pcec_545,Comptes rattachés - Emprunts et titres subordonnés *,545000,liability_current,False
+pcec_551,Provisions pour risques *,551000,liability_non_current,False
+pcec_552,Provisions pour charges *,552000,liability_non_current,False
+pcec_559,Autres provisions pour charges *,559000,liability_non_current,False
+pcec_561,Capital souscrit non appelé *,561000,equity,False
+pcec_562,Capital souscrit appelé non versé *,562000,equity,False
+pcec_563,Capital souscrit appelé versé *,563000,equity,False
+pcec_564,Primes liées au capital *,564000,equity,False
+pcec_565,Écarts de réévaluation *,565000,equity,False
+pcec_566,Réserve légale *,566000,equity,False
+pcec_567,Réserves statutaires ou contractuelles *,567000,equity,False
+pcec_568,Autres réserves *,568000,equity,False
+pcec_569,Subventions d'investissement *,569000,equity,False
+pcec_581,Report à nouveau - solde créditeur *,581000,equity,False
+pcec_589,Report à nouveau - solde débiteur *,589000,equity,False
+pcec_591,Résultat net de l'exercice - bénéfice *,591000,equity,False
+pcec_598,Résultat net de l'exercice - perte *,598000,equity,False
+pcec_6011,Charges d'intérêts - Banque Centrale *,601100,expense,False
+pcec_6012,Charges d'intérêts - Établissements de crédit *,601200,expense,False
+pcec_6015,Charges d'intérêts - Autres institutions financières *,601500,expense,False
+pcec_6016,Charges d'intérêts - Réseau *,601600,expense,False
+pcec_602,Charges d'intérêts - Bons du Trésor et titres assimilés *,602000,expense,False
+pcec_6035,Charges d'intérêts - Comptes de la clientèle (dépôts) *,603500,expense,False
+pcec_6036,Charges d'intérêts - Bons de caisse *,603600,expense,False
+pcec_6037,Charges d'intérêts - Autres fonds empruntés clientèle *,603700,expense,False
+pcec_6045,Charges d'intérêts - Fonds affectés *,604500,expense,False
+pcec_6046,Charges d'intérêts - Fonds affectés (autres) *,604600,expense,False
+pcec_6049,Charges d'intérêts - Fonds affectés divers *,604900,expense,False
+pcec_6065,Charges d'intérêts - Emprunts subordonnés *,606500,expense,False
+pcec_6066,Charges d'intérêts - Titres subordonnés *,606600,expense,False
+pcec_6067,Charges d'intérêts - Fonds de garantie *,606700,expense,False
+pcec_6071,Charges d'intérêts - Crédit bail *,607100,expense,False
+pcec_6072,Charges d'intérêts - Location simple *,607200,expense,False
+pcec_6073,Charges d'intérêts - comptes d'épargne à régime spécial,607300,expense,False
+pcec_6074,Charges d'intérêts - Divers 2 *,607400,expense,False
+pcec_6075,Charges d'intérêts - Divers 3 *,607500,expense,False
+pcec_6076,Charges d'intérêts - Divers 4 *,607600,expense,False
+pcec_611,Charges de commissions - opérations de trésorerie *,611000,expense,False
+pcec_613,Charges de commissions - opérations avec la clientèle *,613000,expense,False
+pcec_614,Charges de commissions - opérations sur titres *,614000,expense,False
+pcec_616,Charges d'honoraires *,616000,expense,False
+pcec_617,Charges de commissions - moyens de paiement *,617000,expense,False
+pcec_618,Charges de commissions - engagements *,618000,expense,False
+pcec_619,Autres charges de commissions *,619000,expense,False
+pcec_621,Charges sur instruments de taux *,621000,expense,False
+pcec_622,Charges sur instruments de change *,622000,expense,False
+pcec_623,Charges sur instruments sur actions *,623000,expense,False
+pcec_624,Charges sur instruments de crédit *,624000,expense,False
+pcec_625,Charges sur instruments divers 1 *,625000,expense,False
+pcec_626,Charges sur instruments divers 2 *,626000,expense,False
+pcec_627,Charges sur instruments divers 3 *,627000,expense,False
+pcec_631,Pertes de change *,631000,expense,False
+pcec_632,Charges sur opérations de change à terme *,632000,expense,False
+pcec_633,Autres charges sur opérations en monnaies étrangères *,633000,expense,False
+pcec_6411,Charges sur crédit-bail *,641100,expense,False
+pcec_6412,Pertes sur prêts et avances - non couverts par provisions,641200,expense,False
+pcec_642,Charges sur autres opérations bancaires *,642000,expense,False
+pcec_643,Charges sur immeubles de placement *,643000,expense,False
+pcec_644,Charges sur activités annexes *,644000,expense,False
+pcec_645,Quote-part sur opérations faites en commun *,645000,expense,False
+pcec_649,Autres charges opérationnelles diverses *,649000,expense,False
+pcec_6511,Salaires et traitements *,651100,expense,False
+pcec_6519,Autres charges de personnel *,651900,expense,False
+pcec_6521,Charges sociales - cotisations *,652100,expense,False
+pcec_6529,Charges sociales - autres *,652900,expense,False
+pcec_6531,Impôts et taxes - patente/IRSA employeur *,653100,expense,False
+pcec_6537,Impôts et taxes - autres *,653700,expense,False
+pcec_6541,Autres charges administratives - loyers *,654100,expense,False
+pcec_6549,Autres charges administratives - diverses *,654900,expense,False
+pcec_670,Éléments extraordinaires - charges *,670000,expense,False
+pcec_6811,Dotations aux amortissements des immobilisations *,681100,expense,False
+pcec_6821,Dotations aux pertes de valeur - trésorerie *,682100,expense,False
+pcec_6822,Dotations aux pertes de valeur - clientèle *,682200,expense,False
+pcec_6823,Dotations aux pertes de valeur - autres comptes financiers *,682300,expense,False
+pcec_6824,Dotations aux pertes de valeur - valeurs immobilisées *,682400,expense,False
+pcec_6825,Dotations aux provisions pour risques *,682500,expense,False
+pcec_6826,Dotations aux provisions pour charges *,682600,expense,False
+pcec_6831,Dotations - engagements hors bilan *,683100,expense,False
+pcec_6839,Dotations - autres *,683900,expense,False
+pcec_691,Impôts sur les bénéfices *,691000,expense,False
+pcec_7011,Produits d'intérêts - Banque Centrale *,701100,income,False
+pcec_7012,Produits d'intérêts - Établissements de crédit *,701200,income,False
+pcec_7013,Produits d'intérêts - Autres institutions financières *,701300,income,False
+pcec_7021,Produits d'intérêts - Bons du Trésor *,702100,income,False
+pcec_7022,Produits d'intérêts - Autres titres assimilés au Trésor *,702200,income,False
+pcec_7031,Produits d'intérêts - Créances commerciales *,703100,income,False
+pcec_7032,Produits d'intérêts - Crédits à la clientèle *,703200,income,False
+pcec_7033,Produits d'intérêts - Crédit bail *,703300,income,False
+pcec_7041,Produits d'intérêts - Fonds affectés *,704100,income,False
+pcec_7042,Produits d'intérêts - Fonds affectés (autres) *,704200,income,False
+pcec_7061,Produits d'intérêts - Titres d'investissement *,706100,income,False
+pcec_7062,Produits d'intérêts - Prêts subordonnés *,706200,income,False
+pcec_7063,Produits d'intérêts - Autres valeurs immobilisées *,706300,income,False
+pcec_7071,Produits d'intérêts - Crédit bail donné *,707100,income,False
+pcec_7072,Produits d'intérêts - Location simple *,707200,income,False
+pcec_7073,Produits d'intérêts - crédits de trésorerie,707300,income,False
+pcec_7074,Produits d'intérêts - Divers 2 *,707400,income,False
+pcec_7075,Produits d'intérêts - Divers 3 *,707500,income,False
+pcec_7076,Produits d'intérêts - Divers 4 *,707600,income,False
+pcec_711,Produits de commissions - opérations de trésorerie *,711000,income,False
+pcec_713,Produits de commissions - opérations avec la clientèle *,713000,income,False
+pcec_714,Produits de commissions - opérations sur titres *,714000,income,False
+pcec_716,Produits d'honoraires *,716000,income,False
+pcec_717,Commissions perçues - opérations avec la clientèle,717000,income,False
+pcec_719,Commissions perçues - divers exploitation bancaire,719000,income,False
+pcec_721,Produits sur instruments de taux *,721000,income,False
+pcec_722,Produits sur instruments de change *,722000,income,False
+pcec_723,Produits sur instruments sur actions *,723000,income,False
+pcec_724,Produits sur instruments de crédit *,724000,income,False
+pcec_725,Produits sur instruments divers 1 *,725000,income,False
+pcec_726,Produits sur instruments divers 2 *,726000,income,False
+pcec_727,Produits sur instruments divers 3 *,727000,income,False
+pcec_731,Gains de change *,731000,income,False
+pcec_732,Produits sur opérations de change à terme *,732000,income,False
+pcec_733,Autres produits sur opérations en monnaies étrangères *,733000,income,False
+pcec_741,Récupération sur créances apurées,741000,income,False
+pcec_742,Produits sur location simple *,742000,income,False
+pcec_743,Produits sur immeubles de placement *,743000,income,False
+pcec_744,Produits sur activités annexes *,744000,income,False
+pcec_746,Quote-part sur opérations faites en commun *,746000,income,False
+pcec_747,Produits accessoires *,747000,income,False
+pcec_749,Autres produits opérationnels divers *,749000,income,False
+pcec_761,Subventions d'exploitation reçues *,761000,income_other,False
+pcec_762,Subventions d'équilibre *,762000,income_other,False
+pcec_770,Éléments extraordinaires - produits *,770000,income,False
+pcec_7821,Reprises de pertes de valeur - trésorerie *,782100,income,False
+pcec_7822,Reprises de pertes de valeur - clientèle *,782200,income,False
+pcec_7823,Reprises de pertes de valeur - autres comptes financiers *,782300,income,False
+pcec_7824,Reprises de pertes de valeur - valeurs immobilisées *,782400,income,False
+pcec_7825,Reprises de provisions pour risques *,782500,income,False
+pcec_7826,Reprises de provisions pour charges *,782600,income,False
+pcec_7831,Reprises - engagements hors bilan *,783100,income,False
+pcec_7839,Reprises - autres *,783900,income,False

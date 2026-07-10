@@ -47,4 +47,7 @@
     },
     'application': True,
     'installable': True,
+    # Ne dépend pas de plan_compta_pcec (module chart-agnostic) : le hook vérifie lui-même
+    # company.chart_template == 'mg_pcec' et se limite aux sociétés concernées.
+    'post_init_hook': 'post_init_hook',
 }

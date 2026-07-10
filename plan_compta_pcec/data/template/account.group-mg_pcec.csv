@@ -1,0 +1,63 @@
+id,name,code_prefix_start,code_prefix_end
+group_1,Comptes d'opérations de trésorerie,1,1
+group_2,Comptes d'opérations avec la clientèle,2,2
+group_3,Autres comptes financiers,3,3
+group_4,Comptes de valeurs immobilisées,4,4
+group_5,Comptes de capitaux propres et passifs non courants,5,5
+group_6,Comptes de charges,6,6
+group_7,Comptes de produits,7,7
+group_10,Valeurs en caisse,10,10
+group_11,Banque Centrale,11,11
+group_12,Bons du Trésor et titres assimilés,12,12
+group_13,Établissements de crédit,13,13
+group_14,Autres institutions financières,14,14
+group_16,Opérations internes de trésorerie - réseau,16,16
+group_17,"Créances litigieuses, douteuses ou contentieuses (trésorerie)",17,17
+group_19,Pertes de valeur sur comptes de trésorerie,19,19
+group_20,Prêts et avances à la clientèle,20,20
+group_21,Comptes de la clientèle,21,21
+group_24,Opérations sur fonds privés affectés,24,24
+group_25,Opérations sur fonds publics affectés,25,25
+group_26,Créances immobilisées,26,26
+group_27,"Créances litigieuses, douteuses ou contentieuses (clientèle)",27,27
+group_29,Pertes de valeur sur avances et prêts,29,29
+group_30,Succursales et agences,30,30
+group_31,Débiteurs divers et créditeurs divers,31,31
+group_32,Comptes de régularisation,32,32
+group_33,Comptes d'encaissement,33,33
+group_34,Comptes de position de change,34,34
+group_35,Portefeuille de transaction,35,35
+group_36,Versements restant à effectuer sur titres non libérés,36,36
+group_37,Créances douteuses sur autres comptes financiers,37,37
+group_39,Pertes de valeur - autres comptes financiers,39,39
+group_40,Titres d'investissement,40,40
+group_41,Prêts subordonnés,41,41
+group_42,Immobilisations,42,42
+group_43,Immobilisations en cours,43,43
+group_47,Créances douteuses en valeurs immobilisées,47,47
+group_48,Amortissements des valeurs immobilisées,48,48
+group_49,Pertes de valeur sur valeurs immobilisées,49,49
+group_50,Produits et charges différés hors cycle d'exploitation,50,50
+group_52,Fonds de garantie,52,52
+group_54,Emprunts et titres subordonnés,54,54
+group_55,Provisions pour charges - passifs,55,55
+group_56,"Capital, réserves et assimilés",56,56
+group_58,Report à nouveau,58,58
+group_59,Résultat net,59,59
+group_60,Charges d'intérêts,60,60
+group_61,Charges d'honoraires et de commissions,61,61
+group_62,Charges sur instruments financiers,62,62
+group_63,Charges résultant des opérations en monnaies étrangères,63,63
+group_64,Autres charges opérationnelles,64,64
+group_65,Charges administratives générales,65,65
+group_67,Éléments extraordinaires - charges,67,67
+group_68,Dotations,68,68
+group_69,Impôts sur les bénéfices,69,69
+group_70,Produits d'intérêts,70,70
+group_71,Produits d'honoraires et de commissions,71,71
+group_72,Produits sur instruments financiers,72,72
+group_73,Produits sur opérations en monnaies étrangères,73,73
+group_74,Autres produits opérationnels,74,74
+group_76,Subventions d'exploitation,76,76
+group_77,Éléments extraordinaires - produits,77,77
+group_78,Reprises de provisions,78,78

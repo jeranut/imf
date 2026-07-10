@@ -1,0 +1,13 @@
+id,name,description,amount,amount_type,type_tax_use,price_include_override,active,invoice_label,country_id,tax_group_id,invoice_repartition_line_ids/factor_percent,invoice_repartition_line_ids/repartition_type,invoice_repartition_line_ids/account_id,refund_repartition_line_ids/factor_percent,refund_repartition_line_ids/repartition_type,refund_repartition_line_ids/account_id
+tva_collectee_20,TVA collectée 20%,TVA collectée 20%,20,percent,sale,tax_excluded,True,TVA 20%,base.mg,tax_group_tva_20,100,base,,100,base,
+,,,,,,,,,,,100,tax,pcec_3171,100,tax,pcec_3171
+tva_deductible_bs_20,TVA déductible biens et services 20%,TVA déductible sur biens et services 20%,20,percent,purchase,tax_excluded,True,TVA 20% (B/S),base.mg,tax_group_tva_20,100,base,,100,base,
+,,,,,,,,,,,100,tax,pcec_3172,100,tax,pcec_3172
+tva_deductible_immo_20,TVA déductible immobilisations 20%,TVA déductible sur immobilisations 20%,20,percent,purchase,tax_excluded,True,TVA 20% (Immo),base.mg,tax_group_tva_20,100,base,,100,base,
+,,,,,,,,,,,100,tax,pcec_3173,100,tax,pcec_3173
+tva_collectee_export_0,TVA exportation 0%,Exportation - hors champ TVA,0,percent,sale,tax_excluded,True,TVA Export 0%,base.mg,tax_group_tva_0,100,base,,100,base,
+,,,,,,,,,,,100,tax,pcec_3171,100,tax,pcec_3171
+tva_exoneree_0,TVA exonérée,Opérations exonérées de TVA,0,percent,sale,tax_excluded,True,Exo TVA,base.mg,tax_group_exo,100,base,,100,base,
+,,,,,,,,,,,100,tax,pcec_3171,100,tax,pcec_3171
+tva_achat_exoneree_0,TVA achat exonérée,Achats exonérés de TVA,0,percent,purchase,tax_excluded,True,Exo TVA,base.mg,tax_group_exo,100,base,,100,base,
+,,,,,,,,,,,100,tax,pcec_3172,100,tax,pcec_3172

@@ -113,9 +113,7 @@
                             <group string="Comptes partagés">
                                 <field name="account_recouvrement_id"/>
                                 <field name="account_papeterie_id"/>
-                                <field name="account_cheques_id"/>
                                 <field name="account_surpaiement_id"/>
-                                <field name="account_diff_monnaie_id"/>
                             </group>
                         </page>
                     </notebook>

@@ -75,9 +75,6 @@
                                 <field name="account_cout_interet_payer_individuel_id"/>
                                 <field name="account_cout_interet_payer_groupe_id"/>
                                 <field name="account_cout_interet_payer_entreprise_id"/>
-                                <field name="account_charge_interet_negatif_individuel_id"/>
-                                <field name="account_charge_interet_negatif_groupe_id"/>
-                                <field name="account_charge_interet_negatif_entreprise_id"/>
                             </group>
                             <group string="Pénalités et commissions">
                                 <field name="account_penalites_id"/>
@@ -85,7 +82,6 @@
                                 <field name="account_commission_cheques_rejetes_id"/>
                             </group>
                             <group string="Comptes partagés">
-                                <field name="account_cheques_id"/>
                                 <field name="account_retenue_taxe_id"/>
                                 <field name="account_papeterie_id"/>
                             </group>

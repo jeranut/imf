@@ -3,6 +3,29 @@ from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
 
 
+def _pcec_default(code):
+    """Défaut calculé pour un champ account.account : recherche par code + société, jamais
+    par référence XML statique (les comptes PCEC sont dupliqués par société via le chart
+    template plan_compta_pcec). Retourne un recordset vide si le compte n'existe pas pour la
+    société courante (plan PCEC non chargé) : le champ reste simplement vide."""
+    def _default(self):
+        return self.env['account.account'].search([
+            ('code', '=', code), ('company_id', '=', self.env.company.id),
+        ], limit=1)
+    return _default
+
+
+def _journal_default(code):
+    """Défaut calculé pour un champ account.journal : recherche par code + société (les
+    journaux créés par microfinance_loan_management.hooks.post_init_hook sont dupliqués par
+    société, jamais référencés par ID statique)."""
+    def _default(self):
+        return self.env['account.journal'].search([
+            ('code', '=', code), ('company_id', '=', self.env.company.id),
+        ], limit=1)
+    return _default
+
+
 class MicrofinanceSavingsProduct(models.Model):
     _name = 'microfinance.savings.product'
     _description = "Produit d'épargne microfinance"
@@ -54,112 +77,116 @@ class MicrofinanceSavingsProduct(models.Model):
     account_epargne_individuel_id = fields.Many2one(
         'account.account', string='Épargne - Individuel', required=True,
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('213001'),
     )
     account_epargne_groupe_id = fields.Many2one(
         'account.account', string='Épargne - Groupe', required=True,
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('213002'),
     )
     account_epargne_entreprise_id = fields.Many2one(
         'account.account', string='Épargne - Entreprise', required=True,
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('213003'),
     )
 
     # --- Comptabilité : Intérêts ---
     account_interet_paye_individuel_id = fields.Many2one(
         'account.account', string='Intérêt payé - Individuel',
         domain="[('account_type', '=', 'expense'), ('company_id', '=', company_id)]",
+        default=_pcec_default('607301'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_interet_paye_groupe_id = fields.Many2one(
         'account.account', string='Intérêt payé - Groupe',
         domain="[('account_type', '=', 'expense'), ('company_id', '=', company_id)]",
+        default=_pcec_default('607302'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_interet_paye_entreprise_id = fields.Many2one(
         'account.account', string='Intérêt payé - Entreprise',
         domain="[('account_type', '=', 'expense'), ('company_id', '=', company_id)]",
+        default=_pcec_default('607303'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_interets_avance_individuel_id = fields.Many2one(
         'account.account', string="Intérêts comptabilisés d'avance - Individuel",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('325005'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_interets_avance_groupe_id = fields.Many2one(
         'account.account', string="Intérêts comptabilisés d'avance - Groupe",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('325006'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_interets_avance_entreprise_id = fields.Many2one(
         'account.account', string="Intérêts comptabilisés d'avance - Entreprise",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('325007'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_cout_interet_payer_individuel_id = fields.Many2one(
         'account.account', string="Coût de l'intérêt à payer - Individuel",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('218001'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_cout_interet_payer_groupe_id = fields.Many2one(
         'account.account', string="Coût de l'intérêt à payer - Groupe",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('218002'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_cout_interet_payer_entreprise_id = fields.Many2one(
         'account.account', string="Coût de l'intérêt à payer - Entreprise",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('218003'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
-    account_charge_interet_negatif_individuel_id = fields.Many2one(
-        'account.account', string="Charge de l'intérêt négative - Individuel",
-        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
-    )
-    account_charge_interet_negatif_groupe_id = fields.Many2one(
-        'account.account', string="Charge de l'intérêt négative - Groupe",
-        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
-    )
-    account_charge_interet_negatif_entreprise_id = fields.Many2one(
-        'account.account', string="Charge de l'intérêt négative - Entreprise",
-        domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
-    )
-
     # --- Comptabilité : Comptes partagés ---
     account_penalites_id = fields.Many2one(
         'account.account', string='Pénalités sur épargne',
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        default=_pcec_default('749003'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
     )
     account_commission_id = fields.Many2one(
         'account.account', string='Commission sur épargne',
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        default=_pcec_default('717004'),
         help="Compte de comptabilisation des frais de tenue de compte. Requis uniquement si des frais sont prélevés pour ce produit.",
-    )
-    account_cheques_id = fields.Many2one(
-        'account.account', string='Comptes chèques',
-        domain="[('account_type', '=', 'asset_current'), ('company_id', '=', company_id)]",
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
     )
     account_commission_cheques_rejetes_id = fields.Many2one(
         'account.account', string='Commission sur chèques rejetés',
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        default=_pcec_default('719000'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
     )
     account_retenue_taxe_id = fields.Many2one(
         'account.account', string='Retenue de taxe',
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+        default=_pcec_default('467000'),
+        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR. Compte technique "
+             "467000 : hors nomenclature PCEC officielle, créé par ce module faute de poste "
+             "dédié identifié dans les classes 1-7 (voir audit_pcg2005_mapping).",
     )
     account_papeterie_id = fields.Many2one(
         'account.account', string="Papeterie pour l'épargne",
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
+        default=_pcec_default('749004'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
     )
 
-    deposit_journal_id = fields.Many2one('account.journal', string='Journal dépôt', domain="[('type', 'in', ('bank','cash'))]")
-    withdrawal_journal_id = fields.Many2one('account.journal', string='Journal retrait', domain="[('type', 'in', ('bank','cash'))]")
+    deposit_journal_id = fields.Many2one(
+        'account.journal', string='Journal dépôt', domain="[('type', 'in', ('bank','cash'))]",
+        default=_journal_default('EPG'),
+    )
+    withdrawal_journal_id = fields.Many2one(
+        'account.journal', string='Journal retrait', domain="[('type', 'in', ('bank','cash'))]",
+        default=_journal_default('EPG'),
+    )
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True)
     currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)
     active = fields.Boolean(string='Actif', default=True)
