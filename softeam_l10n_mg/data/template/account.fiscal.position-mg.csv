@@ -1,8 +1,0 @@
-id,name,sequence,auto_apply,country_id,note,tax_ids/tax_src_id,tax_ids/tax_dest_id
-fp_national_assujetti,National assujetti,1,False,base.mg,Personnes physiques ou morales nationales soumises à la TVA. TVA déductible et collectée applicables.,,
-fp_national_non_assujetti,National non assujetti,2,False,base.mg,Personnes physiques ou morales nationales non soumises à la TVA (exonérées).,tva_collectee_20,tva_exoneree_0
-,,,,,,tva_deductible_bs_20,tva_achat_exoneree_0
-,,,,,,tva_deductible_immo_20,tva_achat_exoneree_0
-fp_export,Reste du monde (Export),3,True,base.mg,Opérations d'exportation et avec des partenaires étrangers - hors champ TVA Madagascar.,tva_collectee_20,tva_collectee_export_0
-,,,,,,tva_deductible_bs_20,tva_achat_exoneree_0
-,,,,,,tva_deductible_immo_20,tva_achat_exoneree_0
