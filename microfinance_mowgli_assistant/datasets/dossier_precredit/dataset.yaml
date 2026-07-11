@@ -1,0 +1,307 @@
+workflow: dossier_precredit
+name: Workflow Dossier précrédit
+version: "17.0"
+description: >
+  Instruction et qualification du dossier crédit avant décaissement : cycle
+  microfinance.loan de draft à approved (soumission, validation manager,
+  validation finance, approbation), et qualification du client (catégories,
+  liste noire, représentants/membres de groupe) gérée depuis la fiche
+  partenaire. Ne couvre pas le décaissement, les remboursements, la
+  comptabilité, le recouvrement des impayés ni les garanties/scoring.
+sequence: 80
+roles:
+  - agent_credit
+  - gestionnaire
+categories:
+  - name: Instruction du dossier crédit
+    sequence: 10
+  - name: Qualification client
+    sequence: 20
+articles:
+  - id: dossier_precredit-001
+    title: Créer et soumettre un dossier de crédit
+    category: Instruction du dossier crédit
+    difficulty: intermediate
+    roles:
+      - agent_credit
+    suggested: true
+    priority: 100
+    questions:
+      - Comment soumettre un nouveau dossier de crédit pour validation ?
+      - Pourquoi je ne peux pas soumettre un crédit pour ce client ?
+    menu: >
+      Microfinance > Crédits > Demande de crédit (menu_credits_root >
+      menu_microfinance_loans, action action_microfinance_loan).
+    model: microfinance.loan
+    prerequisites:
+      - Le client (partner_id) doit respecter l'ancienneté minimale du produit si min_membership_days est défini.
+      - Le client ne doit pas déjà avoir de crédit actif dans la société, sauf si le produit autorise un second crédit (allow_second_loan).
+      - Si block_second_if_arrears est activé, le client ne doit pas avoir de crédit actif en arriérés.
+      - Le co-emprunteur (co_borrower_id), s'il y en a un, ne doit pas avoir lui-même de crédit actif en cours dans la société.
+      - Si le produit exige une garantie (guarantee_required), au moins une garantie validée doit couvrir le ratio minimum requis (min_guarantee_ratio).
+    steps:
+      - Ouvrir Microfinance > Crédits > Demande de crédit et créer un nouveau crédit (état initial draft).
+      - Renseigner partner_id, product_id, loan_amount, term, repayment_frequency_id (si le produit laisse le choix) et co_borrower_id (optionnel).
+      - (Optionnel) Générer l'échéancier prévisionnel avec le bouton Générer échéancier avant soumission.
+      - Cliquer sur Soumettre (action_submit) : exécute le contrôle d'éligibilité (_check_eligibility) puis calcule automatiquement le score interne (action_calculate_scoring, silencieux), et passe l'état à submitted.
+    tips: >
+      Compléter les catégories de classification et les données d'identité du client dès
+      la création de sa fiche : plusieurs contraintes (format CIN, format NIF) ne se
+      déclenchent qu'à l'enregistrement de la fiche client, mieux vaut les découvrir
+      immédiatement qu'au moment de soumettre un crédit.
+    errors: >
+      « Ancienneté client insuffisante pour ce produit : il manque X jour(s)... » — client
+      trop récent pour le produit choisi. « Ce client a déjà un crédit actif. Ce produit
+      n'autorise pas de second crédit en parallèle. » « Ce client a déjà un crédit actif en
+      arriérés. Un second crédit ne peut pas être soumis. » « Le co-emprunteur a déjà un
+      crédit actif en cours. » « Ce produit exige une garantie validée avant soumission. »
+      « Garanties insuffisantes : il manque X pour atteindre le ratio minimum requis... »
+    answer: >
+      <p>Pour soumettre un dossier de crédit, créez le crédit depuis
+      <strong>Microfinance &gt; Crédits &gt; Demande de crédit</strong> (état initial
+      <em>brouillon</em>), renseignez l'emprunteur, le produit, le montant et la durée, puis
+      cliquez sur <strong>Soumettre</strong>. Le système vérifie automatiquement l'éligibilité
+      du dossier (ancienneté client, absence de crédit actif conflictuel, garanties requises
+      le cas échéant) avant de calculer un score interne et de faire passer le dossier à
+      l'état <em>soumis</em>. Si un contrôle échoue, un message d'erreur explicite s'affiche
+      et le dossier reste en brouillon.</p>
+    keywords:
+      - soumission
+      - dossier crédit
+      - action_submit
+      - éligibilité
+    source_reference: microfinance_loan_management
+    see_also:
+      - dossier_precredit-002
+      - dossier_precredit-003
+
+  - id: dossier_precredit-002
+    title: Valider et approuver un dossier de crédit (manager, finance, approbation)
+    category: Instruction du dossier crédit
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 90
+    questions:
+      - Qui valide un crédit après l'agent, le manager ou la finance en premier ?
+      - Quelles sont les étapes de validation d'un crédit chez MOWGLI, de la création au décaissement ?
+      - Que signifie chaque état de la barre de statut d'un crédit (brouillon, soumis, validé manager...) ?
+    menu: >
+      Microfinance > Crédits > Demande de crédit (menu_credits_root >
+      menu_microfinance_loans, action action_microfinance_loan).
+    model: microfinance.loan
+    prerequisites:
+      - Le dossier doit être passé par Soumettre (état submitted) avant toute validation.
+    steps:
+      - Le manager clique sur Valider manager (action_manager_validate) : état manager_validated, le champ manager_id est renseigné à l'utilisateur courant.
+      - L'utilisateur finance clique sur Valider finance (action_finance_validate) : état finance_validated, le champ finance_user_id est renseigné.
+      - Le manager clique sur Approuver (action_approve) : état approved, le champ approval_date est renseigné à la date du jour.
+      - Le crédit approuvé est ensuite prêt pour l'encaissement des frais de dossier et le décaissement (action_charge_fee, action_disburse), qui font passer l'état à active — hors périmètre de ce workflow, voir le workflow comptabilite.
+    tips: >
+      Le Gestionnaire hérite à la fois du groupe Manager crédit et du groupe Finance
+      microfinance : il cumule donc les capacités de validation manager et de validation
+      finance, et peut réaliser lui-même l'ensemble de la chaîne Valider manager > Valider
+      finance > Approuver.
+    errors: >
+      Les boutons Valider manager, Valider finance et Approuver ne sont visibles que si
+      l'état du crédit correspond exactement à l'étape attendue (submitted,
+      manager_validated, finance_validated) et si l'utilisateur dispose du groupe requis ;
+      ils restent masqués sinon.
+    answer: >
+      <p>Après la soumission, un dossier de crédit suit une barre de statut à plusieurs
+      étapes : <em>brouillon</em> (draft) → <em>soumis</em> (submitted) →
+      <em>validé manager</em> (manager_validated, via Valider manager) →
+      <em>validé finance</em> (finance_validated, via Valider finance) →
+      <em>approuvé</em> (approved, via Approuver, avec la date d'approbation renseignée).
+      L'étape suivante, le décaissement (état actif), appartient au workflow comptabilité.
+      Le Gestionnaire peut effectuer seul l'ensemble des validations manager et finance
+      ainsi que l'approbation, car il hérite des deux groupes correspondants.</p>
+    keywords:
+      - validation
+      - manager
+      - finance
+      - approbation
+      - état du crédit
+    source_reference: microfinance_loan_management
+    see_also:
+      - dossier_precredit-001
+      - dossier_precredit-003
+
+  # À COMPLÉTER: la méthode ou le bouton déclenchant l'état 'cancelled' de
+  # microfinance.loan n'est pas identifié dans le README source (section 9,
+  # colonne "Déclenché par" laissée à "À compléter").
+
+  - id: dossier_precredit-003
+    title: Générer l'échéancier prévisionnel avant soumission
+    category: Instruction du dossier crédit
+    difficulty: beginner
+    roles:
+      - agent_credit
+      - gestionnaire
+    suggested: false
+    priority: 45
+    questions:
+      - Comment générer l'échéancier prévisionnel d'un crédit avant de le soumettre ?
+    menu: >
+      Microfinance > Crédits > Demande de crédit, bouton Générer échéancier
+      dans l'en-tête de la fiche crédit.
+    model: microfinance.loan
+    prerequisites:
+      - Une périodicité de remboursement (repayment_frequency_id) doit être choisie avant de pouvoir générer l'échéancier.
+    steps:
+      - Depuis la fiche crédit, cliquer sur le bouton Générer échéancier (action_generate_schedule).
+      - Le bouton reste disponible tant que l'état est draft, submitted, manager_validated, finance_validated ou approved (avant activation).
+    errors: >
+      « Choisissez une périodicité de remboursement avant de générer l'échéancier. » si
+      repayment_frequency_id n'est pas renseigné. « Échéancier autorisé avant activation
+      seulement. » si l'état du crédit est en dehors de draft à approved.
+    tips: >
+      Générer l'échéancier prévisionnel avant soumission permet de visualiser l'impact
+      réel de la durée (term) et de la périodicité (repayment_frequency_id) choisies,
+      plutôt que de le découvrir après approbation.
+    answer: >
+      <p>Le bouton <strong>Générer échéancier</strong> sur la fiche crédit calcule un
+      échéancier prévisionnel à partir du montant, de la durée et de la périodicité de
+      remboursement choisis. Il reste disponible à toutes les étapes du cycle avant
+      l'activation (brouillon, soumis, validé manager, validé finance, approuvé), ce qui
+      permet de le régénérer si les paramètres du crédit changent.</p>
+    keywords:
+      - échéancier
+      - action_generate_schedule
+      - périodicité
+    source_reference: microfinance_loan_management
+    see_also:
+      - dossier_precredit-001
+
+  - id: dossier_precredit-004
+    title: Qualifier une fiche client — type, identification et catégories de classification
+    category: Qualification client
+    difficulty: beginner
+    roles:
+      - agent_credit
+      - gestionnaire
+    suggested: true
+    priority: 80
+    questions:
+      - Comment corriger une erreur de format sur le NIF ou le CIN d'un client ?
+    menu: >
+      Microfinance > Clients (menu_clients_root, action action_microfinance_client) —
+      géré directement dans le formulaire partenaire (res.partner) ; aucun menu séparé
+      n'existe pour microfinance.client.category.
+    model: microfinance.client.category
+    prerequisites:
+      - La société (agence, company_id) est obligatoire pour un client créé en contexte microfinance.
+    steps:
+      - Ouvrir ou créer une fiche client via Microfinance > Clients.
+      - Choisir le type de client (microfinance_client_type : Particulier / Société / Groupe, widget radio), qui pilote l'affichage des blocs de champs spécifiques.
+      - Renseigner les champs d'identification du bloc correspondant (microfinance_id_type / microfinance_id_number pour un particulier, microfinance_nif pour une société, etc.).
+      - Affecter jusqu'à 3 catégories de classification (microfinance_category_1/2/3) depuis microfinance.client.category.
+    errors: >
+      « La société (agence) est obligatoire pour un client microfinance. » — création ou
+      modification sans company_id en contexte microfinance. « Le numéro de CIN doit
+      contenir exactement 12 chiffres. » — si microfinance_id_type = cin et que le numéro
+      ne contient pas exactement 12 chiffres (caractères non numériques ignorés dans le
+      comptage). « Le NIF doit contenir exactement 12 chiffres. » — pour un client de type
+      société (company).
+    tips: >
+      Compléter les catégories de classification et les données d'identité dès la création
+      de la fiche client : les contraintes de format CIN/NIF ne se déclenchent qu'à
+      l'enregistrement de la fiche, pas à la soumission d'un crédit.
+    answer: >
+      <p>Depuis <strong>Microfinance &gt; Clients</strong>, chaque fiche client précise un
+      type (Particulier, Société ou Groupe) qui affiche les blocs de champs correspondants.
+      Le numéro de CIN d'un particulier doit contenir exactement 12 chiffres, et le NIF
+      d'une société également, sinon l'enregistrement échoue avec une erreur de validation.
+      Jusqu'à 3 catégories de classification (microfinance_category_1/2/3) peuvent être
+      affectées à chaque client depuis ces mêmes listes éditables du formulaire partenaire.</p>
+    keywords:
+      - client
+      - catégorie
+      - CIN
+      - NIF
+      - type de client
+    source_reference: microfinance_loan_management
+    see_also:
+      - dossier_precredit-001
+
+  - id: dossier_precredit-005
+    title: Gérer la liste noire d'un client
+    category: Qualification client
+    difficulty: beginner
+    roles:
+      - agent_credit
+      - gestionnaire
+    suggested: true
+    priority: 70
+    questions:
+      - Comment ajouter un client à la liste noire ?
+      - Le système bloque-t-il automatiquement les crédits pour un client blacklisté ?
+    menu: >
+      Microfinance > Clients — liste éditable Liste noire (microfinance_blacklist_ids)
+      dans le formulaire partenaire ; aucun menu séparé n'existe pour
+      microfinance.client.blacklist.
+    model: microfinance.client.blacklist
+    steps:
+      - Ouvrir la fiche du client concerné via Microfinance > Clients.
+      - Ajouter une ligne dans Liste noire (microfinance_blacklist_ids) avec un motif (reason) et des dates de début/fin (date_start, date_end).
+    tips: >
+      Vérifier microfinance_is_blacklisted sur la fiche client avant de soumettre un
+      crédit : le champ existe et est visible, mais sa vérification reste manuelle à ce
+      jour — il n'empêche pas en lui-même la création ou la soumission d'un crédit pour le
+      client concerné.
+    answer: >
+      <p>Une entrée de liste noire s'ajoute directement sur la fiche client, dans la liste
+      éditable <strong>Liste noire</strong>, avec un motif et des dates de début/fin. Le
+      champ calculé microfinance_is_blacklisted passe automatiquement à vrai si au moins
+      une entrée est active et non expirée (date de fin vide ou postérieure ou égale à
+      aujourd'hui). Ce champ est purement informatif : il n'existe aucun contrôle
+      automatique qui bloque la création ou la soumission d'un crédit pour un client
+      blacklisté ; la vérification reste manuelle.</p>
+    keywords:
+      - liste noire
+      - blacklist
+      - is_blacklisted
+    source_reference: microfinance_loan_management
+    see_also:
+      - dossier_precredit-004
+
+  - id: dossier_precredit-006
+    title: Représentants (comité) et membres de groupe d'un client
+    category: Qualification client
+    difficulty: beginner
+    roles:
+      - agent_credit
+      - gestionnaire
+    suggested: false
+    priority: 60
+    questions:
+      - Où gérer les représentants d'une société ou d'un groupe de clients ?
+    menu: >
+      Microfinance > Clients — listes éditables Comité (microfinance_representative_ids)
+      et Membres du groupe (microfinance_member_ids) dans le formulaire partenaire
+      (société/groupe) ; aucun menu séparé n'existe pour microfinance.client.representative
+      ou microfinance.client.group.member.
+    model: microfinance.client.representative, microfinance.client.group.member
+    steps:
+      - Ouvrir la fiche du client de type Société ou Groupe.
+      - Ajouter des lignes dans Comité (microfinance_representative_ids), disponible pour les clients de type société ou groupe.
+      - Pour un client de type Groupe, ajouter aussi des lignes dans Membres du groupe (microfinance_member_ids), avec les champs income et planned_periodic_savings.
+    tips: >
+      Pour les clients de type Groupe, renseigner systématiquement
+      microfinance_member_ids (avec income et planned_periodic_savings) : ce sont les
+      seules données structurées disponibles sur les membres du groupe.
+    answer: >
+      <p>Le Comité (microfinance_representative_ids) se renseigne directement sur la fiche
+      client pour un client de type Société ou Groupe : il permet d'y ajouter les
+      représentants légaux (président, etc.). Pour un client de type Groupe uniquement, la
+      liste Membres du groupe (microfinance_member_ids) permet de détailler les membres
+      individuels avec leurs revenus et leur épargne périodique planifiée. Ces deux listes
+      sont embarquées dans le formulaire partenaire, sans menu dédié.</p>
+    keywords:
+      - représentants
+      - comité
+      - membres du groupe
+    source_reference: microfinance_loan_management
+    see_also:
+      - dossier_precredit-004

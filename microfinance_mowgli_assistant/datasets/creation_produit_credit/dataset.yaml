@@ -1,0 +1,237 @@
+workflow: creation_produit_credit
+name: Création produit de crédit
+version: "17.0"
+description: >
+  Paramétrage des produits de crédit (microfinance.loan.product) : montants et durées
+  min/max, méthode de calcul des intérêts, mode et périodicité de remboursement,
+  conditions d'éligibilité, pénalités de retard, frais de dossier, comptes comptables
+  PCEC et journaux comptables par défaut, ainsi que le volet épargne ajouté par
+  microfinance_savings_management (prélèvement automatique, exigence d'apport/épargne
+  cible).
+sequence: 40
+roles:
+  - agent_credit
+  - comptable
+  - gestionnaire
+categories:
+  - name: Produit de crédit
+    sequence: 10
+
+articles:
+  - id: creation_produit_credit-001
+    title: Créer un produit de crédit
+    category: Produit de crédit
+    roles:
+      - gestionnaire
+    questions:
+      - Comment créer un nouveau produit de crédit ?
+      - Créer un produit de crédit
+      - Nouveau produit de crédit
+    menu: Microfinance > Configuration > Produits de crédit
+    model: microfinance.loan.product
+    prerequisites:
+      - Plan comptable PCEC chargé pour la société (sinon les comptes PCEC se pré-remplissent vides et doivent être renseignés manuellement).
+    steps:
+      - Ouvrir Microfinance > Configuration > Produits de crédit (menu réservé au groupe Manager crédit ; le Gestionnaire y a aussi accès par héritage).
+      - Cliquer sur « Nouveau ».
+      - Renseigner l'en-tête : nom, code (unique par société), société, montant minimum/maximum, durée minimum/maximum (la devise est liée en lecture seule à la société).
+      - Dans l'onglet « Calcul crédit », choisir le mode de périodicité de remboursement (imposée ou au choix du client) et la ou les périodicités associées.
+      - Enregistrer : les comptes PCEC et journaux se pré-remplissent automatiquement par défaut à partir du plan comptable de la société.
+    tips: >
+      Les comptes PCEC et journaux se pré-remplissent automatiquement à l'ouverture d'un
+      nouveau produit, à partir du code PCEC correspondant recherché dans le plan
+      comptable de la société active.
+    errors: >
+      Montant maximum ≤ 0, ou montant maximum inférieur au minimum : « Vérifiez les
+      montants minimum et maximum. » Durée maximum inférieure à la durée minimum, ou
+      durée minimum ≤ 0 : « Vérifiez les durées minimum et maximum. » Code produit déjà
+      utilisé par un autre produit de la même société : violation de la contrainte
+      d'unicité (code + société).
+    answer: >
+      <p>Depuis Microfinance > Configuration > Produits de crédit (réservé au groupe
+      Manager crédit, accessible aussi au Gestionnaire), cliquez sur « Nouveau » puis
+      renseignez l'en-tête : nom, code (unique par société), société, montant
+      minimum/maximum, durée minimum/maximum. Dans l'onglet « Calcul crédit », choisissez
+      le mode de périodicité de remboursement (imposée ou au choix du client) et la ou les
+      périodicités associées. À l'enregistrement, les comptes PCEC et les journaux se
+      pré-remplissent automatiquement à partir du plan comptable de la société active.</p>
+    keywords:
+      - produit
+      - crédit
+      - créer
+    source_reference: microfinance_loan_management
+    see_also:
+      - creation_produit_credit-002
+      - creation_produit_credit-003
+      - creation_produit_credit-004
+      - creation_produit_credit-005
+    # (couvre : création générale du produit — nom, code, montants, durées, méthode de calcul, périodicité)
+
+  - id: creation_produit_credit-002
+    title: Configurer les paramètres d'intérêt d'un produit de crédit
+    category: Produit de crédit
+    roles:
+      - gestionnaire
+    questions:
+      - Comment configurer un produit avec un taux d'intérêt dégressif ?
+      - Comment paramétrer le taux d'intérêt d'un produit de crédit ?
+    menu: Microfinance > Configuration > Produits de crédit
+    model: microfinance.loan.product
+    steps:
+      - Ouvrir le produit de crédit (nouveau ou existant) sur Microfinance > Configuration > Produits de crédit.
+      - Dans l'onglet « Calcul crédit », renseigner le taux d'intérêt annuel (%).
+      - Choisir la méthode de calcul des intérêts : Taux fixe (flat) ou Solde dégressif (reducing).
+      - Renseigner le délai de grâce en jours si nécessaire.
+      - Enregistrer.
+    errors: >
+      Taux d'intérêt négatif : « Le taux intérêt ne peut pas être négatif. » Délai de
+      grâce négatif : « Le délai de grâce ne peut pas être négatif. »
+    answer: >
+      <p>Dans l'onglet « Calcul crédit » du produit de crédit (Microfinance >
+      Configuration > Produits de crédit), renseignez le taux d'intérêt annuel (%) et
+      choisissez la méthode de calcul des intérêts : Taux fixe (flat) ou Solde dégressif
+      (reducing). Un délai de grâce en jours peut aussi y être renseigné.</p>
+    keywords:
+      - taux d'intérêt
+      - méthode de calcul
+      - flat
+      - dégressif
+    source_reference: microfinance_loan_management
+    see_also:
+      - creation_produit_credit-001
+      - creation_produit_credit-003
+    # (couvre : taux d'intérêt, méthode de calcul flat/reducing)
+
+  - id: creation_produit_credit-003
+    title: Configurer les journaux et frais d'un produit de crédit
+    category: Produit de crédit
+    roles:
+      - gestionnaire
+    questions:
+      - Comment configurer les frais de dossier d'un produit de crédit ?
+      - Où choisir les journaux comptables d'un produit de crédit ?
+    menu: Microfinance > Configuration > Produits de crédit
+    model: microfinance.loan.product
+    steps:
+      - Ouvrir le produit de crédit sur Microfinance > Configuration > Produits de crédit, onglet « Comptabilité ».
+      - Choisir les journaux de décaissement, de remboursement et de frais (domaine banque ou caisse).
+      - Renseigner le type et le montant des frais de dossier (montant fixe ou pourcentage).
+      - Cocher éventuellement « Frais exigés avant décaissement » pour bloquer le décaissement tant que les frais dus ne sont pas encaissés.
+      - Enregistrer.
+    tips: >
+      Les journaux de décaissement/remboursement/frais sont pré-remplis par défaut avec
+      le journal de code CRE de la société.
+    errors: >
+      Frais de dossier négatifs (montant ou taux) : « Les frais de dossier ne peuvent pas
+      être négatifs. »
+    answer: >
+      <p>Dans l'onglet « Comptabilité » du produit de crédit (Microfinance >
+      Configuration > Produits de crédit), choisissez les journaux de décaissement, de
+      remboursement et de frais (domaine banque ou caisse, pré-remplis par défaut avec le
+      journal de code CRE de la société), puis renseignez le type et le montant des frais
+      de dossier. L'option « Frais exigés avant décaissement » bloque le décaissement tant
+      que les frais dus ne sont pas encaissés.</p>
+    keywords:
+      - journal
+      - frais de dossier
+      - décaissement
+      - remboursement
+    source_reference: microfinance_loan_management
+    see_also:
+      - creation_produit_credit-001
+      - creation_produit_credit-faq-001
+    # (couvre : journaux décaissement/remboursement/frais, frais de dossier)
+
+  - id: creation_produit_credit-004
+    title: Configurer l'éligibilité et les pénalités d'un produit de crédit
+    category: Produit de crédit
+    roles:
+      - gestionnaire
+    questions:
+      - Comment configurer l'éligibilité d'un produit de crédit ?
+      - Comment paramétrer les pénalités de retard d'un produit de crédit ?
+    menu: Microfinance > Configuration > Produits de crédit
+    model: microfinance.loan.product
+    steps:
+      - Ouvrir le produit de crédit sur Microfinance > Configuration > Produits de crédit, onglet « Éligibilité ».
+      - Renseigner l'ancienneté minimum du client (en jours).
+      - Autoriser ou non un 2ᵉ crédit actif, et bloquer le 2ᵉ crédit si le 1ᵉʳ a des arriérés (option visible seulement si le 2ᵉ crédit est autorisé).
+      - Dans l'onglet « Pénalités », choisir le type de pénalité (montant fixe ou pourcentage) et la valeur associée.
+      - Enregistrer.
+    errors: >
+      Ancienneté minimum négative : « L'ancienneté minimum ne peut pas être négative. »
+    answer: >
+      <p>Dans l'onglet « Éligibilité » du produit de crédit (Microfinance >
+      Configuration > Produits de crédit), renseignez l'ancienneté minimum du client (en
+      jours) et indiquez si un 2ᵉ crédit actif est autorisé, avec un blocage possible si
+      le 1ᵉʳ crédit a des arriérés. Dans l'onglet « Pénalités », choisissez le type de
+      pénalité (montant fixe ou pourcentage) et la valeur associée.</p>
+    keywords:
+      - éligibilité
+      - ancienneté
+      - pénalité
+      - retard
+    source_reference: microfinance_loan_management
+    see_also:
+      - creation_produit_credit-001
+
+  - id: creation_produit_credit-005
+    title: Configurer le volet épargne d'un produit de crédit
+    category: Produit de crédit
+    roles:
+      - gestionnaire
+    questions:
+      - Comment activer le prélèvement automatique sur l'épargne pour un produit ?
+      - Comment configurer l'exigence d'épargne d'un produit de crédit ?
+    menu: Microfinance > Configuration > Produits de crédit
+    model: microfinance.loan.product
+    steps:
+      - Ouvrir le produit de crédit sur Microfinance > Configuration > Produits de crédit, onglet « Épargne » (ajouté par le module microfinance_savings_management).
+      - Cocher « Autoriser le prélèvement automatique sur épargne » si souhaité, puis renseigner le délai de grâce avant prélèvement et le respect ou non du solde minimum épargne.
+      - Choisir l'exigence d'épargne du produit (aucune / épargne cible pendant le crédit / apport initial) et sélectionner le produit d'épargne du programme.
+      - Renseigner le ratio d'épargne cible (%) et/ou le ratio d'apport (%) selon l'exigence choisie.
+      - Enregistrer (aucune contrainte serveur spécifique à ce sous-bloc, hors contraintes générales de montants/durées/taux).
+    tips: >
+      Les valeurs par défaut du volet épargne (ex. ratio d'épargne cible à 20 %) sont
+      documentées dans le code comme des hypothèses de configuration à valider avec
+      l'équipe métier, pas des constantes universelles. Le seuil de montant
+      (savings_amount_threshold) est purement informatif : seule l'exigence d'épargne
+      (savings_requirement_type) pilote le contrôle réel.
+    answer: >
+      <p>Dans l'onglet « Épargne » du produit de crédit (ajouté par le module
+      microfinance_savings_management), vous pouvez autoriser le prélèvement automatique
+      sur épargne (avec délai de grâce et respect du solde minimum), puis choisir
+      l'exigence d'épargne du programme (aucune, épargne cible pendant le crédit, ou
+      apport initial), le produit d'épargne associé, et les ratios d'épargne cible (défaut
+      20 %) et d'apport.</p>
+    keywords:
+      - épargne
+      - prélèvement automatique
+      - apport
+      - épargne cible
+    source_reference: microfinance_savings_management
+    see_also:
+      - creation_produit_credit-001
+
+faq:
+  - id: creation_produit_credit-faq-001
+    question: Où configurer les comptes comptables PCEC d'un produit de crédit ?
+    roles:
+      - gestionnaire
+      - comptable
+      - agent_credit
+    answer: >
+      <p>Les comptes comptables PCEC se configurent dans l'onglet « Comptabilité » du
+      produit de crédit (Microfinance > Configuration > Produits de crédit) : compte
+      principal, provisions, intérêts reçus/échus, arriérés déclassifiés, pénalités et
+      commissions, crédits en perte, ainsi que les comptes partagés (recouvrement,
+      commission crédit, pénalités, papeterie, surpaiement). Chaque famille de compte
+      existe en variante Individuel et Groupe. Ces comptes sont pré-remplis
+      automatiquement à l'ouverture d'un nouveau produit en recherchant, pour la société
+      active, le compte dont le code correspond au code PCEC attendu ; si le plan PCEC
+      n'est pas encore chargé pour la société, les champs concernés restent vides et
+      doivent être renseignés manuellement.</p>
+    keywords:
+      - compte
+      - PCEC
+      - comptabilité

@@ -8,6 +8,7 @@ import re
 import zipfile
 from io import BytesIO
 
+import odoo.modules
 import yaml
 from markupsafe import Markup
 
@@ -726,7 +727,13 @@ class MowgliKnowledgeSyncWizard(models.TransientModel):
         result = self.env["mowgli.knowledge.dataset.sync"].sync_datasets(
             options=self._get_sync_options()
         )
+        dev_stats = self.env["mowgli.dev.status.item"].sudo().sync_from_docs_dev()
         message = result.get("message")
+        if dev_stats.get("files_read"):
+            message = (message or "") + _(
+                "\n\n✓ Statuts dev synchronisés (docs_dev) : %(files_read)s fichier(s) lu(s), "
+                "%(items_created)s créé(s), %(items_updated)s mis à jour, %(errors)s erreur(s)."
+            ) % dev_stats
         if result.get("missing_configuration"):
             notification_type = "warning"
         elif not result.get("datasets"):
@@ -878,7 +885,12 @@ class MowgliKnowledgeDatasetSync(models.AbstractModel):
             .get_param("microfinance_mowgli_assistant.mowgli_dataset_path", "")
         )
         path = normalize_text(path)
-        return os.path.expandvars(os.path.expanduser(path)) if path else ""
+        if path:
+            return os.path.expandvars(os.path.expanduser(path))
+        # Aucun chemin externe configuré (personne n'a encore ouvert/enregistré
+        # Paramètres > MOWGLI) : repli sur le dossier datasets/ embarqué dans le
+        # module lui-même, portable sans configuration sur n'importe quel OS.
+        return odoo.modules.get_module_resource(MODULE_NAME, "datasets") or ""
 
     def _iter_dataset_paths(self, root):
         dataset_paths = []

@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(PGPASSWORD='rotas@135' psql -h 127.0.0.1 -p 5432 -U odoo -d CEFOR -c \"select name, state, latest_version from ir_module_module where name in \\('microfinance_mowgli_assistant','microfinance_loan_management','microfinance_savings_management'\\);\")"
+    ]
+  }
+}

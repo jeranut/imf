@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 import html
+import re
 import uuid
 
 from markupsafe import Markup
 
 from odoo import api, models
+
+DEV_COMMAND_RE = re.compile(r"^/(todo|done)\b\s*(.*)$", re.I)
 
 MODULE_NAME = "microfinance_mowgli_assistant"
 BOT_NAME = "MOWGLI — Microfinance Operations With Generative Learning Intelligence"
@@ -305,4 +308,28 @@ class MowgliBotAssistant(models.AbstractModel):
 
     @api.model
     def render_reply(self, question, user=None):
+        dev_reply = self._maybe_render_dev_command(question, user=user)
+        if dev_reply is not None:
+            return dev_reply
         return self.env["mowgli.knowledge.article"].sudo().render_knowledge_reply(question, user=user)
+
+    @api.model
+    def _maybe_render_dev_command(self, question, user=None):
+        # Commandes /todo et /done : réservées à group_mowgli_developer. Un utilisateur
+        # métier CEFOR ne doit jamais savoir que ces commandes existent : si non autorisé,
+        # on renvoie None pour que render_reply() retombe sur le flux normal de recherche
+        # de connaissance métier, exactement comme pour n'importe quelle autre question.
+        user = user or self.env.user
+        match = DEV_COMMAND_RE.match((question or "").strip())
+        if not match:
+            return None
+        # Vérification directe sur groups_id du destinataire (et non via has_group(),
+        # qui teste self.env.user — pas fiable ici puisque render_reply() est toujours
+        # invoqué en sudo() et peut recevoir un "user" différent de l'utilisateur courant
+        # de l'environnement).
+        dev_group = self.env.ref("%s.group_mowgli_developer" % MODULE_NAME, raise_if_not_found=False)
+        if not user or not dev_group or dev_group not in user.sudo().groups_id:
+            return None
+        command = match.group(1).lower()
+        workflow_filter = match.group(2).strip() or False
+        return self.env["mowgli.dev.status.item"].sudo().render_command_reply(command, workflow_filter)

@@ -17,8 +17,10 @@ nettoyage de l'historique MOWGLI utilisateur.
     'license': 'LGPL-3',
     'depends': ['base', 'mail', 'web', 'web_responsive'],
     'data': [
+        'security/groups.xml',
         'security/ir.model.access.csv',
         'views/knowledge_views.xml',
+        'views/dev_status_views.xml',
         'views/res_config_settings_views.xml',
     ],
     'assets': {

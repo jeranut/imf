@@ -20,3 +20,4 @@ access_mowgli_knowledge_link_admin,mowgli.knowledge.link admin,model_mowgli_know
 access_mowgli_knowledge_unanswered_user,mowgli.knowledge.unanswered.question user,model_mowgli_knowledge_unanswered_question,base.group_user,1,0,0,0
 access_mowgli_knowledge_unanswered_admin,mowgli.knowledge.unanswered.question admin,model_mowgli_knowledge_unanswered_question,base.group_system,1,1,1,1
 access_mowgli_knowledge_sync_wizard_admin,mowgli.knowledge.sync.wizard admin,model_mowgli_knowledge_sync_wizard,base.group_system,1,1,1,1
+access_mowgli_dev_status_item_developer,mowgli.dev.status.item developer,model_mowgli_dev_status_item,group_mowgli_developer,1,1,0,0
