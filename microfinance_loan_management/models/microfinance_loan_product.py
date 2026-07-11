@@ -16,6 +16,17 @@ def _pcec_default(code):
     return _default
 
 
+def _journal_default(code):
+    """Défaut calculé pour un champ account.journal : recherche par code + société (les
+    journaux créés par post_init_hook sont dupliqués par société, jamais référencés par ID
+    statique)."""
+    def _default(self):
+        return self.env['account.journal'].search([
+            ('code', '=', code), ('company_id', '=', self.env.company.id),
+        ], limit=1)
+    return _default
+
+
 class MicrofinanceLoanProduct(models.Model):
     _name = 'microfinance.loan.product'
     _description = 'Produit de crédit microfinance'
@@ -67,8 +78,14 @@ class MicrofinanceLoanProduct(models.Model):
     ], string='Type de pénalité', default='fixed', required=True)
     penalty_amount = fields.Monetary(string='Pénalité fixe', default=0.0)
     penalty_rate = fields.Float(string='Taux pénalité (%)', default=0.0)
-    disbursement_journal_id = fields.Many2one('account.journal', string='Journal décaissement', domain="[('type', 'in', ('bank','cash'))]")
-    payment_journal_id = fields.Many2one('account.journal', string='Journal remboursement', domain="[('type', 'in', ('bank','cash'))]")
+    disbursement_journal_id = fields.Many2one(
+        'account.journal', string='Journal décaissement', domain="[('type', 'in', ('bank','cash'))]",
+        default=_journal_default('CRE'),
+    )
+    payment_journal_id = fields.Many2one(
+        'account.journal', string='Journal remboursement', domain="[('type', 'in', ('bank','cash'))]",
+        default=_journal_default('CRE'),
+    )
 
     # --- Comptabilité : Principal ---
     account_principal_individuel_id = fields.Many2one(
@@ -260,6 +277,7 @@ class MicrofinanceLoanProduct(models.Model):
     fee_rate = fields.Float(string='Taux de frais (%)', default=0.0)
     fee_journal_id = fields.Many2one(
         'account.journal', string='Journal encaissement frais', domain="[('type', 'in', ('bank','cash'))]",
+        default=_journal_default('CRE'),
         help='Journal utilisé pour encaisser les frais de dossier, distinct des journaux de '
              'décaissement/remboursement si l\'institution le souhaite (peut être identique à l\'un des deux).',
     )

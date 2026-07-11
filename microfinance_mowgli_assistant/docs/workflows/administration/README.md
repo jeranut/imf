@@ -4,7 +4,7 @@
 
 Paramétrage transverse du crédit, hors création des produits eux-mêmes : périodicités de remboursement (`microfinance.repayment.frequency`), règles de provisionnement selon l'ancienneté des arriérés (`microfinance.provision.rule`), cloisonnement multi-société/multi-agence (`ir.rule`), numérotation automatique (séquences), tâches planifiées (cron) et hook d'installation qui crée les sous-comptes et journaux PCEC dédiés.
 
-Ce workflow ne couvre **pas** : la création des produits de crédit/épargne eux-mêmes (voir `creation_produit_credit` et `creation_produit_epargne`), ni la gestion des utilisateurs et l'attribution des groupes (voir `gestion_utilisateurs`). Le plan comptable PCEC lui-même est fourni par le module externe `plan_compta_pcec`, non une dépendance dure de `microfinance_loan_management` ; il n'est mentionné ici que parce que le hook d'installation y fait explicitement référence.
+Ce workflow ne couvre **pas** : la création des produits de crédit/épargne eux-mêmes (voir `creation_produit_credit` et `creation_produit_epargne`), ni la gestion des utilisateurs et l'attribution des groupes (voir `gestion_utilisateurs`). Le plan comptable PCEC lui-même est fourni par le module externe `plan_compta_pcec` ; le hook d'installation (section 4) y fait référence pour créer les comptes et journaux dédiés d'une société qui l'utilise.
 
 ## 2. Utilisateurs concernés
 
@@ -19,7 +19,7 @@ Ce workflow ne couvre **pas** : la création des produits de crédit/épargne eu
 - Microfinance > Configuration > Périodicités de remboursement (`menu_microfinance_root` > `menu_microfinance_config` > `menu_microfinance_repayment_frequency`).
 - Microfinance > Configuration > Règles de provisionnement (`menu_microfinance_root` > `menu_microfinance_config` > `menu_microfinance_provision_rule`).
 - `menu_microfinance_config` n'est visible que pour le groupe `group_microfinance_manager` (attribut `groups` du `<menuitem>`).
-- Les séquences (`ir.sequence`) et tâches planifiées (`ir.cron`) ne disposent d'aucun menu propre aux modules Microfinance ; elles se gèrent via les menus techniques standard d'Odoo (Réglages > Technique), hors périmètre des vues auditées ici.
+- Les séquences (`ir.sequence`) et tâches planifiées (`ir.cron`) ne disposent d'aucun menu propre aux modules Microfinance ; elles se gèrent via les menus techniques standard d'Odoo (Réglages > Technique).
 
 ## 4. Étapes principales
 
@@ -58,7 +58,7 @@ L'action serveur `action_server_microfinance_post_provisions` (« Comptabiliser 
 
 - **Unicité du code de périodicité** : contrainte SQL `unique(code)` sur `microfinance.repayment.frequency`.
 - **`period_value` positif** : `@api.constrains('period_value')` lève une erreur si `period_value <= 0`.
-- **`microfinance.repayment.frequency` n'a pas de champ `company_id`** : les périodicités sont partagées globalement entre toutes les sociétés/agences (pas de cloisonnement possible sur ce modèle, confirmé par l'absence de `ir.rule` le ciblant).
+- **Les périodicités de remboursement sont communes à toutes les sociétés/agences** : `microfinance.repayment.frequency` n'a pas de champ Société, il n'y a donc pas de cloisonnement par agence sur ce modèle.
 - **Tranches de provisionnement non chevauchantes** : `@api.constrains('min_days', 'max_days', 'company_id')` (`_check_no_overlap`) compare chaque règle à ses « siblings » de la même société et lève une erreur en cas de chevauchement.
 - **Bornes de `microfinance.provision.rule`** : `min_days >= 0`, `max_days` (si non nul) `>= min_days`, `provision_rate` entre 0 et 100 (`_check_values`).
 - **`company_id` par défaut = société courante** (`env.company`) : chaque société doit paramétrer ses propres tranches ; les données de démonstration (`provision_rules_data.xml`) ne préchargent des tranches indicatives (0-30j : 0%, 31-60j : 25%, 61-90j : 50%, 91-180j : 75%, 181j+ : 100%) que pour `base.main_company`, avec le commentaire explicite : « chaque société additionnelle configure les siennes ».
@@ -66,11 +66,10 @@ L'action serveur `action_server_microfinance_post_provisions` (« Comptabiliser 
 - **Tâches planifiées (`data/cron.xml`)** : `cron_update_overdue_and_penalties` (quotidien, actif par défaut) applique les pénalités aux échéances `pending`/`partial`/`overdue` puis recalcule silencieusement le scoring des crédits `active`. `cron_post_provisions` (mensuel) appelle `action_post_provisions()` sur les crédits `active`/`defaulted`, mais est **inactif par défaut** (`active = False`) : doit être activé manuellement pour s'exécuter automatiquement.
 - **`action_post_provisions`** (`microfinance_loan.py`) : pour chaque crédit sélectionné à l'état `active` ou `defaulted`, calcule l'écart entre `provision_amount` (dû) et `provision_posted_amount` (déjà comptabilisé), ignore les écarts inférieurs à 0.01, crée et poste une écriture comptable (`account.move`) par crédit, puis met à jour `provision_posted_amount` et journalise l'opération dans le chatter.
 - **Hook d'installation `post_init_hook`** : ne s'applique qu'aux sociétés dont `chart_template == 'mg_pcec'` ; crée les sous-comptes PCEC dédiés de `LOAN_NEW_SUBACCOUNTS` (un compte par segment Individuel/Groupe) puis les 7 journaux de `JOURNALS` (BQOP, BQEP, BQCR, CAI, CRE, EPG, OD), de façon idempotente (`search_count` avant `create`, aucune duplication en cas de ré-exécution).
-- **Cloisonnement multi-société (`ir.rule`, `groups=[]`) — non contournable par groupe** : les règles définies dans `microfinance_loan_management/security/microfinance_company_rules.xml` et `microfinance_savings_management/security/microfinance_company_rules.xml` ont toutes `domain_force=[('company_id', 'in', company_ids)]` et `groups` vide, ce qui les applique à **tous** les utilisateurs internes sans exception, y compris les managers et les auditeurs. Modèles concernés, réellement présents dans ces deux fichiers :
+- **Cloisonnement multi-société (`ir.rule`, sans groupe cible) — s'applique à tous les utilisateurs, y compris managers et auditeurs** : les règles définies dans `microfinance_loan_management/security/microfinance_company_rules.xml` et `microfinance_savings_management/security/microfinance_company_rules.xml` limitent chaque utilisateur aux enregistrements de ses sociétés (`company_id in company_ids`), sans exception de groupe. Modèles concernés :
   - MLM : `microfinance.loan.product`, `microfinance.loan`, `microfinance.loan.installment`, `microfinance.loan.payment`, `microfinance.loan.guarantee`, `microfinance.guarantee.valuation.rule`, `microfinance.loan.reschedule.history` (par `company_id`), `microfinance.loan.reschedule.history.line` (par `history_id.company_id`, car ce modèle n'a pas son propre `company_id`), `microfinance.collection.visit`.
   - MSM : `microfinance.savings.product`, `microfinance.savings.account`, `microfinance.savings.transaction`.
-  - Une note dans le fichier MLM précise explicitement que `microfinance.loan.application` (dossier d'instruction) est volontairement omis de ce fichier car le modèle n'est pas câblé dans le registre Odoo (absent de `models/__init__.py`, d'`ir.model.access.csv` et de toute vue).
-  - À la différence de ces règles, les `ir.rule` de cloisonnement par société définies dans `groups.xml` (sur `microfinance.scoring.profile`, `microfinance.scoring.rule`, `microfinance.scoring.line` et `microfinance.provision.rule`) ciblent explicitement des groupes (`group_microfinance_user/manager/finance/auditor`) et non `groups=[]`.
+  - Les règles de cloisonnement par société définies dans `groups.xml` sur `microfinance.scoring.profile`, `microfinance.scoring.rule`, `microfinance.scoring.line` et `microfinance.provision.rule` ciblent en plus des groupes précis (`group_microfinance_user/manager/finance/auditor`), contrairement aux règles ci-dessus qui s'appliquent sans distinction de groupe.
 
 ## 8. Contrôles et blocages
 

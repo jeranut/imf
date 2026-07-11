@@ -12,7 +12,7 @@ D'après `security/ir.model.access.csv` et le bouton `action_reschedule` dans `m
 - **Gestionnaire** (`group_microfinance_gestionnaire`) : hérite de `group_microfinance_manager` via `implied_ids` (`security/groups.xml`), donc a également accès au bouton et au wizard.
 
 ## 3. Menus utilisés
-Aucun menu dédié : `reechelonnement` ne possède pas d'entrée dans `microfinance_menus.xml`. Vérification faite par recherche de `action_reschedule` dans `microfinance_loan_views.xml` : il n'apparaît que comme bouton `type="object"` dans le formulaire de `microfinance.loan` (`view_microfinance_loan_form`), pas comme action de menu.
+Aucun menu dédié : `reechelonnement` ne possède pas d'entrée dans `microfinance_menus.xml`. Le bouton **Rééchelonner** n'apparaît que dans le formulaire de `microfinance.loan` (`view_microfinance_loan_form`), pas comme action de menu.
 L'accès se fait donc uniquement en ouvrant une fiche crédit existante via le menu du workflow `dossier_precredit` :
 `Microfinance > Crédits > Demande de crédit` (`menu_microfinance_root` > `menu_credits_root` > `menu_microfinance_loans`, action `action_microfinance_loan`), puis en cliquant sur le bouton **Rééchelonner** visible dans l'en-tête de la fiche crédit lorsque `state = 'active'`.
 

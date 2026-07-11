@@ -1,10 +1,10 @@
 # Workflow Dossier précrédit
 
 ## 1. Objectif métier
-Ce workflow couvre, tel qu'actif dans l'instance MOWGLI aujourd'hui, deux volets :
-**(A)** l'instruction/validation d'un crédit avant décaissement, portée directement par `microfinance.loan` à travers ses états `draft` → `submitted` → `manager_validated` → `finance_validated` → `approved` (le décaissement lui-même, `action_disburse`, appartient au workflow `comptabilite`) ;
+Ce workflow couvre deux volets :
+**(A)** l'instruction/validation d'un crédit avant décaissement, portée par `microfinance.loan` à travers ses états `draft` → `submitted` → `manager_validated` → `finance_validated` → `approved` (le décaissement lui-même, `action_disburse`, appartient au workflow `comptabilite`) ;
 **(B)** la qualification/vetting du client, gérée depuis la fiche partenaire (`res.partner`) : catégories de classification, liste noire, représentants/comité et membres de groupe.
-**Important** : le code contient un modèle bien plus riche et dédié à l'instruction de crédit, `microfinance.loan.application` (enquête terrain, analyse financière, comité, avis CA/CDAG, acceptation sous condition), mais ce modèle **n'est pas activé** dans l'instance actuelle (non importé dans le registre Odoo — voir section 5 « Code présent mais non activé »). Il est documenté ici à titre d'inventaire du code, jamais comme fonctionnalité utilisable. Ce workflow ne couvre pas le décaissement, les remboursements ni la comptabilité (voir `comptabilite`), ni le recouvrement des impayés (voir `par_reporting`), ni les garanties/scoring (voir `garanties_scoring`).
+Ce workflow ne couvre pas le décaissement, les remboursements ni la comptabilité (voir `comptabilite`), ni le recouvrement des impayés (voir `par_reporting`), ni les garanties/scoring (voir `garanties_scoring`).
 
 ## 2. Utilisateurs concernés
 D'après `security/groups.xml` et les `groups=` des boutons de `microfinance_loan_views.xml` :
@@ -17,7 +17,7 @@ D'après `security/groups.xml` et les `groups=` des boutons de `microfinance_loa
 
 ## 3. Menus utilisés
 Chemins reconstruits depuis `microfinance_menus.xml` et `microfinance_partner_views.xml` :
-- `Microfinance > Clients` (`menu_clients_root`, parent `menu_microfinance_root`, action `action_microfinance_client` — ouvre `res.partner` en tree/form/kanban avec contexte `microfinance_context: True`). C'est ici que sont gérées les fiches client, y compris les entités de qualification (catégories, liste noire, représentants, membres de groupe), embarquées comme listes éditables dans le formulaire partenaire — **aucun menu séparé** n'existe pour `microfinance.client.category`, `microfinance.client.blacklist`, `microfinance.client.representative` ou `microfinance.client.group.member` (vérifié : ces modèles n'apparaissent dans aucun `<menuitem>`).
+- `Microfinance > Clients` (`menu_clients_root`, parent `menu_microfinance_root`, action `action_microfinance_client` — ouvre `res.partner` en tree/form/kanban avec contexte `microfinance_context: True`). C'est ici que sont gérées les fiches client, y compris les entités de qualification (catégories, liste noire, représentants, membres de groupe), embarquées comme listes éditables dans le formulaire partenaire — aucun menu séparé n'existe pour `microfinance.client.category`, `microfinance.client.blacklist`, `microfinance.client.representative` ou `microfinance.client.group.member`.
 - `Microfinance > Crédits > Demande de crédit` (`menu_credits_root` parent `menu_microfinance_root` ; `menu_microfinance_loans` parent `menu_credits_root`, action `action_microfinance_loan`) : ouvre la liste/formulaire de `microfinance.loan`, où se déroule tout le cycle draft → approved.
 
 ## 4. Étapes principales
@@ -55,24 +55,13 @@ Chemins reconstruits depuis `microfinance_menus.xml` et `microfinance_partner_vi
 - `microfinance_category_1/2/3` : catégories de classification (Many2one vers `microfinance.client.category`).
 - `microfinance_exit_date`, `microfinance_exit_reason` : sortie du client.
 - `microfinance_blacklist_ids` (Liste noire) : One2many vers `microfinance.client.blacklist` (champs `date_start`, `date_end`, `reason`, `active`).
-- `microfinance_is_blacklisted` (calculé, stocké) : vrai si au moins une entrée de liste noire est `active` et non expirée (`date_end` vide ou ≥ aujourd'hui). **Constat de vérification** : ce champ est uniquement informatif — aucune contrainte ni contrôle dans `microfinance_loan.py` ou `microfinance_loan_product.py` ne bloque la création/soumission d'un crédit pour un client blacklisté.
+- `microfinance_is_blacklisted` (calculé, stocké) : vrai si au moins une entrée de liste noire est `active` et non expirée (`date_end` vide ou ≥ aujourd'hui). Ce champ est informatif : il n'empêche pas en lui-même la création ou la soumission d'un crédit pour le client concerné.
 - `microfinance_representative_ids` (Comité) : One2many vers `microfinance.client.representative` (société/groupe).
 - `microfinance_member_ids` (Membres du groupe) : One2many vers `microfinance.client.group.member` (groupe uniquement).
 - Champs d'identification particulier : `microfinance_id_type`, `microfinance_id_number` (avec contrainte CIN, voir section 7), `microfinance_birthdate`, `microfinance_gender`, `microfinance_marital_status`, `microfinance_profession`.
 - Champs société : `microfinance_nif` (avec contrainte, voir section 7), `microfinance_stat`, `microfinance_rcs`, `microfinance_enterprise_type`, `microfinance_share_capital`, `microfinance_estimated_turnover`.
 - `microfinance_loan_ids` / `microfinance_loan_count` : crédits liés au partenaire, avec bouton statistique et onglet **Crédit** dédié.
 - Module épargne (`microfinance_savings_management/models/res_partner.py`) : `microfinance_savings_account_ids` / `microfinance_savings_count`, bouton statistique **Épargne**.
-
-### Code présent mais non activé (non importé dans `models/__init__.py`, aucune vue/menu/droit d'accès)
-Champs de `microfinance.loan.application` (`microfinance_loan_application.py`), regroupés en blocs A à F dans le fichier source :
-- En-tête : `name`, `application_date`, `surveyor_id` (Enquêteur), `ca_responsible_id` (Chargé de compte responsable), `partner_id`, `loan_sequence_number` (Rang de prêt, calculé), `is_first_loan`, `loan_tier_id`/`loan_tier_label` (Palier de prêt, via le modèle également non câblé `microfinance.loan.application.tier`), `loan_id` (Crédit créé une fois transformé).
-- Bloc A — Identité complète (KYC figée à l'enquête) : `partner_surname`, `partner_id_card_number`, `partner_current_address`, `partner_fokontany`, `partner_housing_status`, données du conjoint (`spouse_*`), `dependent_ids`, `guarantor_line_ids`, `document_line_ids`.
-- Bloc B — Analyse de viabilité de l'activité : `activity_description`, `activity_sector`, `sale_location_status/type/enclosed`, `formalization_level`, `has_existing_debt`, `debt_amount`, etc.
-- Bloc C — Analyse financière : `income_line_ids`, `safety_margin_current/forecast`, totaux calculés (`total_family_income_current/forecast`, `repayment_capacity_monthly/weekly_current/forecast`).
-- Bloc D — Visites terrain pré-octroi : `field_visit_ids`, `field_visit_count`.
-- Bloc E — Avis CA/CDAG : `requested_amount`, `ca_amount`, `cdag_amount`, `previous_loan_repayment_behavior`.
-- Bloc F — Catégorisation sociale : `social_score_ids`.
-- **Remarque supplémentaire de vérification** : plusieurs de ces One2many (`dependent_ids`, `guarantor_line_ids`, `document_line_ids`, `income_line_ids`, `field_visit_ids`, `social_score_ids`) et le wizard cité par `action_create_loan` (`microfinance.loan.application.create.loan.wizard`) référencent des modèles co-modèles qui ne sont définis nulle part ailleurs dans le module (recherche exhaustive sans résultat) : même en imaginant ce fichier importé, le module ne se chargerait pas correctement sans ces définitions manquantes.
 
 ## 6. Boutons et actions
 
@@ -87,9 +76,6 @@ Champs de `microfinance.loan.application` (`microfinance_loan_application.py`), 
 ### (B) Fiche partenaire (`microfinance_partner_views.xml`)
 - `action_view_microfinance_loans` — bouton statistique **Crédit** (`oe_stat_button`), `invisible="not context.get('microfinance_context')"`.
 - `action_view_microfinance_savings` (module épargne) — bouton statistique **Épargne**, même condition.
-
-### Code présent mais non activé
-Boutons d'étape de `microfinance.loan.application` (existent dans le code Python comme méthodes, aucune vue XML ne les expose donc aucun bouton visible en pratique) : `action_start_field_survey`, `action_start_analysis`, `action_submit_committee`, `action_ca_review`, `action_cdag_review`, `action_accept`, `action_accept_condition`, `action_refuse`, `action_reset_to_draft`, `action_sync_partner`, `action_create_loan`, `action_view_loan`.
 
 ## 7. Règles métier
 
@@ -107,11 +93,8 @@ Dérivées de `_check_eligibility()` (appelée par `action_submit`, `microfinanc
 - `_check_microfinance_company_required` (`@api.constrains`) : la société (agence, `company_id`) est obligatoire pour un client créé en contexte microfinance (`microfinance_context`).
 - `_check_cin_format` (`@api.constrains`) : si `microfinance_id_type == 'cin'`, le numéro de pièce d'identité doit contenir exactement 12 chiffres (les caractères non numériques sont ignorés dans le comptage).
 - `_check_nif_format` (`@api.constrains`) : pour un client de type `company`, le NIF doit contenir exactement 12 chiffres.
-- `_compute_microfinance_is_blacklisted` : calcul automatique et stocké, dépendant de `microfinance_blacklist_ids.active` et `.date_end` (voir section 5, non bloquant).
+- `_compute_microfinance_is_blacklisted` : calcul automatique et stocké, dépendant de `microfinance_blacklist_ids.active` et `.date_end` (voir section 5).
 - `_onchange_microfinance_client_type` : synchronise `is_company` natif Odoo (`True` pour société/groupe) au changement de `microfinance_client_type`.
-
-### Code présent mais non activé
-Règles de `microfinance.loan.application` (jamais exécutées dans l'instance actuelle) : machine à états stricte via `ALLOWED_TRANSITIONS` (dictionnaire de transitions autorisées par état) et `STATE_TARGET_GROUP` (rôle minimum requis par état cible, contrôlé dans `write()`/`_check_state_transition`) ; contrôle d'éligibilité au comité (`_check_committee_eligibility`, sans effet pour un premier prêt) ; calcul du rang de prêt (`loan_sequence_number`) à partir des crédits antérieurs décaissés du même partenaire ; calcul du palier de prêt (`loan_tier_id`/`loan_tier_label`) ; totaux financiers automatiques (`_compute_financial_totals`, majorations de sécurité 5%/10% sur les dépenses familiales).
 
 ## 8. Contrôles et blocages
 
@@ -131,12 +114,9 @@ Règles de `microfinance.loan.application` (jamais exécutées dans l'instance a
 - *« Le numéro de CIN doit contenir exactement 12 chiffres. »*
 - *« Le NIF doit contenir exactement 12 chiffres. »*
 
-### Code présent mais non activé
-*« Transition invalide : impossible de passer de "X" à "Y". Étape(s) suivante(s) possible(s) : ... »* et *« Vous n'avez pas le rôle requis pour amener un dossier à l'étape "X". »* (`microfinance.loan.application._check_state_transition`) : ces messages n'apparaîtront jamais dans l'instance actuelle puisque le modèle n'est pas chargé.
-
 ## 9. Statuts
 
-### (A) `microfinance.loan.state` (champ réel, actif)
+### `microfinance.loan.state`
 Selection (`microfinance_loan.py` ~L39-50), `statusbar_visible="draft,submitted,manager_validated,finance_validated,approved,active,closed,defaulted,written_off"` :
 | Valeur | Libellé | Déclenché par |
 |---|---|---|
@@ -149,10 +129,7 @@ Selection (`microfinance_loan.py` ~L39-50), `statusbar_visible="draft,submitted,
 | `closed` | Clôturé | `action_close` (hors périmètre) |
 | `defaulted` | Défaut | `action_mark_default` (hors périmètre — workflow `par_reporting`) |
 | `written_off` | Radié | `action_write_off`/`action_confirm_write_off` (hors périmètre) |
-| `cancelled` | Annulé | Non visible dans la barre de statut (`statusbar_visible` ne le liste pas) ; aucune méthode `action_*` trouvée dans le périmètre lu qui l'atteigne — À compléter |
-
-### Code présent mais non activé — `microfinance.loan.application.state`
-Selection définie dans le fichier (jamais instanciable dans l'instance actuelle) : `draft` (Brouillon) → `field_survey` (Enquête terrain) → `analysis` (Analyse) → `committee` (Soumis comité) → `ca_review` (Avis CA) → `cdag_review` (Avis CDAG) → `accepted` (Accepté) / `accepted_condition` (Accepté sous condition) / `refused` (Refusé) → `loan_created` (Transformé en crédit), avec transitions strictement encadrées par `ALLOWED_TRANSITIONS`.
+| `cancelled` | Annulé | À compléter |
 
 ## 10. Rapports ou PDF
 Aucun rapport dédié à ce jour pour l'instruction du dossier crédit (`microfinance.loan` avant décaissement) ni pour les entités de qualification client. Le reçu de décaissement (`microfinance_loan_disbursement_receipt.xml`) existe mais appartient au workflow `comptabilite` (imprimable seulement une fois le crédit décaissé).
@@ -192,9 +169,6 @@ Aucun indicateur spécifique à l'instruction précrédit ou à la qualification
 
 Cloisonnement multi-société : `microfinance_loan_company_rule` (`security/microfinance_company_rules.xml`) restreint `microfinance.loan` à `company_id in company_ids`, sans groupe ciblé (`groups=[]`), donc appliqué à tous les utilisateurs internes sans exception.
 
-### `microfinance.loan.application` — Aucun menu / Aucun droit d'accès : modèle non câblé dans le registre Odoo
-Vérification faite dans `ir.model.access.csv` (aucune ligne `model_microfinance_loan_application*`) et dans `security/microfinance_company_rules.xml`, dont le commentaire (L23-27) confirme explicitement : *« microfinance.loan.application (dossier d'instruction) n'est pas encore câblé dans le module (absent de models/__init__.py, d'ir.model.access.csv et de toute vue) : le modèle n'existe pas dans le registre Odoo tant que cet import manque. »* Les groupes référencés dans le code (`group_application_surveyor`, `group_application_ca`, `group_application_cdag`) ne sont définis nulle part dans `security/groups.xml` ni ailleurs : ce ne sont que des chaînes de référence externe (`XML-ID`) qui échoueraient si le code tentait de les résoudre.
-
 ## 13. Cas d'utilisation complets
 1. **Instruction complète d'un crédit standard** : l'agent crédit ouvre `Microfinance > Crédits > Demande de crédit`, crée un nouveau crédit, sélectionne `partner_id` et `product_id`, saisit `loan_amount` et `term`, clique sur **Soumettre** (passe en `submitted`, score calculé automatiquement). Le manager ouvre le crédit et clique sur **Valider manager** (`manager_validated`). L'utilisateur finance clique sur **Valider finance** (`finance_validated`). Le manager clique sur **Approuver** (`approved`, `approval_date` renseignée). Le crédit est prêt pour le décaissement (workflow `comptabilite`).
 2. **Création d'une fiche client société avec comité** : l'agent ouvre `Microfinance > Clients`, crée une fiche, choisit `microfinance_client_type = 'company'`, renseigne `microfinance_nif` (12 chiffres, sinon `ValidationError`), remplit les blocs Identité légale / Activité et finances / Localisation étendue, puis ajoute des lignes dans **Comité** (représentant légal, président, etc.) via `microfinance_representative_ids`.
@@ -209,11 +183,11 @@ Vérification faite dans `ir.model.access.csv` (aucune ligne `model_microfinance
 - Boutons de validation absents pour l'utilisateur connecté — vérifier son groupe (`group_microfinance_manager`/`group_microfinance_finance`) et l'état courant du crédit.
 
 ## 15. Bonnes pratiques
-- Vérifier `microfinance_is_blacklisted` sur la fiche client avant de soumettre un crédit : le champ existe et est visible, mais n'étant pas un contrôle bloquant dans le code, sa vérification reste manuelle à ce jour.
+- Vérifier `microfinance_is_blacklisted` sur la fiche client avant de soumettre un crédit : le champ existe et est visible, mais sa vérification reste manuelle à ce jour.
 - Générer l'échéancier prévisionnel (`action_generate_schedule`) avant soumission pour visualiser l'impact réel du `term` et de la `repayment_frequency_id` choisis, plutôt qu'après approbation.
 - Compléter les catégories de classification (`microfinance_category_1/2/3`) et les données d'identité dès la création de la fiche client, car plusieurs contraintes (`_check_cin_format`, `_check_nif_format`) ne se déclenchent qu'à l'enregistrement — mieux vaut les découvrir immédiatement qu'au moment de soumettre un crédit.
-- Pour les clients de type Groupe, renseigner systématiquement `microfinance_member_ids` (avec `income` et `planned_periodic_savings`) : ce sont les seules données structurées disponibles sur les membres, en l'absence du module d'enquête terrain plus riche (`microfinance.loan.application`, non activé).
-- Ne pas confondre le cycle actif (`microfinance.loan.state`) avec les états riches lus dans `microfinance_loan_application.py` (enquête terrain, comité, avis CA/CDAG) : ces derniers ne sont pas disponibles dans l'instance et ne doivent pas être évoqués comme une fonctionnalité existante auprès des utilisateurs.
+- Pour les clients de type Groupe, renseigner systématiquement `microfinance_member_ids` (avec `income` et `planned_periodic_savings`) : ce sont les seules données structurées disponibles sur les membres du groupe.
+- Ne pas confondre les étapes de validation du crédit (`microfinance.loan.state`) avec la qualification du client sur la fiche partenaire : ce sont deux volets distincts de la constitution du dossier précrédit, chacun avec son propre cycle.
 
 ## 16. Questions/Réponses MOWGLI potentielles
 1. Comment soumettre un nouveau dossier de crédit pour validation ?
@@ -224,5 +198,5 @@ Vérification faite dans `ir.model.access.csv` (aucune ligne `model_microfinance
 6. Le système bloque-t-il automatiquement les crédits pour un client blacklisté ?
 7. Quelles sont les étapes de validation d'un crédit chez MOWGLI, de la création au décaissement ?
 8. Comment corriger une erreur de format sur le NIF ou le CIN d'un client ?
-9. Existe-t-il un module d'enquête terrain avec comité et avis CA/CDAG dans MOWGLI ?
+9. Comment générer l'échéancier prévisionnel d'un crédit avant de le soumettre ?
 10. Que signifie chaque état de la barre de statut d'un crédit (brouillon, soumis, validé manager...) ?

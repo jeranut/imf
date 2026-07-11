@@ -1,0 +1,22 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_mowgli_knowledge_workflow_user,mowgli.knowledge.workflow user,model_mowgli_knowledge_workflow,base.group_user,1,0,0,0
+access_mowgli_knowledge_workflow_admin,mowgli.knowledge.workflow admin,model_mowgli_knowledge_workflow,base.group_system,1,1,1,1
+access_mowgli_knowledge_category_user,mowgli.knowledge.category user,model_mowgli_knowledge_category,base.group_user,1,0,0,0
+access_mowgli_knowledge_category_admin,mowgli.knowledge.category admin,model_mowgli_knowledge_category,base.group_system,1,1,1,1
+access_mowgli_knowledge_article_user,mowgli.knowledge.article user,model_mowgli_knowledge_article,base.group_user,1,0,0,0
+access_mowgli_knowledge_article_admin,mowgli.knowledge.article admin,model_mowgli_knowledge_article,base.group_system,1,1,1,1
+access_mowgli_knowledge_keyword_user,mowgli.knowledge.keyword user,model_mowgli_knowledge_keyword,base.group_user,1,0,0,0
+access_mowgli_knowledge_keyword_admin,mowgli.knowledge.keyword admin,model_mowgli_knowledge_keyword,base.group_system,1,1,1,1
+access_mowgli_knowledge_question_user,mowgli.knowledge.question user,model_mowgli_knowledge_question,base.group_user,1,0,0,0
+access_mowgli_knowledge_question_admin,mowgli.knowledge.question admin,model_mowgli_knowledge_question,base.group_system,1,1,1,1
+access_mowgli_knowledge_image_user,mowgli.knowledge.image user,model_mowgli_knowledge_image,base.group_user,1,0,0,0
+access_mowgli_knowledge_image_admin,mowgli.knowledge.image admin,model_mowgli_knowledge_image,base.group_system,1,1,1,1
+access_mowgli_knowledge_video_user,mowgli.knowledge.video user,model_mowgli_knowledge_video,base.group_user,1,0,0,0
+access_mowgli_knowledge_video_admin,mowgli.knowledge.video admin,model_mowgli_knowledge_video,base.group_system,1,1,1,1
+access_mowgli_knowledge_document_user,mowgli.knowledge.document user,model_mowgli_knowledge_document,base.group_user,1,0,0,0
+access_mowgli_knowledge_document_admin,mowgli.knowledge.document admin,model_mowgli_knowledge_document,base.group_system,1,1,1,1
+access_mowgli_knowledge_link_user,mowgli.knowledge.link user,model_mowgli_knowledge_link,base.group_user,1,0,0,0
+access_mowgli_knowledge_link_admin,mowgli.knowledge.link admin,model_mowgli_knowledge_link,base.group_system,1,1,1,1
+access_mowgli_knowledge_unanswered_user,mowgli.knowledge.unanswered.question user,model_mowgli_knowledge_unanswered_question,base.group_user,1,0,0,0
+access_mowgli_knowledge_unanswered_admin,mowgli.knowledge.unanswered.question admin,model_mowgli_knowledge_unanswered_question,base.group_system,1,1,1,1
+access_mowgli_knowledge_sync_wizard_admin,mowgli.knowledge.sync.wizard admin,model_mowgli_knowledge_sync_wizard,base.group_system,1,1,1,1

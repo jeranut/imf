@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_mowgli" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.mowgli</field>
+        <field name="model">res.config.settings</field>
+        <field name="priority" eval="80"/>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="MOWGLI" string="MOWGLI" name="mowgli">
+                    <block title="Configuration MOWGLI" id="mowgli_settings">
+                        <setting string="Knowledge Base MOWGLI" help="Synchronisez les datasets métier validés depuis un dossier externe configurable.">
+                            <field name="mowgli_dataset_path" placeholder="/opt/mowgli-datasets"/>
+                            <button
+                                name="action_create_mowgli_dataset_tree"
+                                type="object"
+                                string="Créer l’arborescence datasets"
+                                icon="oi-folder"
+                                class="oe_link"
+                            />
+                            <button
+                                name="action_open_mowgli_sync"
+                                type="object"
+                                string="Synchroniser les datasets"
+                                icon="oi-arrow-right"
+                                class="oe_link"
+                            />
+                        </setting>
+                        <setting string="Recherche MOWGLI">
+                            <field name="mowgli_min_score"/>
+                        </setting>
+                        <setting string="Historique MOWGLI">
+                            <field name="mowgli_auto_clear_history"/>
+                            <field name="mowgli_clear_on_chat_close"/>
+                            <field name="mowgli_history_retention_days"/>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+</odoo>

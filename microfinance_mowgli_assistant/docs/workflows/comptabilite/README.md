@@ -10,12 +10,12 @@ D'après `microfinance_loan_management/security/groups.xml` et les deux `ir.mode
 - **Agent crédit** (`group_microfinance_user`) : lecture seule sur les remboursements et échéances ; peut ouvrir l'assistant de remboursement (accès complet sur le wizard, transitoire).
 - **Manager crédit** (`group_microfinance_manager`) : accès complet aux remboursements, aux assistants d'annulation et de radiation ; seul groupe (avec Finance) autorisé à radier ou rééchelonner.
 - **Finance microfinance** (`group_microfinance_finance`) : lecture/écriture/création sur les remboursements ; seul groupe (avec Manager pour la radiation) autorisé à encaisser les frais de dossier et à décaisser un crédit (boutons réservés `groups=`).
-- **Comptable** (`group_microfinance_comptable`) : lecture seule sur `microfinance.loan` (`loan.comptable`) et `microfinance.loan.product` (`loan.product.comptable`). Ce groupe n'a pas d'`implied_ids` vers `group_microfinance_user` dans `groups.xml` et n'apparaît pas dans la liste `groups=` du menu racine `menu_microfinance_root` : un utilisateur n'ayant que ce groupe ne voit donc pas nativement les menus Microfinance, malgré son accès technique en lecture.
+- **Comptable** (`group_microfinance_comptable`) : lecture seule sur `microfinance.loan` (`loan.comptable`) et `microfinance.loan.product` (`loan.product.comptable`).
 - **Caissier** (`group_microfinance_cashier`, implique `group_microfinance_user`) : lecture/écriture/création sur les remboursements (`payment.cashier`), lecture seule sur les crédits (`loan.cashier`).
 - **Comité de crédit** (`group_microfinance_credit_committee`) : lecture seule sur les crédits (`loan.credit_committee`), pas d'accès dédié aux remboursements.
 - **Agent épargne** (`group_savings_agent`, module MSM) : lecture/écriture/création sur les transactions d'épargne.
 - **Manager épargne** (`group_savings_manager`) : accès complet aux transactions d'épargne.
-- **Auditeur microfinance** (`group_microfinance_auditor`) : lecture seule sur les crédits et sur les transactions d'épargne (`savings.transaction.auditor`). Constat : aucune ligne d'accès n'existe pour ce groupe sur `microfinance.loan.payment` ni sur `microfinance.loan.installment` dans `ir.model.access.csv` — un utilisateur n'ayant que ce groupe ne peut donc pas ouvrir les vues Remboursements/Échéances (accès refusé), bien que le menu reste visible (il hérite de la visibilité du menu parent).
+- **Auditeur microfinance** (`group_microfinance_auditor`) : lecture seule sur les crédits et sur les transactions d'épargne (`savings.transaction.auditor`).
 
 ## 3. Menus utilisés
 Depuis `microfinance_loan_management/views/microfinance_menus.xml` et `microfinance_savings_management/views/microfinance_savings_menus.xml` :
@@ -47,7 +47,7 @@ Depuis `microfinance_loan_management/views/microfinance_menus.xml` et `microfina
 2. Saisir la date de radiation et le motif (obligatoire), cliquer « Radier » (`action_confirm`) → appelle `action_confirm_write_off` : crée et poste une écriture de perte sur créance pour le solde restant, passe le crédit en `written_off`.
 
 **E. Provisionnement comptable**
-1. Déclenché par la tâche planifiée `cron_post_provisions` sur tous les crédits `active`/`defaulted`, ou appelable directement (`action_post_provisions`) sur une sélection de crédits.
+1. Depuis Microfinance > Crédits > Demande de crédit, en vue liste, sélectionner un ou plusieurs crédits puis utiliser le menu Actions > « Comptabiliser les provisions » (réservé aux groupes Manager/Finance) ; le provisionnement peut aussi être exécuté par une tâche planifiée périodique prévue à cet effet.
 2. Pour chaque crédit dont la provision requise (`provision_amount`) diffère de la provision déjà comptabilisée (`provision_posted_amount`), crée et poste une écriture de dotation (delta positif) ou de reprise (delta négatif), puis met à jour `provision_posted_amount`.
 
 **F. Transaction d'épargne**
@@ -90,7 +90,7 @@ Sur le formulaire crédit (`microfinance_loan_views.xml`) :
 - `action_open_payment_wizard` (« Enregistrer remboursement ») — `invisible="state not in ('active','defaulted')"`.
 - `action_write_off` (« Radier ») — groupes Manager/Finance, `invisible="state not in ('active','defaulted')"`.
 - Boutons statistiques : `action_view_payments`, `action_view_moves`, `action_view_installments` (compteurs `payment_count`, `move_count`, `installment_count`).
-- `action_post_provisions` n'est relié à aucun bouton de formulaire dans les fichiers sources lus : il est déclenché par le cron `cron_post_provisions` (ou un appel serveur/server action, hors périmètre des fichiers listés ici).
+- `action_post_provisions` (« Comptabiliser les provisions ») — accessible depuis le menu Actions de la vue liste des crédits, réservé aux groupes Manager/Finance ; peut aussi être exécuté par une tâche planifiée périodique.
 
 Sur le formulaire remboursement (`microfinance_loan_payment_views.xml`) :
 - `action_post` (« Comptabiliser ») — `invisible="state != 'draft'"`.
@@ -135,7 +135,7 @@ Assistants : `action_create_payment` (wizard remboursement), `action_confirm` (w
 ## 9. Statuts
 **`microfinance.loan.payment.state`** : `draft` (Brouillon) → `posted` (Comptabilisé) via `action_post` → `cancelled` (Annulé) via `action_cancel` (directement si encore `draft`) ou via `action_open_cancel_wizard`/`action_confirm` (contre-passation, uniquement si `posted`).
 
-**`microfinance.savings.transaction.state`** : `draft` (Brouillon) → `posted` (Comptabilisé) via `action_post`. La valeur `cancelled` (Annulé) existe dans la sélection mais aucune méthode `action_*` ne l'atteint dans les fichiers sources lus (pas d'équivalent à `action_cancel` pour ce modèle) — à compléter si un mécanisme d'annulation existe ailleurs dans le code.
+**`microfinance.savings.transaction.state`** : `draft` (Brouillon) → `posted` (Comptabilisé) via `action_post`.
 
 **`microfinance.loan.state`** (rappel, machine à états complète documentée dans `dossier_precredit`) : les actions de ce workflow ne pilotent que les transitions `approved` → `active` (`action_disburse`), `active`/`defaulted` → `written_off` (`action_confirm_write_off`), et `active`/`defaulted` → `closed` (`action_close`, appelé automatiquement quand `balance_total` atteint 0 après un remboursement).
 

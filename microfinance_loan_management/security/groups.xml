@@ -28,6 +28,25 @@
         <field name="name">Auditeur microfinance</field>
         <field name="category_id" ref="module_category_microfinance"/>
     </record>
+    <record id="group_microfinance_comptable" model="res.groups">
+        <field name="name">Comptable</field>
+        <field name="category_id" ref="module_category_microfinance"/>
+    </record>
+    <record id="group_microfinance_cashier" model="res.groups">
+        <field name="name">Caissier</field>
+        <field name="category_id" ref="module_category_microfinance"/>
+        <field name="implied_ids" eval="[(4, ref('group_microfinance_user'))]"/>
+    </record>
+    <record id="group_microfinance_credit_committee" model="res.groups">
+        <field name="name">Comité de crédit</field>
+        <field name="category_id" ref="module_category_microfinance"/>
+        <field name="implied_ids" eval="[(4, ref('group_microfinance_user'))]"/>
+    </record>
+    <record id="group_microfinance_gestionnaire" model="res.groups">
+        <field name="name">Gestionnaire</field>
+        <field name="category_id" ref="module_category_microfinance"/>
+        <field name="implied_ids" eval="[(4, ref('group_microfinance_manager')), (4, ref('group_microfinance_finance'))]"/>
+    </record>
 
     <record id="rule_microfinance_scoring_profile_company" model="ir.rule">
         <field name="name">Scoring profiles by company</field>

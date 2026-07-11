@@ -21,7 +21,7 @@ Réglages > Utilisateurs et Sociétés > Utilisateurs (menu standard Odoo ; aucu
 1. Réglages > Utilisateurs et Sociétés > Utilisateurs > Nouveau.
 2. Renseigner Nom, Adresse e-mail (sert de login par défaut).
 3. Onglet « Droits d'accès » : dans la section « Microfinance », cocher le(s) groupe(s) métier pertinent(s) (ex. Agent crédit, Manager crédit, Agent épargne, etc.). Les cases à cocher reflètent la hiérarchie `implied_ids` décrite en section 12.
-4. Enregistrer : Odoo envoie éventuellement une invitation par e-mail (fonctionnalité standard du framework, hors code des modules Microfinance).
+4. Enregistrer : Odoo envoie éventuellement une invitation par e-mail au nouvel utilisateur.
 5. Pour retirer l'accès d'un utilisateur qui quitte l'institution : décocher ses groupes Microfinance et/ou archiver le compte (champ standard `active`).
 
 ## 5. Champs importants
@@ -34,22 +34,22 @@ Formulaire `res.users` standard Odoo (aucun champ ajouté par les modules Microf
 
 ## 6. Boutons et actions
 
-Aucun bouton `type="object"` n'est défini par les modules Microfinance sur `res.users` (le formulaire est celui du framework Odoo). Les actions disponibles (Archiver/Désarchiver, Changer le mot de passe, Envoyer un e-mail d'invitation) sont des fonctionnalités standard d'Odoo, non présentes dans le code des modules audités. À compléter si une extension propre à `res.users` est ajoutée dans une version future.
+Les actions standard d'Odoo sont disponibles sur la fiche utilisateur : Archiver/Désarchiver, Changer le mot de passe, Envoyer un e-mail d'invitation. À compléter si des actions spécifiques aux modules Microfinance sont ajoutées.
 
 ## 7. Règles métier
 
 - Hiérarchie des groupes MLM (`implied_ids`, source `microfinance_loan_management/security/groups.xml`) : `group_microfinance_manager`, `group_microfinance_finance`, `group_microfinance_collection_agent` et `group_microfinance_credit_committee` impliquent chacun `group_microfinance_user`. `group_microfinance_gestionnaire` implique à la fois `group_microfinance_manager` et `group_microfinance_finance` (et donc, par transitivité, `group_microfinance_user`). `group_microfinance_auditor`, `group_microfinance_comptable` et `group_microfinance_cashier` (ce dernier implique `group_microfinance_user`) sont sinon indépendants.
 - Hiérarchie des groupes MSM : `group_savings_manager` implique `group_savings_agent`.
 - Cocher un groupe « supérieur » (ex. Gestionnaire) attribue automatiquement les droits des groupes impliqués sans action supplémentaire.
-- Aucune contrainte `@api.constrains` propre à `res.users` n'est définie par les modules Microfinance (seules les contraintes standard Odoo, ex. unicité du login, s'appliquent).
+- Seules les contraintes standard d'Odoo s'appliquent à la création d'un compte (ex. unicité du login).
 
 ## 8. Contrôles et blocages
 
-Aucun contrôle spécifique ajouté par les modules Microfinance sur `res.users`. Les blocages observés sont ceux du framework Odoo (login déjà utilisé, e-mail invalide, etc.), non présents dans le code audité. À compléter si des contraintes propres apparaissent dans une version future.
+Les blocages observés sont ceux du framework Odoo : identifiant (login) déjà utilisé, adresse e-mail invalide, etc.
 
 ## 9. Statuts
 
-`res.users` ne comporte pas de champ `state` ni de machine à états définie par les modules Microfinance. Le champ standard `active` (booléen) permet d'archiver/désarchiver un compte (via l'action « Archiver » du framework), ce qui bloque la connexion sans supprimer les données associées.
+Un compte utilisateur n'a pas de statuts multiples. Le champ standard `active` (booléen) permet de l'archiver/désarchiver (via l'action « Archiver »), ce qui bloque la connexion sans supprimer les données associées.
 
 ## 10. Rapports ou PDF
 
@@ -57,7 +57,7 @@ Aucun rapport dédié à ce jour.
 
 ## 11. Tableaux de bord
 
-Aucun indicateur de `microfinance.dashboard` n'est lié à la gestion des utilisateurs (le tableau de bord porte sur le portefeuille de crédit, cf. workflow `dashboard`). À compléter si un indicateur RH/utilisateurs est ajouté.
+Aucun tableau de bord dédié à ce jour.
 
 ## 12. Sécurité et groupes utilisateurs
 

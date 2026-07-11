@@ -494,7 +494,153 @@ Cliquer sur **Générer l'échéancier** remplace l'ancien échéancier par un n
 
 **R** : Lors de l'enregistrement du dernier remboursement, si le solde restant devient ≤ 0.01, le crédit passe automatiquement à l'état **Clôturé**.
 
-### Q4 : Que se passe-t-il si un client paye trop ?
+### Q4 : Que se p# Prompt Claude Code — Création du module `microfinance_mowgli_assistant`
+
+## Contexte
+Le module `packimmo_odoobot_assistant` (assistant MIA, projet immobilier) existe déjà dans les addons de l'instance Odoo 17 partagée. Son architecture (workflows/catégories/articles pilotés par des datasets YAML externes, sans donnée métier en dur) doit être réutilisée pour créer **MOWGLI** (Microfinance Operations With Generative Learning Intelligence), l'assistant du projet `microfinance_loan_management` / `microfinance_savings_management`.
+
+**Règle absolue** : ne jamais modifier `packimmo_odoobot_assistant`. Le nouveau module est une copie indépendante et renommée, aucun modèle ni asset partagé entre les deux.
+
+## Étape 1 — Copie et renommage
+1. Copier le dossier `packimmo_odoobot_assistant` vers un nouveau dossier `microfinance_mowgli_assistant` dans le même répertoire addons.
+2. Remplacer globalement (code Python, XML, JS, CSV, manifest) :
+   - `packimmo` → `mowgli`
+   - `PackImmo` → `Microfinance`
+   - `MIA` → `MOWGLI`
+   - `mia_` (préfixe champs/config) → `mowgli_`
+3. Renommer les fichiers/dossiers contenant `packimmo` ou `mia` dans leur nom.
+4. Vérifier qu'aucune référence croisée vers `packimmo_odoobot_assistant` ne subsiste (`grep -r packimmo microfinance_mowgli_assistant/`).
+
+## Étape 2 — Manifest
+- `name`: "MOWGLI - Assistant microfinance CEFOR"
+- `summary`/`description`: en français, mentionner Microfinance Operations With Generative Learning Intelligence, base de connaissance synchronisée depuis des datasets YAML pour `microfinance_loan_management` et `microfinance_savings_management`.
+- `depends`: `base`, `mail`, `web`, `web_responsive` uniquement (pas de dépendance dure sur les modules microfinance — MOWGLI doit pouvoir s'installer/se mettre à jour indépendamment).
+- `category`: "Productivity"
+
+## Étape 3 — Nettoyage du contenu hérité
+- Supprimer le moteur legacy `packimmo.odoobot.answer` / `packimmo.odoobot.answer.step` (modèles, vues, sécurité, `hooks.py` associés) — MOWGLI démarre uniquement avec le moteur Knowledge, pas de fallback historique à porter.
+- Dans `res_config_settings.py`, méthode `action_create_mia_dataset_tree` (devenue `action_create_mowgli_dataset_tree`) : remplacer la liste de workflows immobilier par :
+  ```python
+  workflows = [
+      "creation_produit_credit",
+      "creation_produit_epargne",
+      "garanties_scoring",
+      "reechelonnement",
+      "dossier_precredit",
+      "comptabilite",
+      "par_reporting",
+      "administration",
+  ]
+  ```
+
+## Étape 4 — Rôles CEFOR
+Dans `models/knowledge.py`, localiser la liste/validation des valeurs acceptées pour `roles` (mentionnée dans `docs/dataset_format.md` : location, vente, morcellement, dessinateur, gestionnaire, comptable, manager, admin). La remplacer par :
+```
+agent_credit, agent_epargne, caissier, comptable, credit_committee, gestionnaire, admin
+```
+Mettre à jour `docs/dataset_format.md` en conséquence (traduire toute mention immobilier restante).
+
+## Étape 5 — Sécurité et vues
+- `security/ir.model.access.csv` : renommer tous les `model_packimmo_knowledge_*` → `model_mowgli_knowledge_*`, garder la même logique `base.group_user` (lecture) / `base.group_system` (admin).
+- `views/knowledge_views.xml` et `views/res_config_settings_views.xml` : renommer tous les XML IDs, actions, menus. Menu racine "MOWGLI" (nouvelle app, icône distincte de MIA — ne pas réutiliser l'icône PackImmo).
+- Tous les labels visibles utilisateur en français explicite (`string="..."`).
+
+## Étape 6 — JS Discuss
+- Renommer `static/src/js/mia_discuss_integration.js` → `mowgli_discuss_integration.js`, adapter le nom du bot/partenaire affiché dans le chat ("MOWGLI").
+- Vérifier qu'aucun sélecteur DOM/nom de composant ne rentre en collision avec l'asset équivalent de MIA (les deux modules coexistent sur la même instance). Namespacer si nécessaire.
+
+## Étape 7 — Datasets initiaux
+Créer l'arborescence (via `mowgli_dataset_path` configuré, ou en dur pour un premier test) :
+```
+<dataset_path>/creation_produit_credit/dataset.yaml
+<dataset_path>/creation_produit_epargne/dataset.yaml
+```
+Avant de rédiger les articles : **inspecter les vues et modèles réels** de `microfinance_loan_management` (ex. modèle produit de crédit, produit d'épargne — champs, menu exact, action) pour que `menu:` et `model:` dans le YAML soient exacts, pas inventés. Ne pas halluciner de chemin de menu.
+
+Format à respecter strictement (voir `docs/dataset_format.md` du module source, conservé tel quel) : `workflow`, `name`, `version: "17.0"`, `roles`, `categories`, puis `articles[]` avec `id`, `title`, `category`, `roles`, `questions`, `menu`, `model`, `steps`, `answer` (HTML court), `keywords`. 2 à 3 articles par workflow suffisent pour ce premier lot (ex. "Créer un produit de crédit", "Configurer les paramètres d'intérêt", "Créer un produit d'épargne").
+
+## Étape 8 — Validation
+```bash
+odoo-bin -u microfinance_mowgli_assistant --stop-after-init -d <db>
+```
+Vérifier absence de `ParseError`, présence du menu MOWGLI, accès `Paramètres > MOWGLI` pour configurer `mowgli_dataset_path`, puis lancer la synchronisation via l'assistant e# Prompt Claude Code — Création du module `microfinance_mowgli_assistant`
+
+## Contexte
+Le module `packimmo_odoobot_assistant` (assistant MIA, projet immobilier) existe déjà dans les addons de l'instance Odoo 17 partagée. Son architecture (workflows/catégories/articles pilotés par des datasets YAML externes, sans donnée métier en dur) doit être réutilisée pour créer **MOWGLI** (Microfinance Operations With Generative Learning Intelligence), l'assistant du projet `microfinance_loan_management` / `microfinance_savings_management`.
+
+**Règle absolue** : ne jamais modifier `packimmo_odoobot_assistant`. Le nouveau module est une copie indépendante et renommée, aucun modèle ni asset partagé entre les deux.
+
+## Étape 1 — Copie et renommage
+1. Copier le dossier `packimmo_odoobot_assistant` vers un nouveau dossier `microfinance_mowgli_assistant` dans le même répertoire addons.
+2. Remplacer globalement (code Python, XML, JS, CSV, manifest) :
+   - `packimmo` → `mowgli`
+   - `PackImmo` → `Microfinance`
+   - `MIA` → `MOWGLI`
+   - `mia_` (préfixe champs/config) → `mowgli_`
+3. Renommer les fichiers/dossiers contenant `packimmo` ou `mia` dans leur nom.
+4. Vérifier qu'aucune référence croisée vers `packimmo_odoobot_assistant` ne subsiste (`grep -r packimmo microfinance_mowgli_assistant/`).
+
+## Étape 2 — Manifest
+- `name`: "MOWGLI - Assistant microfinance CEFOR"
+- `summary`/`description`: en français, mentionner Microfinance Operations With Generative Learning Intelligence, base de connaissance synchronisée depuis des datasets YAML pour `microfinance_loan_management` et `microfinance_savings_management`.
+- `depends`: `base`, `mail`, `web`, `web_responsive` uniquement (pas de dépendance dure sur les modules microfinance — MOWGLI doit pouvoir s'installer/se mettre à jour indépendamment).
+- `category`: "Productivity"
+
+## Étape 3 — Nettoyage du contenu hérité
+- Supprimer le moteur legacy `packimmo.odoobot.answer` / `packimmo.odoobot.answer.step` (modèles, vues, sécurité, `hooks.py` associés) — MOWGLI démarre uniquement avec le moteur Knowledge, pas de fallback historique à porter.
+- Dans `res_config_settings.py`, méthode `action_create_mia_dataset_tree` (devenue `action_create_mowgli_dataset_tree`) : remplacer la liste de workflows immobilier par :
+  ```python
+  workflows = [
+      "creation_produit_credit",
+      "creation_produit_epargne",
+      "garanties_scoring",
+      "reechelonnement",
+      "dossier_precredit",
+      "comptabilite",
+      "par_reporting",
+      "administration",
+  ]
+  ```
+
+## Étape 4 — Rôles CEFOR
+Dans `models/knowledge.py`, localiser la liste/validation des valeurs acceptées pour `roles` (mentionnée dans `docs/dataset_format.md` : location, vente, morcellement, dessinateur, gestionnaire, comptable, manager, admin). La remplacer par :
+```
+agent_credit, agent_epargne, caissier, comptable, credit_committee, gestionnaire, admin
+```
+Mettre à jour `docs/dataset_format.md` en conséquence (traduire toute mention immobilier restante).
+
+## Étape 5 — Sécurité et vues
+- `security/ir.model.access.csv` : renommer tous les `model_packimmo_knowledge_*` → `model_mowgli_knowledge_*`, garder la même logique `base.group_user` (lecture) / `base.group_system` (admin).
+- `views/knowledge_views.xml` et `views/res_config_settings_views.xml` : renommer tous les XML IDs, actions, menus. Menu racine "MOWGLI" (nouvelle app, icône distincte de MIA — ne pas réutiliser l'icône PackImmo).
+- Tous les labels visibles utilisateur en français explicite (`string="..."`).
+
+## Étape 6 — JS Discuss
+- Renommer `static/src/js/mia_discuss_integration.js` → `mowgli_discuss_integration.js`, adapter le nom du bot/partenaire affiché dans le chat ("MOWGLI").
+- Vérifier qu'aucun sélecteur DOM/nom de composant ne rentre en collision avec l'asset équivalent de MIA (les deux modules coexistent sur la même instance). Namespacer si nécessaire.
+
+## Étape 7 — Datasets initiaux
+Créer l'arborescence (via `mowgli_dataset_path` configuré, ou en dur pour un premier test) :
+```
+<dataset_path>/creation_produit_credit/dataset.yaml
+<dataset_path>/creation_produit_epargne/dataset.yaml
+```
+Avant de rédiger les articles : **inspecter les vues et modèles réels** de `microfinance_loan_management` (ex. modèle produit de crédit, produit d'épargne — champs, menu exact, action) pour que `menu:` et `model:` dans le YAML soient exacts, pas inventés. Ne pas halluciner de chemin de menu.
+
+Format à respecter strictement (voir `docs/dataset_format.md` du module source, conservé tel quel) : `workflow`, `name`, `version: "17.0"`, `roles`, `categories`, puis `articles[]` avec `id`, `title`, `category`, `roles`, `questions`, `menu`, `model`, `steps`, `answer` (HTML court), `keywords`. 2 à 3 articles par workflow suffisent pour ce premier lot (ex. "Créer un produit de crédit", "Configurer les paramètres d'intérêt", "Créer un produit d'épargne").
+
+## Étape 8 — Validation
+```bash
+odoo-bin -u microfinance_mowgli_assistant --stop-after-init -d <db>
+```
+Vérifier absence de `ParseError`, présence du menu MOWGLI, accès `Paramètres > MOWGLI` pour configurer `mowgli_dataset_path`, puis lancer la synchronisation via l'assistant et confirmer la création des workflows/articles.
+
+## Hors scope (à ne pas faire maintenant)
+- Pas de dépendance ni de champ lié à `microfinance_context` (MOWGLI ne touche à aucun modèle partagé comme `res.partner`).
+- Pas de dataset pour RH/comptabilité détaillée à ce stade — l'arborescence des dossiers suffit, contenu à ajouter plus tard sans changement de code.t confirmer la création des workflows/articles.
+
+## Hors scope (à ne pas faire maintenant)
+- Pas de dépendance ni de champ lié à `microfinance_context` (MOWGLI ne touche à aucun modèle partagé comme `res.partner`).
+- Pas de dataset pour RH/comptabilité détaillée à ce stade — l'arborescence des dossiers suffit, contenu à ajouter plus tard sans changement de code.asse-t-il si un client paye trop ?
 
 **R** : Un surpaiement est rejeté lors de l'enregistrement du remboursement. Le système affiche un message d'erreur : "Surpaiement interdit. Solde restant : XXX".
 

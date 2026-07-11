@@ -11,7 +11,7 @@ D'après `microfinance_loan_management/security/groups.xml` et `ir.model.access.
 - **Agent crédit** (`group_microfinance_user`) : lecture seule sur les visites et sur les échéances.
 - **Manager crédit** (`group_microfinance_manager`) : accès complet aux visites et aux échéances.
 - **Finance microfinance** (`group_microfinance_finance`) : lecture/écriture sur les échéances (`installment.finance`), pas d'accès dédié aux visites.
-- **Auditeur microfinance** (`group_microfinance_auditor`) : lecture seule sur `microfinance.loan` en général (via `loan.auditor`) et sur les comptes/transactions d'épargne (module MSM). Constat : aucune ligne d'accès n'existe pour ce groupe sur `microfinance.loan.installment` ni sur `microfinance.collection.visit` — un utilisateur n'ayant que ce groupe n'a donc pas d'accès direct à ces deux modèles.
+- **Auditeur microfinance** (`group_microfinance_auditor`) : lecture seule sur `microfinance.loan` en général (via `loan.auditor`) et sur les comptes/transactions d'épargne (module MSM).
 - **Agent épargne / Manager épargne** (`group_savings_agent` / `group_savings_manager`, module MSM) : accès aux comptes d'épargne consultés dans la balance épargne (respectivement lecture/écriture/création, et accès complet).
 
 ## 3. Menus utilisés
@@ -71,7 +71,7 @@ Depuis la fiche crédit elle-même (bouton statistique) : « Visites » (`action
 
 ## 6. Boutons et actions
 - `action_apply_penalty` (« Appliquer pénalité », formulaire échéance) — `invisible="penalty_applied"`. Applique la pénalité du produit (montant fixe ou taux sur le résiduel) si la date d'échéance + délai de grâce du produit est dépassée, et marque `penalty_applied=True` pour empêcher toute réapplication.
-- `action_mark_default` (« Marquer en défaut », formulaire crédit) — `invisible="state != 'active'"`, aucune restriction de groupe. Le contrôle `state == 'active'` n'existe qu'au niveau de l'affichage du bouton : la méthode Python elle-même (`self.write({'state': 'defaulted'})`) n'effectue aucune vérification d'état côté serveur.
+- `action_mark_default` (« Marquer en défaut », formulaire crédit) — `invisible="state != 'active'"`, aucune restriction de groupe : accessible à tout utilisateur ayant accès en écriture à la fiche crédit.
 - `action_view_visits` (bouton statistique, formulaire crédit) : ouvre la liste/formulaire/calendrier des visites du crédit (`view_mode='tree,form,calendar'`).
 
 ## 7. Règles métier
@@ -83,15 +83,15 @@ Depuis la fiche crédit elle-même (bouton statistique) : « Visites » (`action
 - `cron_update_overdue_and_penalties` recalcule aussi le scoring (`action_calculate_scoring(silent=True)`) de tous les crédits `active` après l'application des pénalités du jour.
 
 ## 8. Contrôles et blocages
-Aucune contrainte bloquante (`@api.constrains`) ni `UserError`/`ValidationError` n'est définie dans `microfinance_loan_installment.py` ou `microfinance_collection_visit.py`. Le seul contrôle constaté est d'affichage : le bouton « Marquer en défaut » n'est visible que si le crédit est `active`, sans garde-fou équivalent côté serveur (`action_mark_default` n'effectue aucune vérification d'état). Les erreurs applicables aux échéances (surpaiement, crédit non actif pour un remboursement, etc.) sont levées au moment de l'allocation d'un paiement et sont documentées dans le workflow `comptabilite`.
+Ce workflow ne présente pas de message de blocage qui lui soit propre. Le bouton « Marquer en défaut » n'est visible que si le crédit est à l'état Actif. Les messages d'erreur qu'un utilisateur peut rencontrer au sujet des échéances (surpaiement, crédit non actif pour un remboursement, etc.) sont levés au moment de l'enregistrement d'un remboursement et sont documentés dans le workflow `comptabilite`, section 8.
 
 ## 9. Statuts
-**`microfinance.loan.installment.state`** (calculé, stocké, `readonly=False` — modifiable manuellement bien que recalculé automatiquement) : `pending` (À payer) / `partial` (Partiel) / `paid` (Payé) / `overdue` (En retard). Aucune transition n'est pilotée par un bouton dédié : l'état découle uniquement du recalcul de `residual_amount` et de la comparaison de `due_date` à la date du jour (voir section 7). La seule action de formulaire associée, `action_apply_penalty`, ne change pas `state` mais ajoute une pénalité et bascule `penalty_applied`.
+**`microfinance.loan.installment.state`** : `pending` (À payer) / `partial` (Partiel) / `paid` (Payé) / `overdue` (En retard). Ce champ est recalculé automatiquement (voir section 7) mais reste modifiable manuellement sur la fiche échéance. Aucune transition n'est pilotée par un bouton dédié : l'état découle du recalcul de `residual_amount` et de la comparaison de `due_date` à la date du jour. La seule action de formulaire associée, `action_apply_penalty`, ne change pas `state` mais ajoute une pénalité et bascule `penalty_applied`.
 
-**`microfinance.collection.visit.status`** : `planned` (Planifiée, valeur par défaut) / `done` (Réalisée) / `missed` (Manquée) / `cancelled` (Annulée). Aucune méthode `action_*` ne pilote ce champ dans `microfinance_collection_visit.py` : la transition se fait uniquement par modification manuelle du champ sur le formulaire (aucun bouton d'en-tête n'est défini pour ce modèle).
+**`microfinance.collection.visit.status`** : `planned` (Planifiée, valeur par défaut) / `done` (Réalisée) / `missed` (Manquée) / `cancelled` (Annulée). La mise à jour du statut se fait manuellement sur le formulaire de la visite, au fil du suivi de recouvrement (aucun bouton dédié n'est proposé pour ce changement).
 
 ## 10. Rapports ou PDF
-Aucun rapport dédié à ce jour dans les fichiers sources de ce workflow (les reçus de décaissement et de transaction d'épargne sont documentés dans le workflow `comptabilite`).
+Aucun rapport ou document imprimable n'est disponible pour ce workflow (les reçus de décaissement et de transaction d'épargne sont documentés dans le workflow `comptabilite`).
 
 ## 11. Tableaux de bord
 Dans `microfinance.dashboard` / contrôleur `/microfinance/dashboard/data` (`microfinance_dashboard_controller.py`) :
@@ -136,12 +136,12 @@ Dans `microfinance.dashboard` / contrôleur `/microfinance/dashboard/data` (`mic
 4. **Consultation de la balance épargne.** Un manager épargne ouvre Microfinance > Analyse > Balance épargne pour visualiser, regroupés par produit, les soldes de tous les comptes actifs et leur total.
 
 ## 14. Erreurs fréquentes
-Aucune erreur bloquante n'est levée par le code de ce workflow lui-même (voir section 8) : `microfinance.loan.installment` et `microfinance.collection.visit` ne définissent aucune contrainte `@api.constrains` ni `UserError`. Les seuls messages d'erreur qu'un utilisateur peut rencontrer en lien avec les échéances (surpaiement, crédit non actif pour un remboursement) proviennent de l'allocation des paiements et sont documentés dans le workflow `comptabilite`, section 8.
+Ce workflow ne génère pas de messages de blocage qui lui soient propres (voir section 8). Les seuls messages d'erreur qu'un utilisateur peut rencontrer en lien avec les échéances (surpaiement, crédit non actif pour un remboursement) proviennent de l'enregistrement d'un remboursement et sont documentés dans le workflow `comptabilite`, section 8.
 
 ## 15. Bonnes pratiques
 - S'assurer que le cron `cron_update_overdue_and_penalties` est actif afin que les pénalités de retard et l'état des échéances restent à jour quotidiennement, condition nécessaire à la fiabilité des indicateurs PAR du tableau de bord.
 - Programmer systématiquement une `next_visit_date` à l'issue de chaque visite de recouvrement, pour permettre le suivi via la vue calendrier.
-- Ne marquer un crédit « En défaut » qu'après une évaluation réelle du dossier (visites, promesses de paiement non tenues) : la méthode `action_mark_default` n'impose aucune condition côté serveur, seul le bouton est conditionné à l'affichage.
+- Ne marquer un crédit « En défaut » qu'après une évaluation réelle du dossier (visites de recouvrement effectuées, promesses de paiement non tenues).
 - Consulter Microfinance > Analyse > Analyse échéances régulièrement plutôt que de se fier uniquement au tableau de bord, pour identifier précisément les échéances individuelles en cause derrière un indicateur agrégé.
 
 ## 16. Questions/Réponses MOWGLI potentielles

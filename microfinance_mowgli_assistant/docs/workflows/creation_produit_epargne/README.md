@@ -19,7 +19,7 @@ Chaîne exacte reconstituée depuis les `<menuitem>` :
 - `menu_microfinance_savings_products` ("Produits d'épargne", parent = `microfinance_loan_management.menu_microfinance_config`, action = `action_microfinance_savings_product`), défini dans `microfinance_savings_management/views/microfinance_savings_menus.xml`.
 
 ## 4. Étapes principales
-Séquence dérivée du formulaire (`microfinance_savings_product_views.xml`), sans bouton `action_*` dédié (le modèle ne contient aucune méthode `action_*` métier) :
+Séquence pour créer un produit d'épargne :
 1. Ouvrir Microfinance > Configuration > Produits d'épargne et cliquer sur « Nouveau ».
 2. Saisir le nom et le code du produit (le code doit être unique par société).
 3. Choisir le type de produit (Obligatoire / Volontaire / À terme) et la société.
@@ -27,7 +27,7 @@ Séquence dérivée du formulaire (`microfinance_savings_product_views.xml`), sa
 5. Renseigner l'onglet « Intérêts » : taux d'intérêt annuel, méthode de calcul du solde, fréquence de capitalisation.
 6. Renseigner l'onglet « Limites » : montant minimum d'ouverture, solde minimum à maintenir, plafond de retrait (montant + période), frais de tenue de compte (montant + fréquence).
 7. Renseigner l'onglet « Comptabilité » : journaux de dépôt/retrait et comptes PCEC (épargne, intérêts, pénalités, commissions, comptes partagés) ; des valeurs par défaut sont proposées automatiquement si le plan PCEC de la société contient les comptes correspondants.
-8. Enregistrer. Les contraintes `@api.constrains` sont vérifiées à la sauvegarde.
+8. Enregistrer. Les règles de validation (voir section 7) sont vérifiées à la sauvegarde.
 
 ## 5. Champs importants
 **En-tête**
@@ -54,25 +54,22 @@ Séquence dérivée du formulaire (`microfinance_savings_product_views.xml`), sa
 - Comptes Épargne (obligatoires) : `account_epargne_individuel_id`, `account_epargne_groupe_id`, `account_epargne_entreprise_id` — un compte par type de client (Individuel / Groupe / Entreprise), domaine `account_type = liability_current`.
 - Comptes Intérêts (facultatifs) : `account_interet_paye_*_id` (charge), `account_interets_avance_*_id` (compte d'avance, passif), `account_cout_interet_payer_*_id` (passif), chacun décliné en Individuel/Groupe/Entreprise.
 - Comptes partagés (facultatifs) : `account_penalites_id` (Pénalités sur épargne, produit), `account_commission_id` (Commission sur épargne, produit — requis uniquement si des frais sont prélevés), `account_commission_cheques_rejetes_id` (Commission sur chèques rejetés, produit), `account_retenue_taxe_id` (Retenue de taxe, passif — compte technique 467000 hors nomenclature PCEC officielle selon le commentaire du code), `account_papeterie_id` (Papeterie pour l'épargne, produit).
-- Tous les comptes ont pour défaut calculé une recherche par code PCEC + société courante (fonction `_pcec_default`), et restent vides si le compte n'existe pas encore pour la société (plan PCEC non chargé).
+- Tous les comptes se pré-remplissent automatiquement par recherche du compte portant le code PCEC correspondant dans la société courante, et restent vides si ce compte n'existe pas encore pour la société (plan PCEC non chargé).
 
 ## 6. Boutons et actions
-Aucun bouton `type="object"` dans la vue formulaire (`view_microfinance_savings_product_form`) : le modèle ne définit aucune méthode `action_*`. La création/modification se fait uniquement par saisie de champs et enregistrement standard Odoo.
+Ce formulaire ne comporte pas de bouton d'action dédié. La création et la modification d'un produit d'épargne se font uniquement par la saisie des champs, suivie de l'enregistrement standard (bouton Enregistrer).
 
 ## 7. Règles métier
-Contraintes `@api.constrains('interest_rate', 'min_opening_amount', 'min_balance', 'withdrawal_limit_amount', 'maintenance_fee_amount', 'early_withdrawal_penalty_rate', 'term_months', 'product_type')` (méthode `_check_values`) :
+Règles vérifiées à l'enregistrement d'un produit d'épargne :
 - Le taux d'intérêt ne peut pas être négatif.
-- Les montants minimum (`min_opening_amount`, `min_balance`) ne peuvent pas être négatifs.
+- Les montants minimum (montant minimum d'ouverture, solde minimum à maintenir) ne peuvent pas être négatifs.
 - Le plafond de retrait ne peut pas être négatif.
 - Les frais de tenue de compte ne peuvent pas être négatifs.
 - La pénalité de retrait anticipé ne peut pas être négative.
-- Un produit à terme (`product_type = 'term_deposit'`) doit avoir une durée en mois (`term_months`).
+- Un produit à terme doit avoir une durée en mois renseignée.
+- Le code produit doit être unique par société.
 
-Contrainte SQL : `code_company_unique` — le code produit doit être unique par société.
-
-Méthode utilitaire `_get_account(self, kind, partner)` : retourne dynamiquement le compte comptable (`account_<kind>_individuel_id` / `_groupe_id` / `_entreprise_id`) selon le champ `microfinance_client_type` du partenaire (mappé sur `company` → « entreprise », `group` → « groupe », tout autre valeur → « individuel »). Utilisée par le module pour choisir le bon compte lors des écritures de transactions d'épargne (hors périmètre de ce workflow).
-
-Valeurs par défaut : tous les comptes PCEC et les journaux sont pré-remplis par recherche automatique sur le code comptable/journal + société courante (jamais par référence XML statique), afin de fonctionner correctement en environnement multi-société.
+Valeurs par défaut : tous les comptes PCEC et les journaux sont pré-remplis automatiquement par recherche sur le code comptable/journal de la société courante, ce qui permet un fonctionnement correct en environnement multi-société.
 
 ## 8. Contrôles et blocages
 - Impossible d'enregistrer un produit avec un taux d'intérêt, un montant minimum d'ouverture, un solde minimum, un plafond de retrait, des frais de tenue de compte ou une pénalité de retrait anticipé négatifs (message d'erreur dédié pour chaque cas, voir section 7).
@@ -81,13 +78,13 @@ Valeurs par défaut : tous les comptes PCEC et les journaux sont pré-remplis pa
 - Les champs `account_epargne_individuel_id`, `account_epargne_groupe_id`, `account_epargne_entreprise_id` sont `required=True` : l'enregistrement est bloqué par Odoo si l'un d'eux est vide.
 
 ## 9. Statuts
-Le modèle `microfinance.savings.product` n'a pas de champ `state`. Le seul indicateur de cycle de vie est le champ booléen `active` (Actif), qui contrôle l'archivage standard Odoo (un produit inactif est masqué des vues par défaut mais reste consultable via le filtre archivé). Aucune machine à états, aucun `statusbar_visible`.
+Le produit d'épargne n'a pas de statut à faire progresser. Le seul indicateur de cycle de vie est la case « Actif » : un produit décoché est masqué des vues par défaut mais reste consultable via le filtre archivé.
 
 ## 10. Rapports ou PDF
 Aucun rapport dédié à ce jour.
 
 ## 11. Tableaux de bord
-Aucun indicateur lié à `microfinance.savings.product` trouvé dans `microfinance_loan_management/models/microfinance_dashboard.py` (dashboard de portefeuille crédit uniquement, hors périmètre épargne). À compléter si un tableau de bord épargne existe ailleurs dans le code (non identifié dans les fichiers sources listés).
+Aucun tableau de bord dédié aux produits d'épargne à ce jour. À compléter.
 
 ## 12. Sécurité et groupes utilisateurs
 Table issue de `microfinance_savings_management/security/ir.model.access.csv` (modèle `model_microfinance_savings_product`) :

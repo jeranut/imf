@@ -5,7 +5,7 @@ Ce workflow couvre deux volets rattachés à l'appréciation du risque d'un cré
 1. **Garanties/cautions** (`microfinance.loan.guarantee`) : enregistrement des biens ou cautions personnelles adossés à un crédit, valorisation pondérée par type via des règles de valorisation (`microfinance.guarantee.valuation.rule`), et suivi de leur cycle de vie (brouillon / validée / libérée).
 2. **Scoring crédit** (`microfinance.scoring.profile`, `microfinance.scoring.rule`, `microfinance.scoring.line`) : configuration de profils de scoring par société/produit, de règles de calcul de points (bonus/malus) selon des métriques du client et du crédit, et historisation des calculs appliqués à chaque crédit.
 
-N'est PAS couvert ici : le cycle de vie complet de la demande de crédit (`microfinance.loan`, workflow « dossier_precredit »), le calcul du montant des provisions comptables (workflow « comptabilite »), ni le paramétrage des produits de crédit eux-mêmes (`microfinance.loan.product`, workflow « creation_produit_credit »). Les méthodes `action_calculate_scoring`, `action_recompute_risk` et `action_view_scoring_lines` de `microfinance.loan` sont documentées ici uniquement comme points d'entrée qui rattachent le crédit au moteur de scoring, pas comme cœur de ce workflow.
+N'est PAS couvert ici : le cycle de vie complet de la demande de crédit (`microfinance.loan`, workflow « dossier_precredit »), le calcul du montant des provisions comptables (workflow « comptabilite »), ni le paramétrage des produits de crédit eux-mêmes (`microfinance.loan.product`, workflow « creation_produit_credit »). Les actions de calcul et de consultation du score sur la fiche crédit sont documentées ici uniquement comme points d'entrée qui rattachent le crédit au moteur de scoring, pas comme cœur de ce workflow.
 
 ## 2. Utilisateurs concernés
 D'après `microfinance_loan_management/security/groups.xml` et `ir.model.access.csv` :
@@ -33,16 +33,16 @@ Le menu « Configuration » (`menu_microfinance_config`) n'est affiché qu'au gr
 4. Joindre éventuellement une pièce justificative (document scanné).
 5. La valeur reconnue se calcule automatiquement selon le ratio de valorisation configuré pour ce type de garantie.
 6. Faire passer la garantie de « Brouillon » à « Validée » une fois le dossier vérifié.
-7. À la clôture du crédit (`action_close`), les garanties non libérées sont automatiquement passées à l'état « Libérée ».
+7. À la clôture du crédit, les garanties non libérées sont automatiquement passées à l'état « Libérée ».
 
-**Volet scoring** (dérivé du formulaire `view_microfinance_scoring_profile_form` et des méthodes de `microfinance_loan.py`) :
+**Volet scoring** :
 1. Configurer, dans Microfinance > Configuration > Scoring crédit, un profil de scoring (générique société ou spécifique à un produit de crédit), avec ses bornes de score (min/max) et ses trois seuils de décision.
 2. Ajouter les règles de scoring du profil (onglet « Règles ») : métrique suivie, mode de calcul (seuil ou linéaire), opérateur/valeur, type (bonus/malus) et points.
-3. Sur une demande de crédit, le calcul du score se déclenche automatiquement à la soumission (`action_submit` appelle `action_calculate_scoring`) ou manuellement via le bouton « Recalculer le risque »/« Scoring » présent sur la fiche crédit (bouton `action_recompute_risk` du modèle `microfinance.loan`).
-4. Le système sélectionne le profil de scoring applicable (celui déjà lié au crédit s'il est actif, sinon le profil actif du produit, sinon le profil générique de la société), calcule chaque métrique, applique les règles actives et cumule les points en un score borné entre `min_score` et `max_score`.
-5. Le score alimente `internal_score`, `risk_level` et `scoring_decision` sur le crédit, et génère une ligne d'historique (`microfinance.scoring.line`) par règle qui s'est appliquée.
-6. Consulter le détail du calcul via le bouton statistique « Scoring » (`action_view_scoring_lines`) sur la fiche crédit, ou l'onglet « Scoring » de la fiche.
-7. Une tâche planifiée (`cron_update_overdue_and_penalties`, hors périmètre direct) recalcule automatiquement le scoring de tous les crédits actifs.
+3. Sur une demande de crédit, le calcul du score se déclenche automatiquement à la soumission du dossier, ou manuellement à tout moment via le bouton « Recalculer le score » présent dans l'en-tête de la fiche crédit.
+4. Le système sélectionne le profil de scoring applicable (celui déjà lié au crédit s'il est actif, sinon le profil actif du produit, sinon le profil générique de la société), calcule chaque métrique, applique les règles actives et cumule les points en un score borné entre le score minimum et le score maximum du profil.
+5. Le score alimente le Score interne, le Niveau de risque et la Décision scoring sur le crédit, et génère une ligne d'historique par règle qui s'est appliquée.
+6. Consulter le détail du calcul via le bouton statistique « Scoring » sur la fiche crédit, ou l'onglet « Scoring » de la fiche.
+7. Une tâche planifiée recalcule aussi automatiquement le scoring de tous les crédits actifs.
 
 ## 5. Champs importants
 **Écran Garantie (`microfinance.loan.guarantee`)**
@@ -70,7 +70,7 @@ Le menu « Configuration » (`menu_microfinance_config`) n'est affiché qu'au gr
 
 **Écran Règle de scoring (`microfinance.scoring.rule`)**
 - `profile_id` (Profil de scoring), `sequence`, `active`.
-- `metric` (Métrique) : liste de 17 métriques possibles (ex. `baseline`, `total_loans`, `overdue_installments`, `repayment_rate`, `loan_overdue_installment_count`, `loan_max_days_overdue`, `loan_overdue_amount_ratio`, `loan_partial_payment_count`, etc.).
+- `metric` (Métrique) : liste de 17 métriques possibles, parmi lesquelles Constante (score de base), Total crédits, Crédits actifs/clôturés/en défaut, Échéances en retard, Maximum/moyenne jours de retard, Taux de remboursement, Montant total emprunté/payé, Nombre de paiements partiels, Ancienneté client, et les métriques limitées au crédit courant (Échéances en retard, Maximum jours de retard, Montant en retard / montant crédit en %, Paiements partiels).
 - `computation` (Mode de calcul) : Seuil (points fixes si condition vraie) / Linéaire (points × valeur de la métrique, condition ignorée).
 - `operator` (Opérateur) : =, !=, >, >=, <, <=, between.
 - `value` (Valeur) : nombre, ou deux nombres séparés par une virgule pour `between`.
@@ -85,39 +85,41 @@ Le menu « Configuration » (`menu_microfinance_config`) n'est affiché qu'au gr
 - `guarantee_ids` (Garanties), `guarantee_total` (Total garanties validées, calculé/stocké, somme des `recognized_value` des garanties à l'état « validated »).
 
 ## 6. Boutons et actions
-- Fiche crédit, bouton statistique « Scoring » (`action_view_scoring_lines`, icône `fa-sliders`) : ouvre la liste des lignes de scoring du crédit. Toujours visible dans le button box.
-- Aucun bouton `type="object"` visible directement dans les vues `microfinance_loan_guarantee_views.xml` ou `microfinance_scoring_views.xml` (les vues de garanties et de règles de scoring sont uniquement composées de champs). Les vues des lignes de scoring (`view_microfinance_scoring_line_tree`/`form`) sont explicitement non créables/éditables/supprimables (`create="0" edit="0" delete="0"`).
-- Sur le modèle `microfinance.loan` (fichier `microfinance_loan.py`), les méthodes suivantes pilotent le scoring mais ne sont pas décrites comme boutons dans les fichiers de vues fournis pour ce workflow : `action_calculate_scoring(silent=False)` (calcule/recalcule le score), `action_recompute_risk()` (alias public qui appelle `action_calculate_scoring(silent=True)`), `action_view_scoring_lines()` (ouvre l'historique). `action_submit()` appelle automatiquement `action_calculate_scoring(silent=True)` avant de passer le crédit à l'état « Soumis ».
+- Fiche crédit, bouton statistique « Scoring » (dans la barre de boutons, toujours visible) : ouvre la liste des lignes de scoring du crédit.
+- Fiche crédit, bouton « Recalculer le score » (dans l'en-tête) : relance le calcul du score à tout moment.
+- La soumission de la demande de crédit (bouton « Soumettre ») recalcule automatiquement le score avant de faire passer le crédit à l'état « Soumis ».
+- Les écrans Garanties et Ratios de valorisation des garanties ne comportent pas de bouton d'action dédié : la saisie se fait uniquement par les champs. Il en va de même pour les profils et règles de scoring.
+- Les lignes de l'historique de scoring ne sont pas créables, modifiables ni supprimables manuellement : elles sont uniquement produites par le calcul automatique du score.
 
 ## 7. Règles métier
 **Garanties**
-- `_check_guarantor_partner` (`@api.constrains('guarantee_type', 'guarantor_partner_id')`) : si le type est « Garant / caution personnelle », le partenaire caution est obligatoire.
-- `_check_estimated_value` (`@api.constrains('estimated_value')`) : la valeur estimée ne peut pas être négative.
-- `_compute_recognized_value` (`@api.depends('estimated_value', 'guarantee_type', 'company_id')`) : recherche la règle de valorisation correspondant au type de garantie et à la société ; applique son ratio (défaut 100 % si aucune règle) à la valeur estimée.
+- Si le type est « Garant / caution personnelle », le partenaire caution est obligatoire.
+- La valeur estimée ne peut pas être négative.
+- La valeur reconnue se recalcule automatiquement dès que la valeur estimée, le type de garantie ou la société changent : elle applique le ratio de valorisation du type de garantie pour la société (100 % par défaut si aucune règle n'est configurée).
 
 **Règles de valorisation des garanties**
-- `_check_ratio` (`@api.constrains('valuation_ratio', 'max_ratio')`) : `max_ratio` doit être strictement positif ; `valuation_ratio` ne peut pas être négatif ; `valuation_ratio` ne peut pas dépasser `max_ratio`.
-- Contrainte SQL `type_company_unique` : une seule règle par type de garantie et par société.
+- Le ratio maximum doit être strictement positif ; le ratio de valorisation ne peut pas être négatif ni dépasser le ratio maximum.
+- Une seule règle de valorisation par type de garantie et par société.
 
 **Profils de scoring**
-- `_check_single_active_profile` (`@api.constrains('active', 'company_id', 'product_id')`) : un seul profil actif par société et par produit (ou par société pour les profils génériques sans produit).
-- `_check_thresholds` (`@api.constrains('min_score', 'max_score', 'approve_threshold', 'manual_review_threshold', 'reject_threshold')`) : `min_score < max_score` ; chaque seuil doit être compris entre `min_score` et `max_score` ; `approve_threshold >= manual_review_threshold`.
+- Un seul profil actif par société et par produit (ou par société pour les profils génériques sans produit).
+- Le score minimum doit être inférieur au score maximum ; chaque seuil doit être compris entre le score minimum et le score maximum ; le seuil d'approbation doit être supérieur ou égal au seuil de revue manuelle.
 
 **Règles de scoring**
-- `_check_rule_value` (`@api.constrains('computation', 'operator', 'value')`) : en mode « Seuil », un opérateur et une valeur sont obligatoires, et la valeur doit être numérique (ou une paire numérique valide pour `between`, borne basse ≤ borne haute).
-- `_get_points` : les points sont toujours appliqués en valeur absolue puis signés selon `rule_type` (positif pour bonus, négatif pour malus) ; en mode linéaire, multipliés par la valeur de la métrique.
+- En mode « Seuil », un opérateur et une valeur sont obligatoires, et la valeur doit être numérique (ou une paire numérique valide pour l'opérateur « between », borne basse inférieure ou égale à la borne haute).
+- Les points sont toujours appliqués en valeur absolue puis signés selon le type de règle (positif pour bonus, négatif pour malus) ; en mode linéaire, ils sont multipliés par la valeur de la métrique.
 
-**Calcul du score sur un crédit** (`action_calculate_scoring` dans `microfinance_loan.py`) :
-- Un crédit à l'état « Radié » (`written_off`) reçoit systématiquement score = 0, risque = « Critique », décision = « Risqué / Rejet recommandé », et son historique de scoring est vidé.
-- Le profil applicable est déterminé par `_get_scoring_profile()` : profil déjà lié au crédit s'il est actif, sinon profil actif du produit du crédit, sinon profil générique actif de la société. Si aucun profil n'est trouvé et que l'appel n'est pas en mode silencieux, une erreur bloque le calcul.
-- Les métriques sont calculées par `_get_scoring_metrics()` à partir de l'historique du client (tous crédits/paiements/échéances) et du crédit courant (métriques préfixées `loan_*`).
-- Chaque règle active du profil est évaluée dans l'ordre (`sequence`, `id`) ; les points des règles qui matchent sont cumulés puis le score final est borné entre `min_score` et `max_score` du profil.
-- Décision (`_get_scoring_decision`) : `recommended` si score ≥ `approve_threshold` ; `manual_review` si score ≥ `manual_review_threshold` ; sinon `reject_recommended`.
-- Niveau de risque (`_get_scoring_risk_level`) : ratio = (score − min_score) / (max_score − min_score) ; `low` si ratio ≥ 0,75 ; `medium` si ratio ≥ 0,5 ; `high` si score ≥ `reject_threshold` ; sinon `critical`.
+**Calcul du score sur un crédit**
+- Un crédit à l'état « Radié » reçoit systématiquement score = 0, risque = « Critique », décision = « Risqué / Rejet recommandé », et son historique de scoring est vidé.
+- Le profil applicable est déterminé ainsi : profil déjà lié au crédit s'il est actif, sinon profil actif du produit du crédit, sinon profil générique actif de la société. Si aucun profil n'est trouvé lors d'un calcul déclenché explicitement par l'utilisateur, une erreur bloque le calcul.
+- Les métriques sont calculées à partir de l'historique du client (tous crédits/paiements/échéances) et du crédit courant.
+- Chaque règle active du profil est évaluée dans l'ordre défini par sa séquence ; les points des règles qui correspondent sont cumulés puis le score final est borné entre le score minimum et le score maximum du profil.
+- Décision : « Recommandé » si le score atteint le seuil d'approbation ; « Revue manuelle » si le score atteint le seuil de revue manuelle ; sinon « Risqué / Rejet recommandé ».
+- Niveau de risque : « Faible » si le score se situe dans le quart supérieur de l'échelle du profil, « Moyen » dans la moitié supérieure, « Élevé » si le score atteint au moins le seuil de rejet, sinon « Critique ».
 
-**Eligibilité liée aux garanties** (`_check_eligibility`, appelée par `action_submit`) : si le produit exige une garantie (`product.guarantee_required`), au moins une garantie à l'état « validated » est requise ; si le produit fixe un ratio minimum de garantie (`product.min_guarantee_ratio`), `guarantee_total` (somme des `recognized_value` des garanties validées) doit couvrir ce ratio appliqué au montant du crédit.
+**Eligibilité liée aux garanties** (vérifiée à la soumission du crédit) : si le produit exige une garantie, au moins une garantie à l'état « Validée » est requise ; si le produit fixe un ratio minimum de garantie, le total des garanties validées doit couvrir ce ratio appliqué au montant du crédit.
 
-**Libération automatique des garanties** : à la clôture d'un crédit (`action_close`), toutes les garanties non encore « Libérée » sont automatiquement passées à cet état, avec un message posté dans le chatter du crédit listant les garanties libérées.
+**Libération automatique des garanties** : à la clôture d'un crédit, toutes les garanties non encore « Libérée » sont automatiquement passées à cet état, avec un message posté dans le chatter du crédit listant les garanties libérées.
 
 ## 8. Contrôles et blocages
 - Impossible d'enregistrer une garantie de type « Garant / caution personnelle » sans partenaire caution : « La caution doit préciser le partenaire qui se porte garant. »
@@ -130,21 +132,20 @@ Le menu « Configuration » (`menu_microfinance_config`) n'est affiché qu'au gr
 - Impossible d'enregistrer une règle de scoring à seuil sans opérateur/valeur : « Un opérateur et une valeur sont requis pour une règle à seuil. »
 - Valeur `between` invalide : « La valeur between doit contenir deux nombres, par exemple 10,30. » ou borne basse > borne haute : « La borne basse doit être inférieure ou égale à la borne haute. »
 - Valeur non numérique : « La valeur de scoring doit être numérique. »
-- À la soumission d'un crédit (`action_submit` → `_check_eligibility`), blocage si le produit exige une garantie et qu'aucune n'est validée, ou si le total des garanties validées est inférieur au ratio minimum requis (message détaillant le montant manquant).
-- Si aucun profil de scoring n'est configuré pour la société/le produit et que le calcul n'est pas appelé en mode silencieux : « Configurez un profil de scoring crédit pour cette société ou ce produit. »
+- À la soumission d'un crédit, blocage si le produit exige une garantie et qu'aucune n'est validée, ou si le total des garanties validées est inférieur au ratio minimum requis (message détaillant le montant manquant).
 
 ## 9. Statuts
-- `microfinance.loan.guarantee.state` : Brouillon (`draft`, valeur par défaut) → Validée (`validated`) → Libérée (`released`). Aucun bouton `type="object"` de transition d'état identifié dans les vues fournies : le champ `state` est modifiable directement dans le formulaire/la liste éditable. La transition vers « Libérée » peut aussi se produire automatiquement via `action_close()` du crédit.
-- `microfinance.guarantee.valuation.rule` : pas de champ `state` (paramétrage statique).
-- `microfinance.scoring.profile` / `microfinance.scoring.rule` : pas de champ `state` ; seul un booléen `active` gère l'archivage/désactivation.
-- `microfinance.scoring.line` : pas de champ `state` (ligne d'historique en lecture seule).
-- Rappel indirect : `microfinance.loan.risk_level` (Faible/Moyen/Élevé/Critique) et `microfinance.loan.scoring_decision` (Recommandé/Revue manuelle/Risqué-Rejet recommandé) sont des champs calculés par le scoring, mais ce ne sont pas des champs `state` avec statusbar.
+- Statut d'une garantie : Brouillon (valeur par défaut) → Validée → Libérée. Le champ Statut se modifie directement sur la fiche de la garantie (ou dans la liste éditable), sans bouton dédié. La transition vers « Libérée » se produit aussi automatiquement pour toutes les garanties non encore libérées lors de la clôture du crédit.
+- Les ratios de valorisation des garanties n'ont pas de statut : ce sont des paramétrages statiques.
+- Les profils et règles de scoring n'ont pas de statut ; seule la case « Actif » gère leur archivage/désactivation.
+- Les lignes d'historique de scoring n'ont pas de statut (lecture seule).
+- Sur la fiche crédit, le Niveau de risque (Faible/Moyen/Élevé/Critique) et la Décision scoring (Recommandé/Revue manuelle/Risqué-Rejet recommandé) sont des indicateurs calculés automatiquement par le scoring, pas des statuts à faire progresser manuellement.
 
 ## 10. Rapports ou PDF
 Aucun rapport dédié à ce jour.
 
 ## 11. Tableaux de bord
-Aucun indicateur lié aux garanties ou au scoring identifié dans `microfinance_loan_management/models/microfinance_dashboard.py` parmi les fichiers listés pour ce workflow. À compléter si un widget dédié existe ailleurs.
+Aucun tableau de bord dédié aux garanties ou au scoring à ce jour. À compléter.
 
 ## 12. Sécurité et groupes utilisateurs
 D'après `microfinance_loan_management/security/ir.model.access.csv` :
@@ -195,7 +196,7 @@ En complément, `microfinance_loan_management/security/groups.xml` définit troi
 ## 13. Cas d'utilisation complets
 1. **Ajout d'une garantie sur un crédit.** Un Agent crédit ouvre la fiche du crédit concerné, va dans l'onglet « Garanties », clique sur « Ajouter une ligne », choisit le type « Terrain », saisit la description et la valeur estimée. La valeur reconnue se calcule automatiquement selon le ratio de valorisation défini pour « Terrain » dans Microfinance > Configuration > Ratios de valorisation des garanties. Un Manager crédit fait ensuite passer l'état de la garantie de « Brouillon » à « Validée ».
 2. **Paramétrage d'un nouveau profil de scoring pour un produit.** Un Manager crédit va dans Microfinance > Configuration > Scoring crédit, crée un profil, sélectionne le produit de crédit concerné, définit les bornes de score (0-100) et les trois seuils, puis ajoute dans l'onglet « Règles » les métriques pertinentes (ex. « Échéances en retard (ce crédit) » en mode linéaire, malus, 15 points). Il enregistre ; la contrainte d'unicité empêche d'avoir deux profils actifs pour le même produit.
-3. **Calcul du score à la soumission d'un crédit.** Un Agent crédit clique sur le bouton de soumission de la demande de crédit (`action_submit`) ; le système vérifie l'éligibilité (garanties suffisantes si requises), calcule automatiquement le score via le profil applicable, affiche le niveau de risque et la décision recommandée sur la fiche, et alimente l'historique consultable via le bouton statistique « Scoring ».
+3. **Calcul du score à la soumission d'un crédit.** Un Agent crédit clique sur le bouton de soumission de la demande de crédit ; le système vérifie l'éligibilité (garanties suffisantes si requises), calcule automatiquement le score via le profil applicable, affiche le niveau de risque et la décision recommandée sur la fiche, et alimente l'historique consultable via le bouton statistique « Scoring ».
 
 ## 14. Erreurs fréquentes
 - « La caution doit préciser le partenaire qui se porte garant. » (garantie de type caution sans partenaire renseigné).
@@ -204,17 +205,16 @@ En complément, `microfinance_loan_management/security/groups.xml` définit troi
 - « Un profil de scoring actif existe déjà pour cette société et ce produit. » (tentative d'activer un second profil pour le même périmètre).
 - « Les seuils doivent être compris entre le score minimum et le score maximum. »
 - « Un opérateur et une valeur sont requis pour une règle à seuil. »
-- « La valeur de scoring doit être numérique. » (règle `between` ou seuil mal saisie).
-- « Configurez un profil de scoring crédit pour cette société ou ce produit. » (aucun profil actif trouvé lors d'un calcul non silencieux).
+- « La valeur de scoring doit être numérique. » (règle « between » ou seuil mal saisie).
 - « Garanties insuffisantes : il manque X pour atteindre le ratio minimum requis... » (à la soumission d'un crédit dont le produit impose un ratio de garantie minimum).
-- « Ce produit exige une garantie validée avant soumission. » (produit avec `guarantee_required` et aucune garantie à l'état « validated »).
+- « Ce produit exige une garantie validée avant soumission. » (produit exigeant une garantie et aucune garantie à l'état « Validée »).
 
 ## 15. Bonnes pratiques
 - Configurer les ratios de valorisation par type de garantie avant la saisie des garanties elles-mêmes, afin que la valeur reconnue calculée automatiquement reflète la politique de risque de l'IMF dès la création (sinon le ratio par défaut de 100 % s'applique).
 - Ne conserver qu'un seul profil de scoring actif par société/produit ; désactiver (`active = False`) plutôt que supprimer un ancien profil pour garder l'historique des lignes de scoring cohérent.
 - Ordonner les règles de scoring avec le champ `sequence` en commençant par une règle « Constante » (métrique `baseline`) servant de score de base, puis les malus, comme dans le profil par défaut fourni par `scoring_rules_data.xml`.
 - Faire valider les garanties (passage à l'état « Validée ») avant la soumission du crédit, car seules les garanties validées comptent dans `guarantee_total` et dans le contrôle d'éligibilité.
-- Recalculer le scoring manuellement (bouton lié à `action_recompute_risk`) après toute modification manuelle du profil de scoring rattaché à un crédit, le score n'étant pas recalculé automatiquement à chaque écriture.
+- Recalculer le scoring manuellement (bouton « Recalculer le score ») après toute modification manuelle du profil de scoring rattaché à un crédit, le score n'étant pas recalculé automatiquement à chaque écriture.
 
 ## 16. Questions/Réponses MOWGLI potentielles
 1. Comment ajouter une garantie à une demande de crédit ?
