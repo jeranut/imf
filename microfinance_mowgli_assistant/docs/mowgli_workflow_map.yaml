@@ -5,7 +5,8 @@
 # ici. Si une information n'existe pas dans ces fichiers, écrire "À compléter".
 #
 # Modules couverts : microfinance_loan_management (MLM), microfinance_savings_management (MSM).
-# Racine du dépôt : /opt/odoo17/imf_git
+# Racine : addons_path — tous les chemins ci-dessous sont relatifs à la racine addons
+# (nom_module/chemin), portables quel que soit l'emplacement du clone sur le disque.
 
 workflows:
 

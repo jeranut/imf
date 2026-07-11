@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
 import os
 
+import odoo.modules
 from odoo import fields, models
 from odoo.exceptions import UserError
 
 
 class ResConfigSettings(models.TransientModel):
     _inherit = "res.config.settings"
+
+    def _default_mowgli_dataset_path(self):
+        return odoo.modules.get_module_resource('microfinance_mowgli_assistant', 'datasets') or ''
 
     mowgli_auto_clear_history = fields.Boolean(
         string="Effacer l'historique MOWGLI à la connexion",
@@ -31,6 +35,7 @@ class ResConfigSettings(models.TransientModel):
     mowgli_dataset_path = fields.Char(
         string="Chemin des datasets MOWGLI",
         config_parameter="microfinance_mowgli_assistant.mowgli_dataset_path",
+        default=lambda self: self._default_mowgli_dataset_path(),
         help="Dossier externe contenant les sous-dossiers de workflows MOWGLI et leurs fichiers dataset.yaml.",
     )
 
