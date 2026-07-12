@@ -1,3 +1,9 @@
+# Dependency required by microfinance_loan_management, vendored from odoo17 instance
+base_accounting_kit/
+base_account_budget/
+hr_advance_salary/
+hr_payroll_community/
+
 # Python
 __pycache__/
 *.pyc
