@@ -13,12 +13,15 @@
                             <field name="auto_debit_grace_days" invisible="not allow_savings_auto_debit"/>
                             <field name="auto_debit_respect_minimum_balance" invisible="not allow_savings_auto_debit"/>
                         </group>
-                        <group string="Éligibilité progressive / apport">
+                        <group string="Éligibilité progressive">
                             <field name="savings_requirement_type"/>
                             <field name="savings_product_id" invisible="savings_requirement_type == 'none'"/>
                             <field name="savings_target_ratio" invisible="savings_requirement_type != 'target_during_loan'"/>
-                            <field name="savings_apport_ratio" invisible="savings_requirement_type != 'upfront_apport'"/>
                             <field name="savings_amount_threshold" invisible="savings_requirement_type == 'none'"/>
+                        </group>
+                        <group string="Épargne garantie de crédit">
+                            <field name="guarantee_savings_percent"/>
+                            <field name="guarantee_savings_product_id" invisible="not guarantee_savings_percent"/>
                         </group>
                     </group>
                 </page>

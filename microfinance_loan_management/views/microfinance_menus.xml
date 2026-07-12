@@ -23,4 +23,5 @@
     <menuitem id="menu_microfinance_scoring" name="Scoring crédit" parent="menu_microfinance_config" action="action_microfinance_scoring_profile" sequence="2"/>
     <menuitem id="menu_microfinance_provision_rule" name="Règles de provisionnement" parent="menu_microfinance_config" action="action_microfinance_provision_rule" sequence="3"/>
     <menuitem id="menu_microfinance_guarantee_valuation_rule" name="Ratios de valorisation des garanties" parent="menu_microfinance_config" action="action_microfinance_guarantee_valuation_rule" sequence="4"/>
+    <menuitem id="menu_microfinance_profession" name="Professions" parent="menu_microfinance_config" action="action_microfinance_profession" sequence="5"/>
 </odoo>

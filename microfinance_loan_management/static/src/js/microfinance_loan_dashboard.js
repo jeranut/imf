@@ -7,13 +7,15 @@ import { Component, onMounted, onPatched, onWillUnmount, useRef, useState } from
 export class MicrofinanceLoanDashboard extends Component {
     setup() {
         this.rpc = useService("rpc");
+        this.orm = useService("orm");
+        this.actionService = useService("action");
         this.state = useState({ loading: true, error: false, data: null });
         this.charts = [];
         this.shouldRenderCharts = false;
         this.stateChartRef = useRef("stateChart");
         this.disbursementChartRef = useRef("disbursementChart");
         this.repaymentChartRef = useRef("repaymentChart");
-        this.defaultRateChartRef = useRef("defaultRateChart");
+        this.overdueTrendChartRef = useRef("overdueTrendChart");
         this.parChartRef = useRef("parChart");
 
         onMounted(async () => {
@@ -48,12 +50,35 @@ export class MicrofinanceLoanDashboard extends Component {
         return this.state.data?.kpis || {};
     }
 
+    get companyInfo() {
+        return this.state.data?.company || {};
+    }
+
     get topOverdueLoans() {
         return this.state.data?.top_overdue_loans || [];
     }
 
+    get recentLoans() {
+        return this.state.data?.recent_loans || [];
+    }
+
+    get todayInstallments() {
+        return this.state.data?.today_installments || [];
+    }
+
+    get todayInstallmentsCount() {
+        return this.state.data?.today_installments_count || 0;
+    }
+
     formatNumber(value) {
         return new Intl.NumberFormat().format(value || 0);
+    }
+
+    formatDate(value) {
+        if (!value) {
+            return "";
+        }
+        return new Intl.DateTimeFormat("fr-FR").format(new Date(value));
     }
 
     formatMoney(value) {
@@ -63,6 +88,50 @@ export class MicrofinanceLoanDashboard extends Component {
 
     formatPercent(value) {
         return `${(value || 0).toFixed(1)}%`;
+    }
+
+    /**
+     * Ouvre la liste filtrée correspondant à une tuile KPI (aucune action n'existait sur ces
+     * tuiles auparavant : navigation ajoutée vers la vue liste déjà existante la plus proche de
+     * chaque indicateur, sans toucher aux valeurs/calculs affichés sur le tableau de bord).
+     */
+    openKpiAction(model, domain, name) {
+        this.actionService.doAction({
+            type: "ir.actions.act_window",
+            res_model: model,
+            name,
+            views: [[false, "list"], [false, "form"]],
+            domain,
+        });
+    }
+
+    openNewLoan() {
+        this.actionService.doAction({
+            type: "ir.actions.act_window",
+            res_model: "microfinance.loan",
+            name: "Nouveau prêt",
+            views: [[false, "form"]],
+            target: "current",
+        });
+    }
+
+    openAllLoans() {
+        this.actionService.doAction("microfinance_loan_management.action_microfinance_loan");
+    }
+
+    openAllInstallments() {
+        this.actionService.doAction("microfinance_loan_management.action_microfinance_installment");
+    }
+
+    /**
+     * Réutilise action_open_payment_wizard (déjà en place côté microfinance.loan, avec son
+     * pré-remplissage montant/journal) plutôt que de reconstruire le contexte de l'assistant en
+     * JS : le bouton "Encaisser" du panneau "Échéances du jour" ouvre ainsi exactement le même
+     * assistant que le bouton équivalent sur la fiche crédit.
+     */
+    async openPaymentWizard(loanId) {
+        const action = await this.orm.call("microfinance.loan", "action_open_payment_wizard", [[loanId]]);
+        this.actionService.doAction(action);
     }
 
     destroyCharts() {
@@ -159,19 +228,16 @@ export class MicrofinanceLoanDashboard extends Component {
             grid: { borderColor: "#e2e8f0" },
         });
 
-        this.mountChart(this.defaultRateChartRef, {
-            chart: { ...baseChart, type: "radialBar", height: 280 },
-            series: [Number((data.kpis.default_rate || 0).toFixed(1))],
-            labels: ["Taux defaut"],
-            colors: ["#ef4444"],
-            plotOptions: {
-                radialBar: {
-                    hollow: { size: "62%" },
-                    dataLabels: {
-                        value: { formatter: (value) => `${value}%` },
-                    },
-                },
-            },
+        this.mountChart(this.overdueTrendChartRef, {
+            chart: { ...baseChart, type: "line", height: 280 },
+            series: [{ name: "Nouveaux impayes", data: data.monthly.new_overdue }],
+            xaxis: { categories: data.monthly.labels },
+            colors: ["#f59e0b"],
+            stroke: { width: 3, curve: "smooth" },
+            dataLabels: { enabled: false },
+            markers: { size: 4 },
+            yaxis: { labels: { formatter: (value) => Math.round(value) } },
+            grid: { borderColor: "#e2e8f0" },
         });
     }
 }

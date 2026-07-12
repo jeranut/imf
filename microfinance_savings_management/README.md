@@ -13,15 +13,21 @@ module **Gestion des crédits microfinance** doit déjà être installé.
 Menu **Microfinance > Configuration > Produits d'épargne**.
 
 Trois types de produits sont disponibles : obligatoire (liée à un crédit), volontaire, ou à
-terme (dépôt bloqué sur une durée fixe).
+terme (dépôt bloqué sur une durée fixe). Le code du produit (ex. `EP00001`) est généré
+automatiquement à la création — préfixe configurable par société (Paramètres > Sociétés,
+champ « Préfixe code produit épargne », par défaut `EP`), verrouillé dès le premier produit
+créé pour cette société.
 
 **Onglet Intérêts** : taux d'intérêt annuel, méthode de calcul du solde de référence pour la
 capitalisation (solde minimum, moyen, ou de clôture de période) et fréquence de
 capitalisation (mensuelle, trimestrielle, annuelle).
 
 **Onglet Limites** : montant minimum d'ouverture, solde minimum à maintenir (un retrait ne
-peut pas faire descendre le compte en dessous, sauf dérogation explicite), plafond de retrait,
-frais de tenue de compte, pénalité de retrait anticipé pour un produit à terme.
+peut pas faire descendre le compte en dessous, sauf dérogation explicite), plafond de retrait
+par transaction (dérogation possible, distincte de celle du solde minimum), frais de tenue de
+compte (non implémenté pour l'instant — champ grisé). Pénalité de retrait anticipé : appliquée
+automatiquement avant la date d'échéance d'un produit à terme, et/ou avant un délai minimum de
+rétention en jours configurable sur n'importe quel produit (y compris l'épargne libre).
 
 **Onglet Comptabilité** : configuration, par le service comptable/finance, des comptes du
 plan comptable général qui recevront les écritures générées par les opérations d'épargne
@@ -47,9 +53,14 @@ automatiquement son écriture comptable.
   (tâche planifiée quotidienne), en respectant le solde minimum du produit d'épargne sauf
   dérogation explicite pour ce produit de crédit.
 - **Éligibilité progressive au crédit basée sur l'épargne** : un produit de crédit peut exiger
-  une épargne cible à atteindre pendant le remboursement (condition pour un prêt suivant), ou
-  un apport en amont bloquant l'approbation du dossier, chacun paramétrable indépendamment sur
-  le produit de crédit.
+  une épargne cible à atteindre pendant le remboursement, condition pour qu'un prêt suivant
+  puisse être soumis (indépendant de la garantie ci-dessous).
+- **Épargne garantie de crédit** (mécanisme LPF) : un produit de crédit peut exiger qu'un
+  pourcentage du montant demandé soit disponible sur le solde du client dans un produit
+  d'épargne dédié (ex. « Épargne garantie de crédit »), tous deux configurables sur le produit
+  de crédit. Vérifié dès la demande de crédit (soumission), pas seulement au décaissement — si
+  le solde est insuffisant, la demande est rejetée avec le montant manquant. Non applicable aux
+  clients de type Société.
 
 ## À venir
 

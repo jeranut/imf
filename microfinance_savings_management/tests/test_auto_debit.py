@@ -9,13 +9,13 @@ from .common import SavingsCommon
 
 class TestAutoDebit(SavingsCommon):
 
-    def _loan_with_overdue_installment(self, **product_kwargs):
+    def _loan_with_overdue_installment(self, partner_id=None, **product_kwargs):
         self.product.write({
             'allow_savings_auto_debit': True,
             'auto_debit_grace_days': 0,
             **product_kwargs,
         })
-        loan = self._activate_loan(loan_amount=900.0, term=3)
+        loan = self._activate_loan(loan_amount=900.0, term=3, partner_id=partner_id or self.partner.id)
         first = loan.installment_ids.sorted('sequence')[0]
         first.write({'due_date': fields.Date.today() - timedelta(days=10)})
         return loan, first
@@ -66,10 +66,15 @@ class TestAutoDebit(SavingsCommon):
         self.assertLess(account.balance, 50.0)  # solde vidé sous le minimum, dérogation active
 
     def test_cron_isolates_failures_across_loans(self):
-        broken_journal = self.env['account.journal'].create({
-            'name': 'Journal cassé test', 'code': 'BRK', 'type': 'cash', 'company_id': self.env.company.id,
-        })
-        broken_product = self.savings_product.copy({'code': 'SAVBRK', 'withdrawal_journal_id': broken_journal.id})
+        # Deux clients distincts : _check_eligibility interdit à un même client d'avoir deux
+        # crédits actifs en arriérés simultanément (allow_second_loan non activé sur le produit
+        # de test), ce qui n'a rien à voir avec ce que ce test vérifie (l'isolation des échecs
+        # entre crédits par le cron).
+        other_partner = self.env['res.partner'].create({'name': 'Client Test Microfinance 2'})
+        # Pas de journal de retrait du tout (plutôt qu'un journal sans compte par défaut) : Odoo
+        # provisionne automatiquement un default_account_id pour tout journal de type cash/bank à
+        # la création, donc un journal "cassé" de cette façon ne casse en réalité rien.
+        broken_product = self.savings_product.copy({'code': 'SAVBRK', 'withdrawal_journal_id': False})
 
         loan_broken, first_broken = self._loan_with_overdue_installment()
         broken_account = self._create_account(product_id=broken_product.id)
@@ -77,8 +82,8 @@ class TestAutoDebit(SavingsCommon):
         broken_account.action_activate()
         loan_broken.savings_account_id = broken_account.id
 
-        loan_ok, first_ok = self._loan_with_overdue_installment()
-        ok_account = self._create_active_account(opening_amount=500.0)
+        loan_ok, first_ok = self._loan_with_overdue_installment(partner_id=other_partner.id)
+        ok_account = self._create_active_account(opening_amount=500.0, partner_id=other_partner.id)
         loan_ok.savings_account_id = ok_account.id
 
         self.env['microfinance.loan'].cron_process_savings_auto_debit()

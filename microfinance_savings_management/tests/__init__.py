@@ -5,5 +5,7 @@ from . import test_savings_interest
 from . import test_savings_closure
 from . import test_auto_debit
 from . import test_progressive_eligibility
-from . import test_upfront_apport
+from . import test_guarantee_savings
 from . import test_multi_company
+from . import test_savings_transaction_limits
+from . import test_product_code_sequence

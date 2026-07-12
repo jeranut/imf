@@ -33,7 +33,12 @@ class MicrofinanceSavingsProduct(models.Model):
     _order = 'name'
 
     name = fields.Char(string='Nom', required=True, tracking=True)
-    code = fields.Char(string='Code', required=True, tracking=True)
+    code = fields.Char(
+        string='Code', required=True, tracking=True, default='Nouveau', copy=False, readonly=True,
+        help="Généré automatiquement à la création (préfixe configurable par société "
+             "'res.company.savings_product_code_prefix' + numéro séquentiel), jamais saisi "
+             "manuellement.",
+    )
     product_type = fields.Selection([
         ('compulsory', 'Obligatoire (liée à un crédit)'),
         ('voluntary', 'Volontaire'),
@@ -56,20 +61,40 @@ class MicrofinanceSavingsProduct(models.Model):
         help='Solde gelé (frozen balance) : un retrait ne peut pas faire descendre le solde du '
              'compte en dessous de ce montant, sauf prélèvement automatique en dérogation explicite.',
     )
-    withdrawal_limit_amount = fields.Monetary(string='Plafond de retrait', default=0.0)
-    withdrawal_limit_period = fields.Selection([
-        ('transaction', 'Par transaction'),
-        ('month', 'Par mois'),
-    ], string='Période du plafond de retrait', default='transaction')
-    maintenance_fee_amount = fields.Monetary(string='Frais de tenue de compte', default=0.0)
+    withdrawal_limit_amount = fields.Monetary(
+        string='Plafond de retrait par transaction', default=0.0,
+        help="Si renseigné, bloque tout retrait (type 'Retrait' uniquement) dont le montant "
+             "dépasse ce plafond, transaction par transaction (pas de cumul sur une période). "
+             "Un retrait avec la dérogation 'Déroger au plafond de retrait' (ex. clôture de "
+             "compte) n'est pas soumis à ce plafond.",
+    )
+    maintenance_fee_amount = fields.Monetary(
+        string='Frais de tenue de compte', default=0.0, readonly=True,
+        help='Non implémenté — sans effet actuellement. Aucun cron ne prélève ces frais '
+             "périodiquement ; utiliser une transaction manuelle de type 'Frais prélevés' en "
+             'attendant.',
+    )
     maintenance_fee_frequency = fields.Selection([
         ('monthly', 'Mensuelle'),
         ('quarterly', 'Trimestrielle'),
         ('annual', 'Annuelle'),
-    ], string='Fréquence des frais de tenue de compte', default='monthly')
+    ], string='Fréquence des frais de tenue de compte', default='monthly', readonly=True,
+        help='Non implémenté — sans effet actuellement (lié à Frais de tenue de compte, ci-dessus).')
     early_withdrawal_penalty_rate = fields.Float(
         string='Pénalité de retrait anticipé (%)', default=0.0,
-        help='Uniquement pertinent pour un produit à terme.',
+        help="Taux appliqué automatiquement, en ligne comptable séparée sur le compte 'Pénalités "
+             "sur épargne' ci-dessous, sur tout retrait comptabilisé avant l'une des deux "
+             "échéances suivantes (dès que l'une des deux est configurée et pas encore atteinte, "
+             "jamais cumulées) : la date d'échéance du compte (produit à terme uniquement) ou le "
+             "délai minimum de rétention ci-dessous (tout type de produit).",
+    )
+    min_retention_days = fields.Integer(
+        string='Délai minimum de rétention (jours)', default=0,
+        help="Nombre de jours minimum depuis l'ouverture du compte avant qu'un retrait soit "
+             "possible sans pénalité, quel que soit le type de produit (y compris épargne "
+             "libre) — contrairement à la date d'échéance, réservée aux produits à terme. "
+             "Calculé depuis la date d'ouverture du compte (pas de suivi par dépôt individuel "
+             "dans ce modèle). Sans effet si Pénalité de retrait anticipé (%) est à 0.",
     )
     term_months = fields.Integer(string='Durée (mois)', help='Requis pour un produit à terme.')
 
@@ -150,7 +175,9 @@ class MicrofinanceSavingsProduct(models.Model):
         'account.account', string='Pénalités sur épargne',
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
         default=_pcec_default('749003'),
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+        help='Requis dès que Pénalité de retrait anticipé (%) est renseigné sur un produit à '
+             "terme : la pénalité calculée y est créditée automatiquement. Peut rester vide "
+             "si aucune pénalité n'est configurée.",
     )
     account_commission_id = fields.Many2one(
         'account.account', string='Commission sur épargne',
@@ -161,22 +188,24 @@ class MicrofinanceSavingsProduct(models.Model):
     account_commission_cheques_rejetes_id = fields.Many2one(
         'account.account', string='Commission sur chèques rejetés',
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
-        default=_pcec_default('719000'),
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+        default=_pcec_default('719000'), readonly=True,
+        help='Non implémenté — sans effet actuellement. Aucun mode de paiement "chèque" ni '
+             'transaction "chèque rejeté" ne existe encore sur ce modèle.',
     )
     account_retenue_taxe_id = fields.Many2one(
         'account.account', string='Retenue de taxe',
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
-        default=_pcec_default('467000'),
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR. Compte technique "
-             "467000 : hors nomenclature PCEC officielle, créé par ce module faute de poste "
-             "dédié identifié dans les classes 1-7 (voir audit_pcg2005_mapping).",
+        default=_pcec_default('467000'), readonly=True,
+        help="Non implémenté — sans effet actuellement. Compte technique 467000 : hors "
+             "nomenclature PCEC officielle, créé par ce module faute de poste dédié identifié "
+             "dans les classes 1-7 (voir audit_pcg2005_mapping).",
     )
     account_papeterie_id = fields.Many2one(
         'account.account', string="Papeterie pour l'épargne",
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
-        default=_pcec_default('749004'),
-        help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
+        default=_pcec_default('749004'), readonly=True,
+        help='Non implémenté — sans effet actuellement. Aucune transaction ne ventile encore '
+             'une part "papeterie" séparée du dépôt/retrait.',
     )
 
     deposit_journal_id = fields.Many2one(
@@ -195,8 +224,19 @@ class MicrofinanceSavingsProduct(models.Model):
         ('code_company_unique', 'unique(code, company_id)', 'Le code produit doit être unique par société.'),
     ]
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('code', 'Nouveau') in (False, '', 'Nouveau'):
+                company = self.env['res.company'].browse(vals['company_id']) if vals.get('company_id') else self.env.company
+                prefix = company.savings_product_code_prefix or 'EP'
+                number = self.env['ir.sequence'].next_by_code('microfinance.savings.product') or '00000'
+                vals['code'] = '%s%s' % (prefix, number)
+        return super().create(vals_list)
+
     @api.constrains('interest_rate', 'min_opening_amount', 'min_balance', 'withdrawal_limit_amount',
-                     'maintenance_fee_amount', 'early_withdrawal_penalty_rate', 'term_months', 'product_type')
+                     'maintenance_fee_amount', 'early_withdrawal_penalty_rate', 'min_retention_days',
+                     'term_months', 'product_type')
     def _check_values(self):
         for product in self:
             if product.interest_rate < 0:
@@ -209,6 +249,8 @@ class MicrofinanceSavingsProduct(models.Model):
                 raise ValidationError(_('Les frais de tenue de compte ne peuvent pas être négatifs.'))
             if product.early_withdrawal_penalty_rate < 0:
                 raise ValidationError(_('La pénalité de retrait anticipé ne peut pas être négative.'))
+            if product.min_retention_days < 0:
+                raise ValidationError(_('Le délai minimum de rétention ne peut pas être négatif.'))
             if product.product_type == 'term_deposit' and not product.term_months:
                 raise ValidationError(_('Un produit à terme doit avoir une durée en mois.'))
 

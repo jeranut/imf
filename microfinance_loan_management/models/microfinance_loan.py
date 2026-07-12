@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from collections import defaultdict
+
 from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
@@ -205,6 +207,58 @@ class MicrofinanceLoan(models.Model):
             if line.due_date:
                 max_days = max(max_days, (today - line.due_date).days)
         return max_days
+
+    @api.model
+    def get_recent_loans(self, company_id, limit=5):
+        """5 derniers prêts créés, pour le panneau "Derniers prêts" du tableau de bord. L'ordre
+        par défaut du modèle (id desc) est équivalent à un tri par date de création décroissante.
+        Extrait en méthode de modèle pour rester testable directement, comme get_par_buckets."""
+        return self.search([('company_id', '=', company_id)], limit=limit)
+
+    @api.model
+    def get_overdue_monthly_flux(self, company_id, month_keys):
+        """Nombre de "nouveaux impayés" par mois (flux, pas le stock cumulé) pour le graphique
+        "Évolution des impayés" du tableau de bord, à partir de l'historique persistant
+        arrears_onset_date/arrears_cured_date des échéances (cf. installment._sync_arrears_state).
+
+        Un prêt compte un nouvel impayé au mois de la première échéance dont le retard est
+        constaté, sauf si le prêt a déjà un "épisode" de retard ouvert à ce moment-là (une ou
+        plusieurs échéances encore non soldées, chevauchant dans le temps) — auquel cas
+        l'échéance rejoint le même épisode sans être recomptée. Un nouvel épisode n'est compté
+        que si l'épisode précédent du prêt est bien clos (toutes ses échéances soldées) avant la
+        date de retard de la nouvelle échéance : c'est ce qui distingue un retard continu sur
+        plusieurs échéances (compté une fois) d'une régularisation suivie d'une rechute (comptée
+        deux fois)."""
+        installments = self.env['microfinance.loan.installment'].search([
+            ('company_id', '=', company_id),
+            ('arrears_onset_date', '!=', False),
+        ], order='loan_id, arrears_onset_date')
+
+        by_loan = defaultdict(list)
+        for inst in installments:
+            by_loan[inst.loan_id.id].append(inst)
+
+        counts = defaultdict(int)
+        for insts in by_loan.values():
+            has_episode = False
+            episode_open = False
+            episode_cure_date = None
+            for inst in insts:
+                onset, cured = inst.arrears_onset_date, inst.arrears_cured_date
+                starts_new = not has_episode or (not episode_open and onset > episode_cure_date)
+                if starts_new:
+                    counts[onset.strftime('%Y-%m')] += 1
+                    has_episode = True
+                    episode_open = False
+                    episode_cure_date = None
+                if not cured:
+                    # Champ Date Odoo vide => False (jamais None) : "not cured" est la bonne
+                    # façon de détecter une échéance encore non soldée ici.
+                    episode_open = True
+                elif not episode_open:
+                    episode_cure_date = max(episode_cure_date, cured) if episode_cure_date else cured
+
+        return {key: counts.get(key, 0) for key in month_keys}
 
     @api.model
     def get_par_buckets(self, company_id):
@@ -863,7 +917,18 @@ class MicrofinanceLoan(models.Model):
 
     @api.model
     def cron_update_overdue_and_penalties(self):
-        self.env['microfinance.loan.installment'].search([('state', 'in', ('pending', 'partial', 'overdue'))]).action_apply_penalty()
+        # Domaine étendu par rapport aux seules échéances pending/partial/overdue : inclut aussi
+        # celles ayant un épisode de retard ouvert (arrears_onset_date posé, pas encore soldé côté
+        # historique) pour que _sync_arrears_state() capture aussi les régularisations (passage à
+        # 'paid') et pose arrears_cured_date. La portée de action_apply_penalty() reste identique
+        # à avant (filtrée sur pending/partial/overdue juste après).
+        installments = self.env['microfinance.loan.installment'].search([
+            '|',
+            ('state', 'in', ('pending', 'partial', 'overdue')),
+            '&', ('arrears_onset_date', '!=', False), ('arrears_cured_date', '=', False),
+        ])
+        installments._sync_arrears_state()
+        installments.filtered(lambda inst: inst.state in ('pending', 'partial', 'overdue')).action_apply_penalty()
         self.search([('state', '=', 'active')]).action_calculate_scoring(silent=True)
         return True
 

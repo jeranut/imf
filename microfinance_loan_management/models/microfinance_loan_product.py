@@ -34,7 +34,12 @@ class MicrofinanceLoanProduct(models.Model):
     _order = 'name'
 
     name = fields.Char(string='Nom', required=True, tracking=True)
-    code = fields.Char(string='Code', required=True, tracking=True)
+    code = fields.Char(
+        string='Code', required=True, tracking=True, default='Nouveau', copy=False, readonly=True,
+        help="Généré automatiquement à la création (préfixe configurable par société "
+             "'res.company.loan_product_code_prefix' + numéro séquentiel), jamais saisi "
+             "manuellement.",
+    )
     min_amount = fields.Monetary(string='Montant minimum', required=True, default=0.0)
     max_amount = fields.Monetary(string='Montant maximum', required=True, default=0.0)
     min_term = fields.Integer(string='Durée min.', default=1, required=True)
@@ -292,6 +297,16 @@ class MicrofinanceLoanProduct(models.Model):
     _sql_constraints = [
         ('code_company_unique', 'unique(code, company_id)', 'Le code produit doit être unique par société.'),
     ]
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('code', 'Nouveau') in (False, '', 'Nouveau'):
+                company = self.env['res.company'].browse(vals['company_id']) if vals.get('company_id') else self.env.company
+                prefix = company.loan_product_code_prefix or 'CR'
+                number = self.env['ir.sequence'].next_by_code('microfinance.loan.product') or '00000'
+                vals['code'] = '%s%s' % (prefix, number)
+        return super().create(vals_list)
 
     @api.constrains('min_amount', 'max_amount', 'min_term', 'max_term', 'interest_rate', 'grace_period_days',
                      'min_membership_days', 'min_guarantee_ratio', 'fee_amount', 'fee_rate')

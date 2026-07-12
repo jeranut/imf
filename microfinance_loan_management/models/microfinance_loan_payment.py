@@ -3,6 +3,26 @@ from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
 
+def default_payment_amount_and_journal(loan):
+    """Montant et journal suggérés pour un remboursement de ce crédit — réutilisé par le
+    formulaire microfinance.loan.payment et par microfinance.loan.payment.wizard, pour ne pas
+    dupliquer la logique entre les deux points d'entrée de saisie d'un remboursement.
+    Montant : somme des échéances déjà en retard (state == 'overdue') s'il y en a, sinon le
+    montant résiduel de la toute prochaine échéance non soldée. Ne duplique pas l'allocation
+    pénalité → intérêt → capital (_allocate_to_installments) : ceci ne fait que suggérer un
+    montant total, l'allocation détaillée reste calculée séparément à la comptabilisation."""
+    journal = loan.product_id.payment_journal_id
+    overdue = loan.installment_ids.filtered(lambda i: i.state == 'overdue')
+    if overdue:
+        amount = sum(overdue.mapped('residual_amount'))
+    else:
+        next_due = loan.installment_ids.filtered(lambda i: i.residual_amount > 0.01).sorted(
+            lambda i: (i.due_date, i.sequence)
+        )[:1]
+        amount = next_due.residual_amount if next_due else 0.0
+    return amount, journal
+
+
 class MicrofinanceLoanPayment(models.Model):
     _name = 'microfinance.loan.payment'
     _description = 'Remboursement crédit microfinance'
@@ -38,6 +58,17 @@ class MicrofinanceLoanPayment(models.Model):
         for rec in self:
             if rec.amount <= 0:
                 raise ValidationError(_('Le montant du remboursement doit être positif.'))
+
+    @api.onchange('loan_id')
+    def _onchange_loan_id(self):
+        for payment in self:
+            if not payment.loan_id:
+                continue
+            amount, journal = default_payment_amount_and_journal(payment.loan_id)
+            if amount:
+                payment.amount = amount
+            if journal:
+                payment.journal_id = journal
 
     def _allocate_to_installments(self):
         self.ensure_one()

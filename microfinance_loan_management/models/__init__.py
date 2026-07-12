@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from . import res_company
+from . import microfinance_profession
 from . import microfinance_repayment_frequency
 from . import microfinance_loan_product
 from . import microfinance_scoring

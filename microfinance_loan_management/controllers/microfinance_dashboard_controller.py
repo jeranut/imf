@@ -69,6 +69,8 @@ class MicrofinanceDashboardController(http.Controller):
             if key in monthly_overdue:
                 monthly_overdue[key] += installment.residual_amount
 
+        monthly_new_overdue = Loan.get_overdue_monthly_flux(company.id, month_keys)
+
         # risk_level is derived from the single unified scoring field (internal_score); critical
         # is folded into high since the dashboard only distinguishes 3 buckets.
         risk_distribution = {'low': 0, 'medium': 0, 'high': 0}
@@ -81,6 +83,46 @@ class MicrofinanceDashboardController(http.Controller):
                 risk_distribution['low'] += 1
 
         par_buckets = Loan.get_par_buckets(company.id)
+
+        # Badge/libellé "En cours" (vert) / "En attente" (orange) pour les états simplifiés
+        # demandés par le panneau "Derniers prêts" ; les autres états réutilisent leur libellé
+        # existant (state_selection) avec une couleur cohérente avec les decoration- déjà
+        # utilisées sur la vue liste des crédits (danger=defaulted, muted=written_off/cancelled,
+        # success=closed).
+        state_badge = {
+            'active': ('success', 'En cours'),
+            'draft': ('warning', 'En attente'),
+            'submitted': ('warning', 'En attente'),
+            'manager_validated': ('warning', 'En attente'),
+            'finance_validated': ('warning', 'En attente'),
+            'approved': ('warning', 'En attente'),
+            'closed': ('success', state_selection.get('closed', 'Clôturé')),
+            'defaulted': ('danger', state_selection.get('defaulted', 'Défaut')),
+            'written_off': ('secondary', state_selection.get('written_off', 'Radié')),
+            'cancelled': ('secondary', state_selection.get('cancelled', 'Annulé')),
+        }
+        recent_loans = []
+        for loan in Loan.get_recent_loans(company.id, limit=5):
+            badge_class, badge_label = state_badge.get(loan.state, ('secondary', state_selection.get(loan.state, loan.state)))
+            recent_loans.append({
+                'id': loan.id,
+                'name': loan.name,
+                'partner': loan.partner_id.display_name,
+                'loan_amount': loan.loan_amount,
+                'term': loan.term,
+                'date': loan.create_date and loan.create_date.date().isoformat(),
+                'badge_class': badge_class,
+                'badge_label': badge_label,
+            })
+
+        today_installments_recordset = Installment.get_due_today(company.id)
+        today_installments = [{
+            'loan_id': installment.loan_id.id,
+            'loan_name': installment.loan_id.name,
+            'partner': installment.partner_id.display_name,
+            'sequence': installment.sequence,
+            'residual_amount': installment.residual_amount,
+        } for installment in today_installments_recordset]
 
         overdue_by_loan = defaultdict(lambda: {'amount_due': 0.0, 'days_overdue': 0})
         top_lines = Installment.search(company_domain + [('state', '=', 'overdue'), ('residual_amount', '>', 0)])
@@ -106,6 +148,12 @@ class MicrofinanceDashboardController(http.Controller):
 
         return {
             'currency': company.currency_id.symbol or '',
+            'company': {
+                'id': company.id,
+                'name': company.name,
+                'has_logo': not company.uses_default_logo,
+                'address_subtitle': company._get_microfinance_dashboard_subtitle(),
+            },
             'kpis': {
                 'active_loan_count': active_loan_count,
                 'disbursed_amount': disbursed_amount,
@@ -119,8 +167,12 @@ class MicrofinanceDashboardController(http.Controller):
                 'disbursement': [monthly_disbursement[key] for key in month_keys],
                 'repayment': [monthly_repayment[key] for key in month_keys],
                 'overdue': [monthly_overdue[key] for key in month_keys],
+                'new_overdue': [monthly_new_overdue[key] for key in month_keys],
             },
             'risk_distribution': risk_distribution,
             'top_overdue_loans': top_overdue_loans,
             'par_buckets': par_buckets,
+            'recent_loans': recent_loans,
+            'today_installments': today_installments,
+            'today_installments_count': len(today_installments),
         }

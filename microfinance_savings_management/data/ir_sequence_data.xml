@@ -7,4 +7,12 @@
         <field name="padding">5</field>
         <field name="company_id" eval="False"/>
     </record>
+    <!-- Préfixe configurable par société (res.company.savings_product_code_prefix), concaténé
+         en Python à la création du produit — séquence globale, même logique que ci-dessus. -->
+    <record id="seq_microfinance_savings_product" model="ir.sequence">
+        <field name="name">Code produit d'épargne microfinance</field>
+        <field name="code">microfinance.savings.product</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
 </odoo>

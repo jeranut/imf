@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-from odoo import fields, models
+from odoo import api, fields, models, _
+from odoo.exceptions import ValidationError
 
 
 class MicrofinanceLoanProduct(models.Model):
@@ -20,19 +21,18 @@ class MicrofinanceLoanProduct(models.Model):
              "d'une épargne obligatoire nantie explicitement en garantie de ce crédit).",
     )
 
-    # --- Éligibilité progressive & apport épargne (§3bis) ---
+    # --- Éligibilité progressive (§3bis) ---
     # Valeurs par défaut fournies à titre d'hypothèses de configuration à valider avec Micka avant
     # mise en production : elles ne sont pas des constantes métier universelles, chaque
     # institution/programme peut avoir ses propres seuils et ratios.
     savings_requirement_type = fields.Selection([
         ('none', 'Aucune exigence épargne'),
         ('target_during_loan', 'Épargne cible pendant le remboursement'),
-        ('upfront_apport', 'Apport épargne exigé avant décaissement'),
     ], string='Exigence épargne', required=True, default='none', tracking=True)
     savings_amount_threshold = fields.Monetary(
         string="Seuil de montant (info)", default=0.0,
-        help="Seuil indicatif au-delà duquel ce produit correspond au palier 'apport en amont' "
-             "dans le programme progressif de l'institution. Purement informatif ici : c'est bien "
+        help="Seuil indicatif au-delà duquel ce produit correspond au palier supérieur dans le "
+             "programme progressif de l'institution. Purement informatif ici : c'est bien "
              "savings_requirement_type qui pilote le contrôle, pas ce seuil.",
     )
     savings_target_ratio = fields.Float(
@@ -40,12 +40,37 @@ class MicrofinanceLoanProduct(models.Model):
         help='Utilisé si "Épargne cible pendant le remboursement" : ratio montant épargne cible / '
              'montant emprunté.',
     )
-    savings_apport_ratio = fields.Float(
-        string="Ratio d'apport (%)", default=0.0,
-        help='Utilisé si "Apport épargne exigé avant décaissement" : ratio apport minimum exigé / '
-             'montant demandé.',
-    )
     savings_product_id = fields.Many2one(
         'microfinance.savings.product', string="Produit d'épargne du programme",
-        help="Produit d'épargne dans lequel la cible/l'apport doit être constitué.",
+        help="Produit d'épargne dans lequel la cible doit être constituée (éligibilité "
+             "progressive, §3bis). Sans rapport avec l'épargne garantie de crédit ci-dessous.",
     )
+
+    # --- Épargne garantie de crédit (§3, mécanisme LPF) ---
+    guarantee_savings_percent = fields.Float(
+        string='Épargne garantie exigée (%)', default=0.0,
+        help="Pourcentage du montant du crédit demandé qui doit être disponible sur le compte "
+             "d'épargne garantie du client (produit ci-dessous) au moment de la demande de "
+             "crédit. Si à 0, aucune vérification n'est effectuée. Non applicable aux clients de "
+             "type Société (garantie sur compte d'épargne réservée aux particuliers/groupes, "
+             "cohérent avec le reste du module épargne).",
+    )
+    guarantee_savings_product_id = fields.Many2one(
+        'microfinance.savings.product', string="Produit d'épargne garantie de crédit",
+        help="Produit d'épargne dont le solde sert de garantie de crédit pour ce produit de "
+             "crédit (ex. produit dédié « Épargne garantie de crédit »). Requis si un pourcentage "
+             "d'épargne garantie exigée est renseigné ci-dessus. Le solde vérifié est la somme des "
+             "comptes actifs du client sur ce produit, quel que soit le compte précis choisi.",
+    )
+
+    @api.constrains('guarantee_savings_percent', 'guarantee_savings_product_id')
+    def _check_guarantee_savings_config(self):
+        for product in self:
+            if product.guarantee_savings_percent < 0:
+                raise ValidationError(_("Le pourcentage d'épargne garantie exigée ne peut pas être négatif."))
+            if product.guarantee_savings_percent and not product.guarantee_savings_product_id:
+                raise ValidationError(_(
+                    "Configurez le produit d'épargne garantie de crédit : un pourcentage d'épargne "
+                    "garantie exigée est renseigné sans indiquer sur quel produit d'épargne le "
+                    "vérifier."
+                ))

@@ -85,18 +85,24 @@ class ResPartner(models.Model):
     microfinance_marital_status = fields.Selection([
         ('single', 'Célibataire'), ('married', 'Marié(e)'), ('divorced', 'Divorcé(e)/Séparé(e)'), ('widowed', 'Veuf/Veuve'),
     ], string='Situation matrimoniale')
-    microfinance_profession = fields.Char(string='Profession')
+    microfinance_profession = fields.Many2one(
+        'microfinance.profession', string='Profession',
+        help="Autocomplete sur un référentiel configurable (menu Microfinance > Configuration "
+             "> Professions), plutôt qu'une liste figée : une institution peut y ajouter ses "
+             "propres valeurs à tout moment.",
+    )
     microfinance_education_level = fields.Selection([
         ('none', 'Aucun'), ('primary', 'Primaire'), ('secondary', 'Secondaire'), ('higher', 'Supérieur'),
     ], string="Niveau d'éducation")
 
     # --- Particulier : Famille et compte ---
     microfinance_spouse_name = fields.Char(string='Nom du conjoint')
+    microfinance_spouse_phone = fields.Char(string='Téléphone du conjoint')
+    microfinance_spouse_profession = fields.Char(string='Profession du conjoint')
     microfinance_next_of_kin_name = fields.Char(string='Personne à contacter')
     microfinance_next_of_kin_address = fields.Char(string='Adresse contact')
     microfinance_co_holder_name = fields.Char(string='Co-titulaire')
     microfinance_required_signatures = fields.Integer(string='Signatures requises', default=1)
-    microfinance_evolved_from_group = fields.Boolean(string='Issu du groupe')
 
     # --- Société : Identité légale (NIF/STAT/RCS remplacent le N° TVA natif) ---
     microfinance_trade_name = fields.Char(string='Nom commercial')
@@ -140,6 +146,33 @@ class ResPartner(models.Model):
 
     currency_id = fields.Many2one('res.currency', default=lambda self: self.env.company.currency_id)
 
+    microfinance_id_number_display = fields.Char(
+        string='N° pièce (affiché)', compute='_compute_id_number_display', inverse='_inverse_id_number_display',
+        help="Présentation en blocs de 3 chiffres pour la lisibilité (ex. 123 456 789 012 pour "
+             "un CIN). La valeur brute (chiffres uniquement) reste stockée dans le champ "
+             "technique 'N° pièce d'identité' — cette présentation n'affecte ni la validation "
+             "12 chiffres ni la recherche. Sans effet pour un type de pièce autre que CIN "
+             "(passeport, autre), affiché tel quel.",
+    )
+
+    @api.depends('microfinance_id_number', 'microfinance_id_type')
+    def _compute_id_number_display(self):
+        for partner in self:
+            raw = partner.microfinance_id_number or ''
+            if partner.microfinance_id_type == 'cin':
+                digits = re.sub(r'\D', '', raw)
+                partner.microfinance_id_number_display = ' '.join(digits[i:i + 3] for i in range(0, len(digits), 3)) if digits else ''
+            else:
+                partner.microfinance_id_number_display = raw
+
+    def _inverse_id_number_display(self):
+        for partner in self:
+            value = partner.microfinance_id_number_display or ''
+            if partner.microfinance_id_type == 'cin':
+                partner.microfinance_id_number = re.sub(r'\D', '', value)
+            else:
+                partner.microfinance_id_number = value
+
     @api.depends('microfinance_blacklist_ids.active', 'microfinance_blacklist_ids.date_end')
     def _compute_microfinance_is_blacklisted(self):
         today = fields.Date.context_today(self)
@@ -163,3 +196,17 @@ class ResPartner(models.Model):
                 digits = re.sub(r'\D', '', partner.microfinance_nif)
                 if len(digits) != 12:
                     raise ValidationError(_('Le NIF doit contenir exactement 12 chiffres.'))
+
+    @api.constrains('microfinance_marital_status', 'microfinance_spouse_name', 'microfinance_spouse_phone')
+    def _check_spouse_required_if_married(self):
+        # Hors contexte microfinance, ce contact est partagé avec d'autres usages de l'instance
+        # (EAT, immobilier) : aucune contrainte microfinance ne doit s'y appliquer.
+        if not self.env.context.get('microfinance_context'):
+            return
+        for partner in self:
+            if partner.microfinance_marital_status == 'married' and not (
+                partner.microfinance_spouse_name and partner.microfinance_spouse_phone
+            ):
+                raise ValidationError(_(
+                    'Le nom et le téléphone du conjoint sont obligatoires pour un client marié.'
+                ))

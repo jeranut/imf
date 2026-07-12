@@ -86,7 +86,7 @@ class MicrofinanceSavingsAccount(models.Model):
             account.transaction_count = len(account.transaction_ids)
 
     def _create_transaction(self, transaction_type, amount, note=None, bypass_min_balance=False,
-                             related_loan_payment_id=False, date=None):
+                             bypass_withdrawal_limit=False, related_loan_payment_id=False, date=None):
         self.ensure_one()
         transaction = self.env['microfinance.savings.transaction'].create({
             'account_id': self.id,
@@ -95,6 +95,7 @@ class MicrofinanceSavingsAccount(models.Model):
             'date': date or fields.Date.context_today(self),
             'note': note,
             'bypass_min_balance': bypass_min_balance,
+            'bypass_withdrawal_limit': bypass_withdrawal_limit,
             'related_loan_payment_id': related_loan_payment_id,
         })
         transaction.action_post()
@@ -124,7 +125,7 @@ class MicrofinanceSavingsAccount(models.Model):
             if abs(account.balance) > 0.01:
                 account._create_transaction(
                     'withdrawal', abs(account.balance), note=_('Retrait total avant clôture'),
-                    bypass_min_balance=True,
+                    bypass_min_balance=True, bypass_withdrawal_limit=True,
                 )
             account.write({
                 'state': 'closed',

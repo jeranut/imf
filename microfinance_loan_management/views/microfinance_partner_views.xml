@@ -46,42 +46,45 @@
 
                 <group invisible="microfinance_client_type != 'individual' or not context.get('microfinance_context')">
                     <group string="Identification">
-                        <field name="microfinance_registration_number"/>
+                        <field name="microfinance_registration_number" placeholder="Numéro d'inscription interne"/>
                         <field name="microfinance_id_type"/>
-                        <field name="microfinance_id_number" string="N° CIN" placeholder="123 122 123 123" invisible="microfinance_id_type != 'cin'"/>
-                        <field name="microfinance_id_number" string="N° pièce d'identité" invisible="microfinance_id_type == 'cin'"/>
+                        <field name="microfinance_id_number_display" string="N° CIN" placeholder="123 456 789 012" invisible="microfinance_id_type != 'cin'"/>
+                        <field name="microfinance_id_number" string="N° pièce d'identité" placeholder="Numéro de la pièce d'identité" invisible="microfinance_id_type == 'cin'"/>
                         <field name="microfinance_id_issue_date" invisible="microfinance_id_type != 'cin'"/>
-                        <field name="microfinance_id_issue_place" invisible="microfinance_id_type != 'cin'"/>
+                        <field name="microfinance_id_issue_place" placeholder="Ex: Antananarivo" invisible="microfinance_id_type != 'cin'"/>
                         <field name="microfinance_birthdate"/>
                         <field name="microfinance_gender"/>
                         <field name="microfinance_marital_status"/>
-                        <field name="microfinance_profession"/>
+                        <field name="microfinance_profession" placeholder="Rechercher ou créer une profession..."/>
                         <field name="microfinance_education_level"/>
                     </group>
                     <group string="Famille et compte">
-                        <field name="microfinance_spouse_name"/>
-                        <field name="microfinance_next_of_kin_name"/>
-                        <field name="microfinance_next_of_kin_address"/>
-                        <field name="microfinance_co_holder_name"/>
+                        <field name="microfinance_spouse_name" placeholder="Nom complet du conjoint"
+                            required="microfinance_marital_status == 'married'"/>
+                        <field name="microfinance_spouse_phone" placeholder="Ex: 034 12 345 67"
+                            required="microfinance_marital_status == 'married'"/>
+                        <field name="microfinance_spouse_profession" placeholder="Ex: Commerçant, Agriculteur..."/>
+                        <field name="microfinance_next_of_kin_name" placeholder="Nom de la personne à contacter en cas d'urgence"/>
+                        <field name="microfinance_next_of_kin_address" placeholder="Adresse de cette personne"/>
+                        <field name="microfinance_co_holder_name" placeholder="Nom du co-titulaire du compte, le cas échéant"/>
                         <field name="microfinance_required_signatures"/>
-                        <field name="microfinance_evolved_from_group"/>
                     </group>
                 </group>
 
                 <group invisible="microfinance_client_type != 'company' or not context.get('microfinance_context')">
                     <group string="Identité légale">
-                        <field name="microfinance_trade_name"/>
-                        <field name="microfinance_acronym"/>
+                        <field name="microfinance_trade_name" placeholder="Nom commercial de l'entreprise"/>
+                        <field name="microfinance_acronym" placeholder="Sigle ou acronyme"/>
                         <field name="microfinance_enterprise_type"/>
                         <field name="microfinance_nif" placeholder="123 122 123 123"/>
                         <field name="microfinance_stat" placeholder="12345 11 2020 0 12345"/>
                         <field name="microfinance_rcs" placeholder="2020B00123"/>
-                        <field name="microfinance_legal_form"/>
+                        <field name="microfinance_legal_form" placeholder="Ex: SARL, EURL, Association..."/>
                         <field name="microfinance_creation_date"/>
                     </group>
                     <group string="Activité et finances">
-                        <field name="microfinance_business_sector"/>
-                        <field name="microfinance_main_activity"/>
+                        <field name="microfinance_business_sector" placeholder="Ex: Commerce, Agriculture, Artisanat..."/>
+                        <field name="microfinance_main_activity" placeholder="Description de l'activité principale"/>
                         <field name="microfinance_share_capital"/>
                         <field name="microfinance_estimated_turnover"/>
                         <field name="microfinance_employee_count"/>
@@ -89,16 +92,16 @@
                 </group>
                 <group invisible="microfinance_client_type != 'company' or not context.get('microfinance_context')">
                     <group string="Localisation étendue">
-                        <field name="microfinance_region"/>
-                        <field name="microfinance_district"/>
-                        <field name="microfinance_commune"/>
-                        <field name="microfinance_locality"/>
-                        <field name="microfinance_gps_coordinates"/>
+                        <field name="microfinance_region" placeholder="Région"/>
+                        <field name="microfinance_district" placeholder="District"/>
+                        <field name="microfinance_commune" placeholder="Commune"/>
+                        <field name="microfinance_locality" placeholder="Fokontany / localité"/>
+                        <field name="microfinance_gps_coordinates" placeholder="Ex: -18.8792, 47.5079"/>
                         <field name="microfinance_distance_to_branch"/>
                     </group>
                     <group string="Fermeture">
                         <field name="microfinance_closure_date"/>
-                        <field name="microfinance_closure_reason"/>
+                        <field name="microfinance_closure_reason" placeholder="Motif de la fermeture du dossier"/>
                     </group>
                 </group>
 
@@ -132,16 +135,6 @@
                     </field>
                 </group>
 
-                <group invisible="not context.get('microfinance_context')" string="Suivi (commun)">
-                    <field name="company_id" groups="base.group_multi_company"/>
-                    <field name="microfinance_internal_reference"/>
-                    <field name="microfinance_category_1"/>
-                    <field name="microfinance_statistical_number"/>
-                    <field name="microfinance_category_2"/>
-                    <field name="microfinance_exit_date" invisible="microfinance_client_type == 'group'"/>
-                    <field name="microfinance_category_3"/>
-                    <field name="microfinance_exit_reason" invisible="microfinance_client_type == 'group'"/>
-                </group>
                 <group invisible="not context.get('microfinance_context')" string="Liste noire">
                     <field name="microfinance_blacklist_ids" nolabel="1" colspan="2">
                         <tree editable="bottom">

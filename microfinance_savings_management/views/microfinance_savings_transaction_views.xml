@@ -37,6 +37,7 @@
                         </group>
                         <group>
                             <field name="bypass_min_balance" invisible="transaction_type not in ('withdrawal','auto_debit')"/>
+                            <field name="bypass_withdrawal_limit" invisible="transaction_type != 'withdrawal'"/>
                             <field name="related_loan_payment_id" readonly="1"/>
                             <field name="move_id" readonly="1"/>
                             <field name="note"/>

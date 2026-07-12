@@ -12,8 +12,9 @@
             <field name="fee_move_id" position="after">
                 <field name="savings_target_amount" invisible="savings_requirement_type != 'target_during_loan'" readonly="1"/>
                 <field name="savings_target_reached" invisible="savings_requirement_type != 'target_during_loan'" readonly="1"/>
-                <field name="savings_apport_required" invisible="savings_requirement_type != 'upfront_apport'" readonly="1"/>
-                <field name="savings_apport_verified" invisible="savings_requirement_type != 'upfront_apport'" readonly="1"/>
+                <field name="guarantee_savings_required" invisible="not guarantee_savings_required" readonly="1"/>
+                <field name="guarantee_savings_balance" invisible="not guarantee_savings_required" readonly="1"/>
+                <field name="guarantee_savings_verified" invisible="not guarantee_savings_required" readonly="1"/>
             </field>
         </field>
     </record>

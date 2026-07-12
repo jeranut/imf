@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_company_form_inherit_microfinance_loan" model="ir.ui.view">
+        <field name="name">res.company.form.inherit.microfinance.loan</field>
+        <field name="model">res.company</field>
+        <field name="inherit_id" ref="base.view_company_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='name']" position="after">
+                <field name="loan_product_code_locked" invisible="1"/>
+                <field name="loan_product_code_prefix" readonly="loan_product_code_locked"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

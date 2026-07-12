@@ -18,7 +18,11 @@ général est en place (comptes de créances, de produits d'intérêts, de charg
 Menu **Microfinance > Configuration > Produits de crédit**.
 
 Un produit de crédit regroupe toutes les règles qui s'appliqueront aux dossiers créés à
-partir de lui (un « crédit express », un « crédit agricole », etc.).
+partir de lui (un « crédit express », un « crédit agricole », etc.). Le code du produit
+(ex. `CR00001`) est généré automatiquement à la création — préfixe configurable par société
+(Paramètres > Sociétés, champ « Préfixe code produit crédit », par défaut `CR`), verrouillé
+dès le premier produit créé pour cette société afin de ne jamais mélanger deux styles de code
+dans l'historique.
 
 **Onglet Calcul crédit**
 - Taux d'intérêt annuel, et méthode de calcul (taux fixe ou solde dégressif)
@@ -62,9 +66,13 @@ défaut sur chacun).
 4. **Approbation**.
 5. **Génération de l'échéancier** et **décaissement** : si des frais de dossier sont dus et
    exigés avant décaissement, ils doivent d'abord être encaissés.
-6. **Remboursements** : chaque versement est automatiquement réparti entre pénalité, intérêt
-   et capital de l'échéance la plus ancienne encore due. Un remboursement comptabilisé peut
-   être annulé (contre-passation) si besoin, par exemple en cas d'erreur de saisie.
+6. **Remboursements** : à la sélection du crédit (formulaire ou assistant), le montant et le
+   journal se préremplissent automatiquement — montant dû (échéances déjà en retard cumulées,
+   ou à défaut la prochaine échéance), journal configuré sur le produit — librement modifiables
+   pour un remboursement partiel ou anticipé. Chaque versement est ensuite automatiquement
+   réparti entre pénalité, intérêt et capital de l'échéance la plus ancienne encore due. Un
+   remboursement comptabilisé peut être annulé (contre-passation) si besoin, par exemple en cas
+   d'erreur de saisie.
 7. **Clôture automatique** dès que le solde restant dû atteint zéro.
 
 En cours de route, un crédit actif peut être **rééchelonné** (nouvelle durée et/ou nouvelle
@@ -110,6 +118,22 @@ mensuelle.
 
 Les agents de recouvrement peuvent enregistrer leurs visites clients directement dans le
 module, pour garder une trace du suivi effectué sur les dossiers en difficulté.
+
+## Fiche client (contact partagé)
+
+Le formulaire Contact standard est enrichi en contexte microfinance uniquement (menu
+**Microfinance > Clients**) : toutes ces modifications sont invisibles pour les autres usages
+de l'instance (EAT, immobilier) qui partagent le même contact.
+
+- Si le client est marié, le nom et le téléphone du conjoint deviennent obligatoires (la
+  profession du conjoint reste facultative).
+- La profession est saisie par autocomplete sur une liste configurable (**Microfinance >
+  Configuration > Professions**), plutôt qu'une liste figée dans le code — livrée avec une
+  quinzaine de professions courantes pour le contexte malgache, modifiable ensuite librement.
+- Le numéro de CIN s'affiche par blocs de 3 chiffres pour la lisibilité (ex.
+  `123 456 789 012`) ; la valeur brute (12 chiffres) reste seule stockée et validée.
+- Le champ "Issu du groupe" et la section "Suivi (commun)" (référence interne, catégories,
+  date/motif de sortie) ont été retirés du formulaire, jugés obsolètes.
 
 ## Qui peut faire quoi
 

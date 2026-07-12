@@ -34,7 +34,6 @@
                         <group>
                             <field name="product_type"/>
                             <field name="term_months" invisible="product_type != 'term_deposit'" required="product_type == 'term_deposit'"/>
-                            <field name="early_withdrawal_penalty_rate" invisible="product_type != 'term_deposit'"/>
                         </group>
                     </group>
                     <notebook>
@@ -50,9 +49,12 @@
                                 <field name="min_opening_amount"/>
                                 <field name="min_balance"/>
                                 <field name="withdrawal_limit_amount"/>
-                                <field name="withdrawal_limit_period"/>
                                 <field name="maintenance_fee_amount"/>
                                 <field name="maintenance_fee_frequency"/>
+                            </group>
+                            <group string="Pénalité de retrait anticipé">
+                                <field name="early_withdrawal_penalty_rate"/>
+                                <field name="min_retention_days"/>
                             </group>
                         </page>
                         <page string="Comptabilité">

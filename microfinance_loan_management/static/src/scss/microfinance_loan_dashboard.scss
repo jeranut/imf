@@ -1,5 +1,19 @@
+// Rectificatif : la tentative précédente (".o_action_manager > .o_action.o_microfinance_dashboard")
+// ne correspondait à aucun élément réel et était donc sans effet. ActionContainer
+// (web/webclient/actions/action_container.js) passe bien className="'o_action'" à ce composant,
+// mais ce n'est qu'un PROP OWL comme un autre : ce sont les contrôleurs de vue standard
+// (web/views/view.js, form_controller.js, etc.) qui lisent explicitement this.props.className et
+// l'appliquent eux-mêmes sur leur racine. Notre composant ne le fait pas, donc la classe
+// "o_action" n'apparaît jamais dans le DOM ici : ce div est un enfant NU de ".o_action_manager".
+// Or ".o_action_manager" (pas ".o_action") porte déjà "height:100%; overflow:hidden;" dans
+// addons/web/static/src/webclient/webclient_layout.scss — c'est CETTE règle, partagée par toute
+// l'application, qui tronquait le contenu. On ne la touche pas (elle sert toutes les autres
+// actions) : on donne plutôt à ce composant sa propre zone de défilement interne, exactement
+// comme le fait ".o_content" pour les vues standard (hauteur=100% du parent + overflow-y:auto
+// sur soi-même), pour un seul niveau de scroll, contenu à ce composant.
 .o_microfinance_dashboard {
-    min-height: 100%;
+    height: 100%;
+    overflow-y: auto;
     padding: 24px;
     background: #f8fafc;
     color: #0f172a;
@@ -27,14 +41,55 @@
         text-transform: uppercase;
     }
 
-    &__badge {
-        padding: 8px 12px;
-        border: 1px solid #cbd5e1;
-        border-radius: 8px;
-        background: #ffffff;
+    &__address {
+        margin: 4px 0 0;
+        color: #64748b;
+        font-size: 13px;
+        font-weight: 500;
+    }
+
+    // Option A : logo seul (pas de pilule/cadre qui le compresse), nom de la société empilé
+    // dessous plutôt qu'accolé à droite — supprime le besoin de tronquer le nom (largeur du
+    // bloc = celle du logo, plus généreuse, et le texte peut passer sur 2 lignes au besoin).
+    &__company {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+        max-width: 260px;
+    }
+
+    // Ratio libre : object-fit:contain + hauteur fixe (largeur auto) pour que le logo des 25
+    // agences s'affiche en entier, agrandi, sans cadre ni fond qui le compresse. Le repli (pas
+    // de logo) garde un léger encadré neutre car c'est une icône générique, pas une image.
+    &__company_logo {
+        height: 60px;
+        width: auto;
+        max-width: 100%;
+        object-fit: contain;
+
+        &--fallback {
+            box-sizing: border-box;
+            width: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #eef2ff;
+            color: #534AB7;
+            font-size: 22px;
+        }
+    }
+
+    &__company_name {
         color: #475569;
         font-weight: 600;
-        white-space: nowrap;
+        font-size: 13px;
+        text-align: right;
+        white-space: normal;
+        overflow-wrap: break-word;
     }
 
     &__loading,
@@ -55,6 +110,32 @@
     }
 }
 
+.o_microfinance_section_header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 24px 0 12px;
+
+    &:first-child {
+        margin-top: 0;
+    }
+
+    &__label {
+        color: #534AB7;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    &__line {
+        flex: 1;
+        height: 1px;
+        background: #e2e8f0;
+    }
+}
+
 .o_microfinance_kpi_grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(150px, 1fr));
@@ -62,36 +143,104 @@
     margin-bottom: 16px;
 }
 
+// Tuile KPI : icône circulaire à gauche, valeur + libellé à droite, lien d'action pleine
+// largeur en bas séparé par une ligne pointillée. Couleurs fixes (non adaptatives clair/sombre)
+// par choix assumé pour ce module — cf. note dans le README.
 .o_microfinance_kpi {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
     min-height: 112px;
-    padding: 18px;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
+    padding: 1rem;
+    border: 0.5px solid;
+    border-radius: 12px;
     background: #ffffff;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 
-    span {
-        display: block;
-        margin-bottom: 14px;
-        color: #64748b;
-        font-size: 13px;
-        font-weight: 700;
-        text-transform: uppercase;
+    &__body {
+        display: flex;
+        align-items: center;
+        gap: 12px;
     }
 
-    strong {
-        display: block;
-        color: #0f172a;
-        font-size: 25px;
-        line-height: 1.15;
-        overflow-wrap: anywhere;
+    &__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        border-radius: 50%;
+        font-size: 18px;
     }
 
-    &--blue { border-top: 4px solid #2563eb; }
-    &--green { border-top: 4px solid #10b981; }
-    &--cyan { border-top: 4px solid #0891b2; }
-    &--red { border-top: 4px solid #ef4444; }
-    &--amber { border-top: 4px solid #f59e0b; }
+    &__content {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+
+        strong {
+            display: block;
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1.2;
+            overflow-wrap: anywhere;
+        }
+
+        span {
+            display: block;
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 500;
+        }
+    }
+
+    &__link {
+        display: block;
+        width: 100%;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px dashed;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+
+    // Une paire (fond tuile / fond cercle / couleur icône+lien) par indicateur. Bordure de
+    // tuile = variante plus foncée du fond, calculée avec darken() plutôt que codée en dur.
+    &--credits {
+        background: #F4F3FC;
+        border-color: darken(#F4F3FC, 10%);
+        .o_microfinance_kpi__icon { background: #CECBF6; color: #3C3489; }
+        .o_microfinance_kpi__link { color: #534AB7; border-top-color: #CECBF6; }
+    }
+    &--decaisse {
+        background: #EEF6E9;
+        border-color: darken(#EEF6E9, 10%);
+        .o_microfinance_kpi__icon { background: #C0DD97; color: #27500A; }
+        .o_microfinance_kpi__link { color: #3B6D11; border-top-color: #C0DD97; }
+    }
+    &--encours {
+        background: #EAF3FC;
+        border-color: darken(#EAF3FC, 10%);
+        .o_microfinance_kpi__icon { background: #B5D4F4; color: #0C447C; }
+        .o_microfinance_kpi__link { color: #185FA5; border-top-color: #B5D4F4; }
+    }
+    &--impayes {
+        background: #FCF3E1;
+        border-color: darken(#FCF3E1, 10%);
+        .o_microfinance_kpi__icon { background: #FAC775; color: #633806; }
+        .o_microfinance_kpi__link { color: #854F0B; border-top-color: #FAC775; }
+    }
+    &--defaut {
+        background: #FFEBEB;
+        border-color: darken(#FFEBEB, 10%);
+        .o_microfinance_kpi__icon { background: #FFB3B3; color: #FF0000; }
+        .o_microfinance_kpi__link { color: #FF0000; border-top-color: #FFB3B3; }
+    }
 }
 
 .o_microfinance_panel {
@@ -156,6 +305,100 @@
     }
 }
 
+.o_microfinance_activity_grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+    align-items: stretch;
+}
+
+.o_microfinance_activity_panel {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 18px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+
+    &__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+
+        h2 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 700;
+        }
+    }
+
+    &__link {
+        display: block;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px dashed #e2e8f0;
+        color: #534AB7;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+
+        &:hover {
+            text-decoration: underline;
+        }
+    }
+}
+
+.o_microfinance_activity_list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    &__item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid #f1f5f9;
+
+        &:last-child {
+            border-bottom: none;
+        }
+    }
+
+    &__info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1;
+
+        strong {
+            font-size: 13px;
+        }
+
+        span {
+            color: #64748b;
+            font-size: 12px;
+        }
+    }
+
+    &__amount {
+        font-weight: 700;
+        font-size: 13px;
+        white-space: nowrap;
+    }
+
+    &__empty {
+        padding: 16px 0;
+        color: #64748b;
+        text-align: center;
+        font-size: 13px;
+    }
+}
+
 .o_microfinance_table {
     margin-bottom: 0;
 
@@ -168,12 +411,17 @@
 }
 
 @media (max-width: 1200px) {
-    .o_microfinance_kpi_grid {
-        grid-template-columns: repeat(2, minmax(160px, 1fr));
-    }
-
-    .o_microfinance_dashboard__grid {
+    .o_microfinance_dashboard__grid,
+    .o_microfinance_activity_grid {
         grid-template-columns: 1fr;
+    }
+}
+
+// Pas de breakpoint dédié ailleurs dans le module pour la grille KPI : 992px repris du "lg"
+// Bootstrap (déjà le standard du client web Odoo), comme suggéré à défaut d'un seuil existant.
+@media (max-width: 992px) {
+    .o_microfinance_kpi_grid {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
     }
 }
 

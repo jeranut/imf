@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from dateutil.relativedelta import relativedelta
+
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
@@ -45,6 +47,12 @@ class MicrofinanceSavingsTransaction(models.Model):
              "(clôture de compte, ou prélèvement automatique quand le produit de crédit l'autorise "
              'explicitement).',
     )
+    bypass_withdrawal_limit = fields.Boolean(
+        string='Déroger au plafond de retrait', default=False,
+        help='Si activé, ce retrait peut dépasser le plafond de retrait par transaction du '
+             'produit (ex. clôture de compte). Dérogation distincte de "Déroger au solde '
+             'minimum" : les deux règles sont indépendantes.',
+    )
     partner_id = fields.Many2one(related='account_id.partner_id', store=True, readonly=True)
     company_id = fields.Many2one(related='account_id.company_id', store=True, readonly=True)
     currency_id = fields.Many2one(related='account_id.currency_id', readonly=True)
@@ -71,6 +79,69 @@ class MicrofinanceSavingsTransaction(models.Model):
                     'Retrait refusé : le solde après retrait (%(projected).2f) descendrait sous le '
                     'solde minimum du produit (%(minimum).2f).'
                 ) % {'projected': projected_balance, 'minimum': min_balance})
+
+    @api.constrains('date', 'account_id', 'state')
+    def _check_transaction_date_order(self):
+        # Comparaison à la date maximale des autres transactions déjà comptabilisées sur le même
+        # compte (pas d'horodatage dans le modèle) : une date strictement antérieure est refusée,
+        # une date égale reste acceptée puisque l'ordre de saisie du jour est de toute façon
+        # départagé par l'id (croissant à la création, jamais réutilisé).
+        for txn in self:
+            other_posted = txn.account_id.transaction_ids.filtered(
+                lambda t: t.state == 'posted' and t.id != txn.id
+            )
+            if not other_posted:
+                continue
+            last_date = max(other_posted.mapped('date'))
+            if txn.date < last_date:
+                raise ValidationError(_(
+                    'Transaction refusée : la date (%(date)s) est antérieure à la dernière '
+                    'transaction déjà comptabilisée sur ce compte (%(last)s). Les transactions '
+                    'doivent être saisies dans l\'ordre chronologique.'
+                ) % {'date': txn.date, 'last': last_date})
+
+    @api.constrains('transaction_type', 'amount', 'bypass_withdrawal_limit', 'account_id')
+    def _check_withdrawal_limit(self):
+        # Blocage simple par transaction individuelle uniquement (pas de cumul sur une période :
+        # non demandé, absent du manuel LPF, écarté pour ne pas introduire une règle métier non
+        # validée). Dérogation via son propre flag, distinct de bypass_min_balance.
+        for txn in self:
+            if txn.transaction_type != 'withdrawal' or txn.bypass_withdrawal_limit:
+                continue
+            limit = txn.account_id.product_id.withdrawal_limit_amount
+            if not limit:
+                continue
+            if txn.amount > limit + 0.01:
+                raise ValidationError(_(
+                    'Retrait refusé : le montant (%(amount).2f) dépasse le plafond de retrait '
+                    'par transaction du produit (%(limit).2f).'
+                ) % {'amount': txn.amount, 'limit': limit})
+
+    def _compute_early_withdrawal_penalty(self):
+        """Pénalité de retrait anticipé (§5/§6) : ne s'applique qu'à un retrait client (pas à un
+        prélèvement automatique ni à un virement), au taux unique configuré sur le produit
+        (early_withdrawal_penalty_rate), déclenchée par l'une OU l'autre des deux échéances
+        suivantes si configurée et pas encore atteinte — jamais cumulée si les deux le sont :
+          - maturity_date du compte (uniquement pour un produit à terme, product_type =
+            'term_deposit') ;
+          - min_retention_days depuis l'ouverture du compte (n'importe quel produit, y compris
+            épargne libre). Calculé depuis account.opening_date : ce modèle ne suit pas les
+            dépôts individuellement (solde fongible, pas de lots par dépôt), donc il n'existe pas
+            d'autre référence temporelle exploitable que l'ouverture du compte, cohérente avec le
+            calcul déjà fait pour maturity_date."""
+        self.ensure_one()
+        account = self.account_id
+        product = account.product_id
+        if self.transaction_type != 'withdrawal' or not product.early_withdrawal_penalty_rate:
+            return 0.0
+        before_maturity = bool(account.maturity_date) and self.date < account.maturity_date
+        before_retention_end = False
+        if product.min_retention_days and account.opening_date:
+            retention_end = account.opening_date + relativedelta(days=product.min_retention_days)
+            before_retention_end = self.date < retention_end
+        if not before_maturity and not before_retention_end:
+            return 0.0
+        return self.amount * product.early_withdrawal_penalty_rate / 100.0
 
     def _prepare_transaction_move(self):
         self.ensure_one()
@@ -113,10 +184,26 @@ class MicrofinanceSavingsTransaction(models.Model):
                 if not journal or not journal.default_account_id:
                     raise UserError(_('Configurez le journal de retrait et son compte par défaut sur le produit %s.') % product.name)
                 counterpart_account = journal.default_account_id
-            lines = [
-                (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': deposit_account.id, 'debit': self.amount, 'credit': 0.0}),
-                (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': counterpart_account.id, 'debit': 0.0, 'credit': self.amount}),
-            ]
+            penalty_amount = self._compute_early_withdrawal_penalty()
+            if penalty_amount:
+                if not product.account_penalites_id:
+                    raise UserError(_("Configurez le compte pénalités sur épargne sur le produit %s.") % product.name)
+                if penalty_amount >= self.amount:
+                    raise UserError(_(
+                        "La pénalité de retrait anticipé calculée (%(penalty).2f) est supérieure ou "
+                        "égale au montant retiré (%(amount).2f) : vérifiez le taux configuré sur le "
+                        "produit %(product)s."
+                    ) % {'penalty': penalty_amount, 'amount': self.amount, 'product': product.name})
+                lines = [
+                    (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': deposit_account.id, 'debit': self.amount, 'credit': 0.0}),
+                    (0, 0, {'name': _('Pénalité de retrait anticipé %s') % account.name, 'partner_id': account.partner_id.id, 'account_id': product.account_penalites_id.id, 'debit': 0.0, 'credit': penalty_amount}),
+                    (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': counterpart_account.id, 'debit': 0.0, 'credit': self.amount - penalty_amount}),
+                ]
+            else:
+                lines = [
+                    (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': deposit_account.id, 'debit': self.amount, 'credit': 0.0}),
+                    (0, 0, {'name': label, 'partner_id': account.partner_id.id, 'account_id': counterpart_account.id, 'debit': 0.0, 'credit': self.amount}),
+                ]
         journal_for_move = (
             product.deposit_journal_id if self.transaction_type in CREDIT_TYPES and self.transaction_type != 'interest_credit'
             else product.withdrawal_journal_id or product.deposit_journal_id

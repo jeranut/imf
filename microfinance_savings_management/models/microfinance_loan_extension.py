@@ -14,22 +14,27 @@ class MicrofinanceLoan(models.Model):
         related='product_id.savings_requirement_type', string='Exigence épargne (produit)', readonly=True,
     )
     savings_account_id = fields.Many2one(
-        'microfinance.savings.account', string="Compte épargne (prélèvement / apport)",
+        'microfinance.savings.account', string="Compte épargne (prélèvement)",
         domain="[('partner_id', '=', partner_id)]", tracking=True,
-        help='Compte source du prélèvement automatique et/ou compte dans lequel est vérifié '
-             "l'apport/la cible d'épargne progressive.",
+        help='Compte source du prélèvement automatique et/ou compte dans lequel est vérifiée la '
+             "cible d'épargne progressive.",
     )
     savings_target_amount = fields.Monetary(
         compute='_compute_savings_target_amount', store=True, string='Épargne cible (pendant remboursement)',
     )
-    savings_apport_required = fields.Monetary(
-        compute='_compute_savings_apport_required', store=True, string="Apport épargne requis",
-    )
-    savings_apport_verified = fields.Boolean(
-        compute='_compute_savings_apport_verified', string='Apport vérifié',
-    )
     savings_target_reached = fields.Boolean(
         compute='_compute_savings_target_reached', store=True, string='Épargne cible atteinte',
+    )
+    guarantee_savings_required = fields.Monetary(
+        compute='_compute_guarantee_savings_required', store=True, string='Épargne garantie requise',
+    )
+    guarantee_savings_balance = fields.Monetary(
+        compute='_compute_guarantee_savings_balance', string='Solde épargne garantie du client',
+        help="Somme des soldes des comptes actifs du client sur le produit d'épargne garantie de "
+             "crédit configuré sur le produit de crédit.",
+    )
+    guarantee_savings_verified = fields.Boolean(
+        compute='_compute_guarantee_savings_verified', string='Épargne garantie vérifiée',
     )
 
     @api.depends('loan_amount', 'product_id.savings_requirement_type', 'product_id.savings_target_ratio')
@@ -40,19 +45,6 @@ class MicrofinanceLoan(models.Model):
             else:
                 loan.savings_target_amount = 0.0
 
-    @api.depends('loan_amount', 'product_id.savings_requirement_type', 'product_id.savings_apport_ratio')
-    def _compute_savings_apport_required(self):
-        for loan in self:
-            if loan.product_id.savings_requirement_type == 'upfront_apport':
-                loan.savings_apport_required = loan.loan_amount * loan.product_id.savings_apport_ratio / 100.0
-            else:
-                loan.savings_apport_required = 0.0
-
-    @api.depends('savings_account_id.balance', 'savings_apport_required')
-    def _compute_savings_apport_verified(self):
-        for loan in self:
-            loan.savings_apport_verified = bool(loan.savings_account_id) and loan.savings_account_id.balance >= loan.savings_apport_required
-
     @api.depends('savings_account_id.balance', 'savings_target_amount')
     def _compute_savings_target_reached(self):
         for loan in self:
@@ -61,6 +53,29 @@ class MicrofinanceLoan(models.Model):
                 and loan.savings_target_amount > 0
                 and loan.savings_account_id.balance >= loan.savings_target_amount
             )
+
+    @api.depends('loan_amount', 'product_id.guarantee_savings_percent')
+    def _compute_guarantee_savings_required(self):
+        for loan in self:
+            loan.guarantee_savings_required = loan.loan_amount * loan.product_id.guarantee_savings_percent / 100.0
+
+    def _compute_guarantee_savings_balance(self):
+        for loan in self:
+            guarantee_product = loan.product_id.guarantee_savings_product_id
+            if not guarantee_product or not loan.partner_id:
+                loan.guarantee_savings_balance = 0.0
+                continue
+            accounts = self.env['microfinance.savings.account'].search([
+                ('partner_id', '=', loan.partner_id.id),
+                ('product_id', '=', guarantee_product.id),
+                ('state', '=', 'active'),
+            ])
+            loan.guarantee_savings_balance = sum(accounts.mapped('balance'))
+
+    @api.depends('guarantee_savings_required', 'guarantee_savings_balance')
+    def _compute_guarantee_savings_verified(self):
+        for loan in self:
+            loan.guarantee_savings_verified = loan.guarantee_savings_balance >= loan.guarantee_savings_required
 
     @api.constrains('savings_account_id', 'company_id')
     def _check_savings_account_company(self):
@@ -75,12 +90,13 @@ class MicrofinanceLoan(models.Model):
         super()._check_eligibility()
         for loan in self:
             loan._check_progressive_savings_eligibility()
+            loan._check_guarantee_savings_eligibility()
 
     def _check_progressive_savings_eligibility(self):
         """§3bis.4 : contrôle d'éligibilité en amont (pas un débit) — indépendant du contrôle
-        d'apport (upfront_apport) du produit demandé. Ne bloque que si le client a un précédent
-        crédit dont le produit imposait une épargne cible pendant le remboursement et que cette
-        cible n'a pas été atteinte."""
+        d'épargne garantie du produit demandé. Ne bloque que si le client a un précédent crédit
+        dont le produit imposait une épargne cible pendant le remboursement et que cette cible
+        n'a pas été atteinte."""
         self.ensure_one()
         previous_loan = self.search([
             ('company_id', '=', self.company_id.id),
@@ -99,17 +115,29 @@ class MicrofinanceLoan(models.Model):
                 'balance': previous_loan.savings_account_id.balance if previous_loan.savings_account_id else 0.0,
             })
 
-    def action_approve(self):
-        for loan in self:
-            if loan.product_id.savings_requirement_type == 'upfront_apport' and not loan.savings_apport_verified:
-                raise UserError(_(
-                    "Apport en épargne insuffisant : requis %(required).2f, solde actuel du compte "
-                    "épargne %(balance).2f."
-                ) % {
-                    'required': loan.savings_apport_required,
-                    'balance': loan.savings_account_id.balance if loan.savings_account_id else 0.0,
-                })
-        return super().action_approve()
+    def _check_guarantee_savings_eligibility(self):
+        """Épargne garantie de crédit (mécanisme LPF) : contrôle au moment de la demande de
+        crédit (action_submit), pas seulement au décaissement — contrairement à l'ancien
+        mécanisme upfront_apport qu'il remplace, qui ne bloquait qu'à l'approbation. Non
+        applicable aux clients de type Société (garantie sur compte d'épargne réservée aux
+        particuliers/groupes)."""
+        self.ensure_one()
+        product = self.product_id
+        if not product.guarantee_savings_percent or not product.guarantee_savings_product_id:
+            return
+        if self.partner_id.microfinance_client_type == 'company':
+            return
+        if not self.guarantee_savings_verified:
+            missing = self.guarantee_savings_required - self.guarantee_savings_balance
+            raise UserError(_(
+                "Épargne garantie insuffisante sur le produit %(product)s : requis %(required).2f, "
+                "solde actuel %(balance).2f, il manque %(missing).2f."
+            ) % {
+                'product': product.guarantee_savings_product_id.name,
+                'required': self.guarantee_savings_required,
+                'balance': self.guarantee_savings_balance,
+                'missing': missing,
+            })
 
     def _process_savings_auto_debit(self):
         """Traite le prélèvement automatique pour CE crédit (une échéance overdue au moins déjà

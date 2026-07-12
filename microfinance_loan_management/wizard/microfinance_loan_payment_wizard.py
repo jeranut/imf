@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
-from odoo import fields, models, _
+from odoo import api, fields, models, _
 from odoo.exceptions import UserError
+
+from ..models.microfinance_loan_payment import default_payment_amount_and_journal
 
 
 class MicrofinanceLoanPaymentWizard(models.TransientModel):
@@ -8,12 +10,28 @@ class MicrofinanceLoanPaymentWizard(models.TransientModel):
     _description = 'Assistant remboursement crédit'
 
     loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True)
-    amount = fields.Monetary(string='Montant', required=True)
+    amount = fields.Monetary(
+        string='Montant', required=True,
+        help="Préempli avec le montant dû (échéances en retard cumulées, ou à défaut la "
+             "prochaine échéance) — librement modifiable pour un remboursement partiel ou "
+             "anticipé.",
+    )
     payment_date = fields.Date(string='Date de remboursement', default=fields.Date.context_today, required=True)
     journal_id = fields.Many2one('account.journal', string='Journal', required=True, domain="[('type', 'in', ('bank','cash'))]")
     currency_id = fields.Many2one(related='loan_id.currency_id', readonly=True)
     note = fields.Text(string='Note')
     post_now = fields.Boolean(string='Comptabiliser maintenant', default=True)
+
+    @api.onchange('loan_id')
+    def _onchange_loan_id(self):
+        for wizard in self:
+            if not wizard.loan_id:
+                continue
+            amount, journal = default_payment_amount_and_journal(wizard.loan_id)
+            if amount:
+                wizard.amount = amount
+            if journal:
+                wizard.journal_id = journal
 
     def action_create_payment(self):
         self.ensure_one()
