@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Liste de départ pertinente pour le contexte malgache/microfinance, modifiable ensuite
+         librement par l'institution (menu Microfinance > Configuration > Professions). -->
+    <record id="microfinance_profession_agriculteur" model="microfinance.profession">
+        <field name="name">Agriculteur</field>
+    </record>
+    <record id="microfinance_profession_eleveur" model="microfinance.profession">
+        <field name="name">Éleveur</field>
+    </record>
+    <record id="microfinance_profession_pecheur" model="microfinance.profession">
+        <field name="name">Pêcheur</field>
+    </record>
+    <record id="microfinance_profession_commercant" model="microfinance.profession">
+        <field name="name">Commerçant</field>
+    </record>
+    <record id="microfinance_profession_vendeur" model="microfinance.profession">
+        <field name="name">Vendeur</field>
+    </record>
+    <record id="microfinance_profession_artisan" model="microfinance.profession">
+        <field name="name">Artisan</field>
+    </record>
+    <record id="microfinance_profession_chauffeur" model="microfinance.profession">
+        <field name="name">Chauffeur</field>
+    </record>
+    <record id="microfinance_profession_fonctionnaire" model="microfinance.profession">
+        <field name="name">Fonctionnaire</field>
+    </record>
+    <record id="microfinance_profession_enseignant" model="microfinance.profession">
+        <field name="name">Enseignant</field>
+    </record>
+    <record id="microfinance_profession_employe_prive" model="microfinance.profession">
+        <field name="name">Employé du secteur privé</field>
+    </record>
+    <record id="microfinance_profession_etudiant" model="microfinance.profession">
+        <field name="name">Étudiant</field>
+    </record>
+    <record id="microfinance_profession_retraite" model="microfinance.profession">
+        <field name="name">Retraité</field>
+    </record>
+    <record id="microfinance_profession_sans_emploi" model="microfinance.profession">
+        <field name="name">Sans emploi</field>
+    </record>
+    <record id="microfinance_profession_autre" model="microfinance.profession">
+        <field name="name">Autre</field>
+    </record>
+</odoo>

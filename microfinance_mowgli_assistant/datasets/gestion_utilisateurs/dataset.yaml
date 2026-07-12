@@ -1,0 +1,260 @@
+workflow: gestion_utilisateurs
+name: Gestion des utilisateurs
+version: "17.0"
+description: >
+  Créer, configurer et désactiver les comptes utilisateurs (res.users) qui accèdent
+  aux modules Microfinance, et leur attribuer les groupes de sécurité (res.groups)
+  qui déterminent leurs droits sur les modèles métier de microfinance_loan_management
+  et microfinance_savings_management.
+sequence: 10
+roles:
+  - gestionnaire
+  - admin
+categories:
+  - name: Comptes utilisateurs
+    sequence: 10
+  - name: Groupes et droits d'accès
+    sequence: 20
+articles:
+  - id: gestion_utilisateurs-001
+    title: Créer un compte utilisateur et lui attribuer un groupe métier
+    category: Comptes utilisateurs
+    difficulty: beginner
+    roles:
+      - gestionnaire
+      - admin
+    suggested: true
+    priority: 100
+    questions:
+      - Comment créer un compte pour un nouvel agent crédit ?
+      - Comment créer un utilisateur Microfinance ?
+      - Créer un nouvel utilisateur
+      - Nouveau compte utilisateur
+    menu: Réglages > Utilisateurs et Sociétés > Utilisateurs
+    model: res.users
+    steps:
+      - Réglages > Utilisateurs et Sociétés > Utilisateurs > Nouveau.
+      - Renseigner Nom, Adresse e-mail (sert de login par défaut).
+      - >
+        Onglet « Droits d'accès » : dans la section « Microfinance », cocher le(s)
+        groupe(s) métier pertinent(s) (ex. Agent crédit, Manager crédit, Agent
+        épargne, etc.). Les cases à cocher reflètent la hiérarchie des groupes
+        (implied_ids).
+      - Enregistrer : Odoo envoie éventuellement une invitation par e-mail au nouvel utilisateur.
+    tips: >
+      Exemple : pour créer un agent crédit, renseigner Nom/E-mail, cocher « Agent
+      crédit » (catégorie Microfinance) puis enregistrer. L'utilisateur voit alors le
+      menu racine « Microfinance » (accès par group_microfinance_user) mais pas
+      « Configuration » (réservé au Manager crédit).
+    errors: >
+      Un utilisateur sans aucun groupe de la catégorie « Microfinance » ne voit pas
+      le menu racine « Microfinance » (menu_microfinance_root exige l'un des 5
+      groupes group_microfinance_user/manager/finance/auditor/collection_agent).
+    answer: >
+      <p>Depuis Réglages > Utilisateurs et Sociétés > Utilisateurs, cliquez sur
+      Nouveau, renseignez le Nom et l'Adresse e-mail (qui sert de login par défaut),
+      puis dans l'onglet « Droits d'accès », section « Microfinance », cochez le ou
+      les groupes métier pertinents (Agent crédit, Manager crédit, Agent épargne,
+      etc.). Enregistrez : Odoo envoie éventuellement une invitation par e-mail au
+      nouvel utilisateur.</p>
+      <p>Il s'agit du formulaire res.users standard d'Odoo : aucun champ n'est
+      ajouté par les modules Microfinance.</p>
+    keywords:
+      - utilisateur
+      - créer
+      - compte
+      - agent crédit
+      - res.users
+    source_reference: microfinance_loan_management
+    see_also:
+      - gestion_utilisateurs-002
+
+  - id: gestion_utilisateurs-002
+    title: Comprendre la hiérarchie des groupes Microfinance (implied_ids)
+    category: Groupes et droits d'accès
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+      - admin
+    suggested: true
+    priority: 90
+    questions:
+      - Quels groupes dois-je cocher pour qu'un utilisateur puisse valider les crédits en tant que manager ?
+      - Quelle est la différence entre le groupe « Gestionnaire » et « Manager crédit » ?
+      - Quels sont les 9 groupes définis pour le module crédit microfinance ?
+      - Comment fonctionne la hiérarchie des groupes Microfinance ?
+    menu: Réglages > Utilisateurs et Sociétés > Utilisateurs
+    model: res.users
+    steps:
+      - >
+        Sur la fiche utilisateur, onglet « Droits d'accès », section « Microfinance »,
+        cocher le groupe le plus adapté au rôle de l'utilisateur.
+      - >
+        Cocher un groupe « supérieur » (ex. Gestionnaire) attribue automatiquement les
+        droits des groupes impliqués sans action supplémentaire.
+    tips: >
+      Pour un gestionnaire multi-casquette (crédit + épargne) : cocher « Gestionnaire »
+      (implique automatiquement Manager crédit et Finance microfinance) puis, si
+      l'agence gère aussi l'épargne, cocher également « Manager épargne » (implique
+      Agent épargne).
+    errors: >
+      Attribuer « Comptable » ou « Caissier » ne donne accès qu'aux modèles
+      explicitement listés pour ces groupes dans ir.model.access.csv (ex.
+      microfinance.loan en lecture seule pour Comptable) ; ces deux groupes
+      n'apparaissent dans aucune relation implied_ids.
+    answer: >
+      <p>MLM (microfinance_loan_management/security/groups.xml) définit 9 groupes
+      dans la catégorie « Microfinance » : Agent crédit (group_microfinance_user),
+      Manager crédit (group_microfinance_manager), Finance microfinance
+      (group_microfinance_finance), Agent recouvrement
+      (group_microfinance_collection_agent), Auditeur microfinance
+      (group_microfinance_auditor), Comptable (group_microfinance_comptable),
+      Caissier (group_microfinance_cashier), Comité de crédit
+      (group_microfinance_credit_committee) et Gestionnaire
+      (group_microfinance_gestionnaire).</p>
+      <p>Hiérarchie (implied_ids) : Manager crédit, Finance microfinance, Agent
+      recouvrement et Comité de crédit impliquent chacun Agent crédit. Caissier
+      implique aussi Agent crédit. Gestionnaire implique à la fois Manager crédit et
+      Finance microfinance (et donc, par transitivité, Agent crédit). Auditeur
+      microfinance, Comptable et Caissier (hormis l'implication vers Agent crédit)
+      sont sinon indépendants.</p>
+      <p>MSM (microfinance_savings_management/security/savings_security.xml) définit
+      2 groupes : Agent épargne (group_savings_agent) et Manager épargne
+      (group_savings_manager), ce dernier impliquant Agent épargne.</p>
+      <p>Cocher un groupe « supérieur » (ex. Gestionnaire) attribue automatiquement
+      les droits des groupes impliqués, sans action supplémentaire.</p>
+    keywords:
+      - groupe
+      - hiérarchie
+      - implied_ids
+      - gestionnaire
+      - manager crédit
+      - droits d'accès
+    source_reference: microfinance_loan_management, microfinance_savings_management
+    see_also:
+      - gestion_utilisateurs-001
+      - gestion_utilisateurs-004
+
+  - id: gestion_utilisateurs-003
+    title: Retirer l'accès d'un utilisateur qui quitte l'institution
+    category: Comptes utilisateurs
+    difficulty: beginner
+    roles:
+      - gestionnaire
+      - admin
+    suggested: true
+    priority: 80
+    questions:
+      - Comment retirer l'accès d'un employé qui a quitté l'institution ?
+      - Comment désactiver un compte utilisateur ?
+      - Comment archiver un utilisateur ?
+    menu: Réglages > Utilisateurs et Sociétés > Utilisateurs
+    model: res.users
+    steps:
+      - Ouvrir la fiche de l'utilisateur concerné.
+      - Décocher tous ses groupes Microfinance et/ou utiliser l'action « Archiver ».
+      - >
+        L'action « Archiver » (champ standard active à faux) bloque la connexion
+        sans supprimer les données associées.
+    tips: >
+      Archiver plutôt que supprimer un utilisateur sortant préserve la traçabilité
+      des enregistrements qu'il a créés ou validés.
+    answer: >
+      <p>Ouvrez la fiche de l'utilisateur concerné, décochez tous ses groupes
+      Microfinance et/ou utilisez l'action « Archiver » du framework Odoo (champ
+      standard active mis à faux). Cette action bloque la connexion de l'utilisateur
+      sans supprimer les données associées ni perdre l'historique des enregistrements
+      qu'il a créés ou modifiés.</p>
+      <p>Un compte utilisateur n'a pas de statuts multiples : seul le champ actif
+      (booléen) permet de l'archiver/désarchiver.</p>
+    keywords:
+      - archiver
+      - désactiver
+      - active
+      - départ
+      - retirer accès
+    source_reference: microfinance_loan_management
+    see_also:
+      - gestion_utilisateurs-001
+
+  - id: gestion_utilisateurs-004
+    title: Droits par groupe Microfinance (comptable, caissier, auditeur, épargne)
+    category: Groupes et droits d'accès
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+      - admin
+    suggested: false
+    priority: 60
+    questions:
+      - Pourquoi ce comptable ne voit-il pas le menu Configuration ?
+      - Un agent épargne peut-il aussi voir les crédits ?
+      - Le groupe « Auditeur microfinance » a-t-il le droit de modifier des données ?
+      - Pourquoi un caissier ne peut-il pas créer de nouveaux crédits ?
+      - Comment donner à un utilisateur le droit de comptabiliser les provisions ?
+    menu: Réglages > Utilisateurs et Sociétés > Utilisateurs
+    model: res.users
+    errors: >
+      Un utilisateur avec uniquement « Finance microfinance » ou « Auditeur
+      microfinance » ne voit pas le menu « Configuration » (menu_microfinance_config
+      exige spécifiquement group_microfinance_manager) même s'il a des droits de
+      lecture sur les périodicités et règles de provisionnement.
+    answer: >
+      <p>Les droits dépendent strictement des lignes présentes dans les fichiers
+      ir.model.access.csv de MLM et MSM ; un groupe absent d'un tableau n'a aucun
+      droit sur ce modèle.</p>
+      <p>Comptable (group_microfinance_comptable) : lecture seule sur
+      microfinance.loan.product et microfinance.loan (aucun droit d'écriture, de
+      création ou de suppression).</p>
+      <p>Caissier (group_microfinance_cashier) : lecture seule sur
+      microfinance.loan ; lecture/écriture/création (sans suppression) sur
+      microfinance.loan.payment. Il n'a donc pas les droits de créer de nouveaux
+      crédits.</p>
+      <p>Auditeur microfinance (group_microfinance_auditor) : lecture seule sur de
+      nombreux modèles (produits, crédits, garanties, scoring...), sans jamais de
+      droit d'écriture, de création ou de suppression.</p>
+      <p>Un utilisateur uniquement Agent épargne ou Manager épargne n'a pas accès aux
+      crédits par les groupes MSM ; en revanche les groupes MLM
+      group_microfinance_manager, group_microfinance_finance et
+      group_microfinance_auditor bénéficient d'un accès en lecture croisé sur les
+      modèles MSM (microfinance.savings.product, microfinance.savings.account,
+      microfinance.savings.transaction), selon ir.model.access.csv de MSM.</p>
+      <p>Seuls les groupes Manager crédit et Finance microfinance sont autorisés à
+      déclencher l'action serveur « Comptabiliser les provisions » sur la liste des
+      crédits.</p>
+    keywords:
+      - comptable
+      - caissier
+      - auditeur
+      - agent épargne
+      - droits
+      - accès croisé
+    source_reference: microfinance_loan_management, microfinance_savings_management
+    see_also:
+      - gestion_utilisateurs-002
+
+faq:
+  - id: gestion_utilisateurs-faq-001
+    question: Pourquoi un utilisateur ne voit-il pas le menu racine « Microfinance » ?
+    answer: >
+      <p>Le menu menu_microfinance_root exige l'un des 5 groupes
+      group_microfinance_user, group_microfinance_manager,
+      group_microfinance_finance, group_microfinance_auditor ou
+      group_microfinance_collection_agent. Sans aucun groupe de la catégorie
+      « Microfinance », l'utilisateur ne voit pas ce menu.</p>
+    keywords:
+      - menu microfinance
+      - menu invisible
+      - droits
+
+  - id: gestion_utilisateurs-faq-002
+    question: Pourquoi ce comptable ou cet auditeur ne voit-il pas le menu Configuration ?
+    answer: >
+      <p>Le menu menu_microfinance_config n'est visible que pour le groupe
+      group_microfinance_manager. Les groupes Comptable, Auditeur microfinance et
+      Finance microfinance n'y ont pas accès, même s'ils disposent de droits de
+      lecture sur certains modèles listés dans ce menu.</p>
+    keywords:
+      - menu configuration
+      - comptable
+      - auditeur

@@ -1,0 +1,334 @@
+workflow: administration
+name: Administration
+version: "17.0"
+description: >
+  Paramétrage transverse du crédit, hors création des produits eux-mêmes :
+  périodicités de remboursement, règles de provisionnement selon l'ancienneté des
+  arriérés, cloisonnement multi-société/multi-agence, numérotation automatique,
+  tâches planifiées et hook d'installation qui crée les sous-comptes et journaux
+  PCEC dédiés.
+sequence: 20
+roles:
+  - gestionnaire
+  - comptable
+  - admin
+categories:
+  - name: Périodicités de remboursement
+    sequence: 10
+  - name: Règles de provisionnement
+    sequence: 20
+  - name: Cloisonnement multi-société
+    sequence: 30
+  - name: Paramètres société et installation
+    sequence: 40
+articles:
+  - id: administration-001
+    title: Ajouter une nouvelle périodicité de remboursement
+    category: Périodicités de remboursement
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 100
+    questions:
+      - Comment ajouter une nouvelle périodicité de remboursement ?
+      - Comment créer une périodicité de remboursement ?
+      - Pourquoi les périodicités de remboursement sont-elles les mêmes pour toutes les agences ?
+    menu: Microfinance > Configuration > Périodicités de remboursement
+    model: microfinance.repayment.frequency
+    prerequisites:
+      - Faire partie du groupe Manager crédit (group_microfinance_manager), seul groupe avec droits d'écriture/création sur ce modèle.
+    steps:
+      - Microfinance > Configuration > Périodicités de remboursement : ajouter une ligne dans la liste éditable.
+      - Renseigner le nom, le code technique (unique), l'unité de période (Jours / Mois), la valeur de la période et la séquence d'affichage.
+      - Enregistrer.
+    tips: >
+      Garder les codes de périodicité stables une fois utilisés, le champ d'aide du
+      modèle précisant qu'ils sont « référencés par la migration ». Les périodicités
+      de remboursement sont communes à toutes les sociétés/agences : le modèle n'a
+      pas de champ Société, il n'y a donc pas de cloisonnement par agence sur ce
+      modèle.
+    errors: >
+      Code de périodicité déjà utilisé → violation de la contrainte SQL
+      unique(code) (message standard Odoo). period_value inférieur ou égal à 0 →
+      « La valeur de la période doit être strictement positive. »
+    answer: >
+      <p>Un Manager crédit va dans Microfinance > Configuration > Périodicités de
+      remboursement, ajoute une ligne dans la liste éditable, saisit un code unique,
+      choisit l'unité (Jours/Mois) et la valeur, puis enregistre. La séquence
+      (défaut 10) détermine l'ordre d'affichage.</p>
+      <p>Seul le groupe Manager crédit a des droits d'écriture, de création et de
+      suppression sur ce modèle ; Agent crédit, Finance microfinance et Auditeur
+      microfinance n'ont qu'un accès en lecture.</p>
+    keywords:
+      - périodicité
+      - remboursement
+      - code
+      - jours
+      - mois
+    source_reference: microfinance_loan_management
+    see_also:
+      - administration-002
+
+  - id: administration-002
+    title: Paramétrer les tranches de provisionnement d'une société
+    category: Règles de provisionnement
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 90
+    questions:
+      - Comment configurer les tranches de provisionnement pour une nouvelle agence ?
+      - Pourquoi la règle de provisionnement que je crée est-elle refusée ?
+      - Quel taux de provisionnement s'applique à un crédit en retard de 100 jours ?
+    menu: Microfinance > Configuration > Règles de provisionnement
+    model: microfinance.provision.rule
+    prerequisites:
+      - Faire partie du groupe Manager crédit (group_microfinance_manager), seul groupe avec droits d'écriture/création sur ce modèle.
+    steps:
+      - Microfinance > Configuration > Règles de provisionnement : ajouter une tranche.
+      - Renseigner la société, les jours de retard min. et max. (0 = illimité) et le taux de provision en %.
+      - Enregistrer.
+    tips: >
+      Configurer les tranches de provisionnement dès la création de chaque nouvelle
+      société/agence, car elles ne sont pas héritées automatiquement. Les données de
+      démonstration ne préchargent des tranches indicatives (0-30j : 0 %, 31-60j :
+      25 %, 61-90j : 50 %, 91-180j : 75 %, 181j+ : 100 %) que pour la société
+      principale (base.main_company) : chaque société additionnelle configure les
+      siennes.
+    errors: >
+      min_days négatif → « Le nombre de jours minimum ne peut pas être négatif. »
+      max_days non nul et inférieur à min_days → « Le nombre de jours maximum doit
+      être supérieur ou égal au minimum (ou 0 pour illimité). » provision_rate hors
+      de [0, 100] → « Le taux de provision doit être compris entre 0 et 100. »
+      Chevauchement de deux tranches pour la même société → « Les tranches de
+      provisionnement ne doivent pas se chevaucher (conflit entre "%(rule)s" et
+      "%(other)s"). »
+    answer: >
+      <p>Après création d'une nouvelle société, un Manager crédit va dans
+      Microfinance > Configuration > Règles de provisionnement et ajoute ses propres
+      tranches (société, jours de retard min./max., taux de provision) : les
+      tranches par défaut ne sont chargées que pour la société principale.</p>
+      <p>Le système bloque toute tranche qui chevaucherait une tranche existante
+      pour la même société (contrainte _check_no_overlap), ainsi que toute valeur
+      hors bornes (_check_values).</p>
+      <p>Le nom de la règle est calculé automatiquement à partir des bornes et du
+      taux.</p>
+    keywords:
+      - provisionnement
+      - tranche
+      - taux de provision
+      - retard
+      - société
+    source_reference: microfinance_loan_management
+    see_also:
+      - administration-001
+      - administration-003
+
+  - id: administration-003
+    title: Comptabiliser les provisions (action manuelle ou cron mensuel)
+    category: Règles de provisionnement
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+      - comptable
+    suggested: true
+    priority: 80
+    questions:
+      - Comment déclencher manuellement la comptabilisation des provisions ?
+      - Le cron de comptabilisation des provisions tourne-t-il automatiquement chaque mois ?
+      - Comment donner à un utilisateur le droit de comptabiliser les provisions ?
+    model: microfinance.loan
+    steps:
+      - Sélectionner les crédits concernés (états active ou defaulted) dans la liste des crédits.
+      - >
+        Déclencher l'action serveur « Comptabiliser les provisions » (menu Actions
+        de la liste), restreinte aux groupes Manager crédit et Finance microfinance.
+      - >
+        Alternative automatique : activer le cron mensuel
+        ir_cron_microfinance_post_provisions, inactif par défaut.
+    tips: >
+      Activer consciemment le cron mensuel de provisionnement si un traitement
+      automatique est souhaité, plutôt que de compter sur un déclenchement manuel
+      systématique.
+    errors: >
+      S'attendre à ce que le cron mensuel de provisionnement s'exécute
+      automatiquement alors qu'il est inactif par défaut (active = False) : il doit
+      être activé manuellement pour s'exécuter automatiquement.
+    answer: >
+      <p>L'action serveur « Comptabiliser les provisions »
+      (action_server_microfinance_post_provisions) est liée à la vue liste du modèle
+      microfinance.loan et exécute records.action_post_provisions(). Elle est
+      restreinte aux groupes Manager crédit et Finance microfinance.</p>
+      <p>Pour chaque crédit sélectionné à l'état active ou defaulted,
+      action_post_provisions calcule l'écart entre le montant de provision dû
+      (provision_amount) et le montant déjà comptabilisé (provision_posted_amount),
+      ignore les écarts inférieurs à 0.01, crée et poste une écriture comptable
+      (account.move) par crédit, met à jour provision_posted_amount et journalise
+      l'opération dans le chatter.</p>
+      <p>Le cron mensuel cron_post_provisions appelle action_post_provisions() sur
+      les crédits active/defaulted, mais il est inactif par défaut : il doit être
+      activé manuellement pour automatiser ce traitement.</p>
+    keywords:
+      - provisions
+      - comptabiliser
+      - cron
+      - action serveur
+      - écriture comptable
+    source_reference: microfinance_loan_management
+    see_also:
+      - administration-002
+
+  - id: administration-004
+    title: Cloisonnement multi-société et multi-agence des données Microfinance
+    category: Cloisonnement multi-société
+    difficulty: advanced
+    roles:
+      - gestionnaire
+      - comptable
+      - admin
+    suggested: true
+    priority: 70
+    questions:
+      - Un manager d'une agence peut-il voir les crédits d'une autre agence ?
+      - Comment fonctionne le cloisonnement multi-société sur les modules Microfinance ?
+      - Pourquoi les périodicités de remboursement ne sont-elles pas cloisonnées par société ?
+    tips: >
+      Ne pas chercher à contourner le cloisonnement multi-société via l'attribution
+      d'un groupe : les règles à groups=[] s'appliquent à tout utilisateur interne,
+      quel que soit son groupe.
+    answer: >
+      <p>Les règles définies dans microfinance_loan_management/security/
+      microfinance_company_rules.xml et
+      microfinance_savings_management/security/microfinance_company_rules.xml
+      (ir.rule, domaine company_id in company_ids, sans groupe cible) limitent
+      chaque utilisateur aux enregistrements de ses sociétés, sans exception de
+      groupe : cela s'applique à tous les utilisateurs, y compris les managers et
+      les auditeurs.</p>
+      <p>Modèles concernés côté crédit (MLM) : microfinance.loan.product,
+      microfinance.loan, microfinance.loan.installment, microfinance.loan.payment,
+      microfinance.loan.guarantee, microfinance.guarantee.valuation.rule,
+      microfinance.loan.reschedule.history (par company_id),
+      microfinance.loan.reschedule.history.line (par history_id.company_id, ce
+      modèle n'ayant pas son propre company_id), microfinance.collection.visit.
+      Côté épargne (MSM) : microfinance.savings.product, microfinance.savings.account,
+      microfinance.savings.transaction.</p>
+      <p>Des règles de cloisonnement distinctes, définies dans groups.xml sur
+      microfinance.scoring.profile, microfinance.scoring.rule,
+      microfinance.scoring.line et microfinance.provision.rule, ciblent en plus des
+      groupes précis (group_microfinance_user/manager/finance/auditor),
+      contrairement aux règles ci-dessus qui s'appliquent sans distinction de
+      groupe.</p>
+      <p>microfinance.repayment.frequency n'a pas de champ Société : il n'est donc
+      pas concerné par ce cloisonnement, et les périodicités sont communes à toutes
+      les sociétés. Les séquences globales seq_microfinance_loan et
+      seq_microfinance_payment ont également company_id à False : numérotation
+      partagée entre toutes les sociétés.</p>
+    keywords:
+      - cloisonnement
+      - société
+      - agence
+      - ir.rule
+      - multi-société
+    source_reference: microfinance_loan_management, microfinance_savings_management
+    see_also:
+      - administration-001
+      - administration-002
+
+  - id: administration-005
+    title: Plan comptable PCEC à l'installation et dormance des comptes épargne
+    category: Paramètres société et installation
+    difficulty: advanced
+    roles:
+      - gestionnaire
+      - admin
+    suggested: false
+    priority: 60
+    questions:
+      - Que fait le hook d'installation du module sur le plan comptable PCEC ?
+      - Pourquoi le journal Banque Épargne n'a-t-il pas de compte par défaut sur ma société ?
+      - Comment configurer le nombre de mois avant dormance d'un compte épargne ?
+    model: res.company
+    steps:
+      - >
+        À l'installation du module, le hook post_init_hook s'exécute automatiquement,
+        sans action utilisateur, pour chaque société dont le champ chart_template
+        vaut 'mg_pcec'.
+      - >
+        Il crée les sous-comptes PCEC dédiés (LOAN_NEW_SUBACCOUNTS, un compte par
+        segment Individuel/Groupe) puis les 7 journaux standards (JOURNALS : BQOP,
+        BQEP, BQCR, CAI, CRE, EPG, OD) s'ils n'existent pas déjà, de façon idempotente
+        (search_count avant create).
+      - >
+        Pour la dormance des comptes épargne, le champ savings_dormancy_months
+        (entier, défaut 6) sur la fiche société détermine le nombre de mois
+        d'inactivité avant dormance.
+    tips: >
+      Vérifier que chart_template == 'mg_pcec' avant de s'attendre à ce que les
+      sous-comptes et journaux dédiés soient créés automatiquement à l'installation.
+    errors: >
+      Si un compte PCEC attendu (ex. 131001) est introuvable lors de la création
+      d'un journal par le hook, un simple avertissement est journalisé, sans bloquer
+      l'installation : « Microfinance PCEC : compte %s introuvable pour la société
+      %s (id=%s) — le journal ou le champ correspondant restera sans compte par
+      défaut. Le plan PCEC (plan_compta_pcec) est-il bien chargé sur cette société ? »
+      S'attendre à ce que le hook crée des sous-comptes/journaux PCEC sur une
+      société dont le plan comptable n'est pas mg_pcec : le hook ignore
+      silencieusement ces sociétés.
+    answer: >
+      <p>Le hook d'installation post_init_hook ne s'applique qu'aux sociétés dont
+      chart_template == 'mg_pcec' : il crée les sous-comptes PCEC dédiés de
+      LOAN_NEW_SUBACCOUNTS (un compte par segment Individuel/Groupe) puis les 7
+      journaux de JOURNALS (BQOP, BQEP, BQCR, CAI, CRE, EPG, OD), de façon
+      idempotente (aucune duplication en cas de ré-exécution). Le plan comptable
+      PCEC lui-même est fourni par le module externe plan_compta_pcec.</p>
+      <p>Si un compte PCEC attendu est introuvable pour créer un journal, seul un
+      avertissement est journalisé (pas de blocage) et le journal ou le champ
+      correspondant reste sans compte par défaut.</p>
+      <p>Le champ savings_dormancy_months (entier, défaut 6) sur res.company
+      détermine, pour les comptes épargne, le nombre de mois d'inactivité avant
+      dormance (utilisé dans microfinance_savings_account.py).</p>
+      <p>Le cron quotidien ir_cron_microfinance_overdue_penalties (actif par
+      défaut) applique les pénalités de retard et recalcule le scoring des crédits
+      actifs, sans intervention manuelle ; les séquences (ir.sequence) et tâches
+      planifiées (ir.cron) se gèrent via les menus techniques standard d'Odoo
+      (Réglages > Technique), sans menu propre aux modules Microfinance.</p>
+    keywords:
+      - post_init_hook
+      - PCEC
+      - journal
+      - sous-compte
+      - dormance
+      - épargne
+      - cron
+      - séquence
+    source_reference: microfinance_loan_management, microfinance_savings_management
+    see_also:
+      - administration-004
+
+faq:
+  - id: administration-faq-001
+    question: Le cron de comptabilisation des provisions tourne-t-il automatiquement chaque mois ?
+    answer: >
+      <p>Non par défaut. Le cron cron_post_provisions (mensuel) est inactif par
+      défaut (active = False) : il doit être activé manuellement pour s'exécuter
+      automatiquement. En attendant, la comptabilisation des provisions peut être
+      déclenchée manuellement via l'action serveur « Comptabiliser les
+      provisions ».</p>
+    keywords:
+      - cron
+      - provisions
+      - mensuel
+      - inactif
+
+  - id: administration-faq-002
+    question: Pourquoi les périodicités de remboursement sont-elles identiques pour toutes les agences ?
+    answer: >
+      <p>Le modèle microfinance.repayment.frequency n'a pas de champ Société : il
+      n'y a donc pas de cloisonnement par agence sur ce modèle, contrairement aux
+      règles de provisionnement qui sont propres à chaque société.</p>
+    keywords:
+      - périodicité
+      - société
+      - cloisonnement

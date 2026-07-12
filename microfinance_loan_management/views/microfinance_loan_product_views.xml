@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_product_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.product.tree</field>
+        <field name="model">microfinance.loan.product</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="min_amount"/>
+                <field name="max_amount"/>
+                <field name="interest_rate"/>
+                <field name="interest_method"/>
+                <field name="repayment_frequency_mode"/>
+                <field name="repayment_frequency_id"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_product_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.product.form</field>
+        <field name="model">microfinance.loan.product</field>
+        <field name="arch" type="xml">
+            <form string="Produit de crédit">
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" placeholder="Nom du produit"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <!-- Pas de groups="base.group_multi_company" : les domaines des
+                                 champs account.account ci-dessous référencent company_id, qui
+                                 doit donc rester présent dans la vue quel que soit le groupe. -->
+                            <field name="company_id"/>
+                            <field name="currency_id"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="min_amount"/>
+                            <field name="max_amount"/>
+                            <field name="min_term"/>
+                            <field name="max_term"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Calcul crédit">
+                            <group>
+                                <field name="interest_rate"/>
+                                <field name="interest_method"/>
+                                <field name="repayment_frequency_mode"/>
+                                <field name="repayment_frequency_id" invisible="repayment_frequency_mode != 'fixed'" required="repayment_frequency_mode == 'fixed'"/>
+                                <field name="allowed_repayment_frequency_ids" widget="many2many_tags" invisible="repayment_frequency_mode != 'client_choice'"/>
+                                <field name="grace_period_days"/>
+                            </group>
+                        </page>
+                        <page string="Éligibilité">
+                            <group>
+                                <field name="min_membership_days"/>
+                                <field name="allow_second_loan"/>
+                                <field name="block_second_if_arrears" invisible="not allow_second_loan"/>
+                            </group>
+                        </page>
+                        <page string="Pénalités">
+                            <group>
+                                <field name="penalty_type"/>
+                                <field name="penalty_amount" invisible="penalty_type != 'fixed'"/>
+                                <field name="penalty_rate" invisible="penalty_type != 'percentage'"/>
+                            </group>
+                        </page>
+                        <page string="Comptabilité">
+                            <group string="Journaux et frais">
+                                <field name="disbursement_journal_id"/>
+                                <field name="payment_journal_id"/>
+                                <field name="fee_type"/>
+                                <field name="fee_amount" invisible="fee_type != 'fixed'"/>
+                                <field name="fee_rate" invisible="fee_type != 'percentage'"/>
+                                <field name="fee_journal_id"/>
+                                <field name="fee_charged_before_disbursement"/>
+                            </group>
+                            <group string="Principal">
+                                <field name="account_principal_individuel_id"/>
+                                <field name="account_principal_groupe_id"/>
+                                <field name="account_credits_perte_individuel_id"/>
+                                <field name="account_credits_perte_groupe_id"/>
+                                <field name="account_arrieres_declassifies_individuel_id"/>
+                                <field name="account_arrieres_declassifies_groupe_id"/>
+                            </group>
+                            <group string="Provisions">
+                                <field name="account_provision_individuel_id"/>
+                                <field name="account_provision_groupe_id"/>
+                                <field name="account_provision_cout_individuel_id"/>
+                                <field name="account_provision_cout_groupe_id"/>
+                            </group>
+                            <group string="Intérêts">
+                                <field name="account_interets_recus_individuel_id"/>
+                                <field name="account_interets_recus_groupe_id"/>
+                                <field name="account_interets_echus_individuel_id"/>
+                                <field name="account_interets_echus_groupe_id"/>
+                                <field name="account_interets_echus_recevoir_individuel_id"/>
+                                <field name="account_interets_echus_recevoir_groupe_id"/>
+                            </group>
+                            <group string="Pénalités et commissions">
+                                <field name="account_penalites_id"/>
+                                <field name="account_penalites_avance_individuel_id"/>
+                                <field name="account_penalites_avance_groupe_id"/>
+                                <field name="account_revenu_penalites_avance_individuel_id"/>
+                                <field name="account_revenu_penalites_avance_groupe_id"/>
+                                <field name="account_commission_credit_id"/>
+                                <field name="account_commissions_echues_individuel_id"/>
+                                <field name="account_commissions_echues_groupe_id"/>
+                                <field name="account_commissions_accumulees_individuel_id"/>
+                                <field name="account_commissions_accumulees_groupe_id"/>
+                            </group>
+                            <group string="Comptes partagés">
+                                <field name="account_recouvrement_id"/>
+                                <field name="account_papeterie_id"/>
+                                <field name="account_surpaiement_id"/>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_loan_product" model="ir.actions.act_window">
+        <field name="name">Produits de crédit</field>
+        <field name="res_model">microfinance.loan.product</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

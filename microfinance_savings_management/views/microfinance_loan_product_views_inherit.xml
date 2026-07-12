@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_product_form_inherit_savings" model="ir.ui.view">
+        <field name="name">microfinance.loan.product.form.inherit.savings</field>
+        <field name="model">microfinance.loan.product</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_product_form"/>
+        <field name="arch" type="xml">
+            <notebook position="inside">
+                <page string="Épargne">
+                    <group>
+                        <group string="Prélèvement automatique">
+                            <field name="allow_savings_auto_debit"/>
+                            <field name="auto_debit_grace_days" invisible="not allow_savings_auto_debit"/>
+                            <field name="auto_debit_respect_minimum_balance" invisible="not allow_savings_auto_debit"/>
+                        </group>
+                        <group string="Éligibilité progressive">
+                            <field name="savings_requirement_type"/>
+                            <field name="savings_product_id" invisible="savings_requirement_type == 'none'"/>
+                            <field name="savings_target_ratio" invisible="savings_requirement_type != 'target_during_loan'"/>
+                            <field name="savings_amount_threshold" invisible="savings_requirement_type == 'none'"/>
+                        </group>
+                        <group string="Épargne garantie de crédit">
+                            <field name="guarantee_savings_percent"/>
+                            <field name="guarantee_savings_product_id" invisible="not guarantee_savings_percent"/>
+                        </group>
+                    </group>
+                </page>
+            </notebook>
+        </field>
+    </record>
+</odoo>

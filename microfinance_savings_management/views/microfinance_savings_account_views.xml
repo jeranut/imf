@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_savings_account_tree" model="ir.ui.view">
+        <field name="name">microfinance.savings.account.tree</field>
+        <field name="model">microfinance.savings.account</field>
+        <field name="arch" type="xml">
+            <tree decoration-muted="state == 'closed'" decoration-warning="state == 'dormant'" decoration-success="state == 'active'">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="product_id"/>
+                <field name="balance" sum="Total"/>
+                <field name="maturity_date"/>
+                <field name="state" widget="badge"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_savings_account_search" model="ir.ui.view">
+        <field name="name">microfinance.savings.account.search</field>
+        <field name="model">microfinance.savings.account</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="product_id"/>
+                <filter name="active" string="Actifs" domain="[('state','=','active')]"/>
+                <filter name="dormant" string="Dormants" domain="[('state','=','dormant')]"/>
+                <filter name="maturing_30d" string="Échéance sous 30 jours" domain="[('maturity_date','!=',False),('maturity_date','&lt;=',(context_today()+relativedelta(days=30)).strftime('%Y-%m-%d'))]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_state" string="État" context="{'group_by':'state'}"/>
+                    <filter name="group_product" string="Produit" context="{'group_by':'product_id'}"/>
+                    <filter name="group_company" string="Société" context="{'group_by':'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="view_microfinance_savings_account_form" model="ir.ui.view">
+        <field name="name">microfinance.savings.account.form</field>
+        <field name="model">microfinance.savings.account</field>
+        <field name="arch" type="xml">
+            <form string="Compte épargne">
+                <header>
+                    <button name="action_activate" string="Activer" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','dormant')"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,active,dormant,closed"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_transactions" type="object" class="oe_stat_button" icon="fa-money">
+                            <field name="transaction_count" widget="statinfo" string="Transactions"/>
+                        </button>
+                    </div>
+                    <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
+                    <group>
+                        <group string="Compte">
+                            <field name="partner_id"/>
+                            <field name="product_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="currency_id"/>
+                            <field name="microfinance_loan_id"/>
+                        </group>
+                        <group string="Suivi">
+                            <field name="opening_date" readonly="1"/>
+                            <field name="closing_date" readonly="1"/>
+                            <field name="maturity_date" readonly="1"/>
+                            <field name="last_transaction_date" readonly="1"/>
+                            <field name="is_dormant" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Solde">
+                        <field name="balance" readonly="1"/>
+                    </group>
+                    <group string="Clôture" invisible="state != 'closed'">
+                        <field name="closure_reason_type"/>
+                        <field name="closure_reason_note"/>
+                    </group>
+                    <notebook>
+                        <page string="Transactions">
+                            <field name="transaction_ids" readonly="1">
+                                <tree>
+                                    <field name="date"/>
+                                    <field name="transaction_type"/>
+                                    <field name="amount"/>
+                                    <field name="payment_method"/>
+                                    <field name="state" widget="badge"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_savings_account" model="ir.actions.act_window">
+        <field name="name">Comptes épargne</field>
+        <field name="res_model">microfinance.savings.account</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_active': 1}</field>
+    </record>
+    <record id="action_microfinance_savings_balance_report" model="ir.actions.act_window">
+        <field name="name">Balance épargne</field>
+        <field name="res_model">microfinance.savings.account</field>
+        <field name="view_mode">tree</field>
+        <field name="context">{'search_default_active': 1, 'search_default_group_product': 1}</field>
+        <field name="search_view_id" ref="view_microfinance_savings_account_search"/>
+    </record>
+</odoo>

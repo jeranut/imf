@@ -1,0 +1,215 @@
+# Carte des workflows MOWGLI -> fichiers sources réels
+#
+# Sert de base à la génération de microfinance_mowgli_assistant/docs/workflows/<workflow>/README.md.
+# Règle absolue : toute section d'un README doit provenir des fichiers listés
+# ici. Si une information n'existe pas dans ces fichiers, écrire "À compléter".
+#
+# Modules couverts : microfinance_loan_management (MLM), microfinance_savings_management (MSM).
+# Racine : addons_path — tous les chemins ci-dessous sont relatifs à la racine addons
+# (nom_module/chemin), portables quel que soit l'emplacement du clone sur le disque.
+
+workflows:
+
+  gestion_utilisateurs:
+    description: >
+      res.users standard Odoo + groupes et droits d'accès Microfinance des deux modules.
+      Pas de vue custom : le formulaire utilisateur est celui d'Odoo (Réglages > Utilisateurs).
+    models: []
+    views: []
+    security:
+      - microfinance_loan_management/security/groups.xml
+      - microfinance_loan_management/security/ir.model.access.csv
+      - microfinance_savings_management/security/savings_security.xml
+      - microfinance_savings_management/security/ir.model.access.csv
+    notes: >
+      9 groupes définis dans MLM (group_microfinance_user, _manager, _finance,
+      _collection_agent, _auditor, _comptable, _cashier, _credit_committee, _gestionnaire)
+      + 2 groupes dans MSM (group_savings_agent, group_savings_manager).
+      Menu : Réglages > Utilisateurs et Sociétés > Utilisateurs (menu standard Odoo).
+
+  administration:
+    description: >
+      Paramétrage transverse : périodicités de remboursement, règles de provisionnement,
+      cloisonnement multi-société (multi-agences), séquences, tâches planifiées (cron),
+      hook d'installation PCEC.
+    models:
+      - microfinance_loan_management/models/microfinance_repayment_frequency.py
+      - microfinance_loan_management/models/microfinance_provision_rule.py
+      - microfinance_savings_management/models/res_company.py
+      - microfinance_loan_management/hooks.py
+    views:
+      - microfinance_loan_management/views/microfinance_repayment_frequency_views.xml
+      - microfinance_loan_management/views/microfinance_provision_rule_views.xml
+      - microfinance_loan_management/views/microfinance_menus.xml   # menu_microfinance_config
+    data:
+      - microfinance_loan_management/data/sequence.xml
+      - microfinance_loan_management/data/cron.xml
+      - microfinance_loan_management/data/provision_rules_data.xml
+      - microfinance_loan_management/data/provision_server_action.xml
+    security:
+      - microfinance_loan_management/security/microfinance_company_rules.xml
+      - microfinance_savings_management/security/microfinance_company_rules.xml
+      - microfinance_loan_management/security/ir.model.access.csv   # lignes repayment.frequency.*, provision.rule.*
+    notes: >
+      Le cloisonnement multi-société (ir.rule, groups=[]) s'applique à tous les utilisateurs
+      internes sans exception, y compris managers et auditeurs.
+
+  dashboard:
+    description: Indicateurs agrégés du portefeuille de crédit (KPI temps réel, pas de machine à états).
+    models:
+      - microfinance_loan_management/models/microfinance_dashboard.py
+    views:
+      - microfinance_loan_management/views/microfinance_dashboard_views.xml
+      - microfinance_loan_management/views/microfinance_menus.xml   # menu_microfinance_dashboard
+    assets:
+      - microfinance_loan_management/static/src/js/microfinance_loan_dashboard.js
+      - microfinance_loan_management/static/src/xml/microfinance_loan_dashboard.xml
+      - microfinance_loan_management/static/src/scss/microfinance_loan_dashboard.scss
+    security:
+      - microfinance_loan_management/security/ir.model.access.csv   # access_microfinance_dashboard_user
+    notes: >
+      Section 9 du gabarit à renommer "Statuts suivis" (pas de champ state sur ce modèle).
+
+  creation_produit_credit:
+    description: Paramétrage des produits de crédit (montants, durées, intérêts, comptes PCEC, journaux).
+    models:
+      - microfinance_loan_management/models/microfinance_loan_product.py
+      - microfinance_savings_management/models/microfinance_loan_product_extension.py
+    views:
+      - microfinance_loan_management/views/microfinance_loan_product_views.xml
+      - microfinance_savings_management/views/microfinance_loan_product_views_inherit.xml
+      - microfinance_loan_management/views/microfinance_menus.xml   # menu_microfinance_products
+    security:
+      - microfinance_loan_management/security/ir.model.access.csv   # lignes loan.product.*
+      - microfinance_loan_management/security/microfinance_company_rules.xml   # microfinance_loan_product_company_rule
+
+  creation_produit_epargne:
+    description: Paramétrage des produits d'épargne (taux, plafonds, solde minimum, comptes).
+    models:
+      - microfinance_savings_management/models/microfinance_savings_product.py
+    views:
+      - microfinance_savings_management/views/microfinance_savings_product_views.xml
+      - microfinance_savings_management/views/microfinance_savings_menus.xml   # menu_microfinance_savings_products
+    security:
+      - microfinance_savings_management/security/ir.model.access.csv   # lignes savings.product.*
+
+  garanties_scoring:
+    description: Garanties/cautions rattachées à un crédit, règles de valorisation, scoring crédit.
+    models:
+      - microfinance_loan_management/models/microfinance_loan_guarantee.py   # microfinance.loan.guarantee + microfinance.guarantee.valuation.rule
+      - microfinance_loan_management/models/microfinance_scoring.py         # scoring.profile / scoring.rule / scoring.line
+    views:
+      - microfinance_loan_management/views/microfinance_loan_guarantee_views.xml
+      - microfinance_loan_management/views/microfinance_scoring_views.xml
+      - microfinance_loan_management/views/microfinance_menus.xml   # menu_microfinance_guarantees, menu_microfinance_scoring, menu_microfinance_guarantee_valuation_rule
+    data:
+      - microfinance_loan_management/data/scoring_rules_data.xml
+    security:
+      - microfinance_loan_management/security/ir.model.access.csv   # lignes guarantee.*, scoring.*, guarantee.valuation.rule.*
+      - microfinance_loan_management/security/groups.xml   # rules scoring_profile/rule/line by company
+    referenced_methods_in_loan_py:
+      - microfinance_loan_management/models/microfinance_loan.py   # action_calculate_scoring, action_recompute_risk, action_view_scoring_lines
+
+  reechelonnement:
+    description: Rééchelonnement d'un échéancier de crédit actif et conservation de l'historique.
+    models:
+      - microfinance_loan_management/models/microfinance_loan_reschedule_history.py
+      - microfinance_loan_management/wizard/microfinance_loan_reschedule_wizard.py
+    views:
+      - microfinance_loan_management/wizard/microfinance_loan_reschedule_wizard_views.xml
+    referenced_methods_in_loan_py:
+      - microfinance_loan_management/models/microfinance_loan.py   # action_reschedule, _reschedule_installments (lignes ~525-630), champ reschedule_count
+    security:
+      - microfinance_loan_management/security/ir.model.access.csv   # lignes reschedule.history.*, reschedule.wizard
+
+  dossier_precredit:
+    description: >
+      Constitution et instruction du dossier client avant décaissement : cycle de vie actuel
+      porté par microfinance.loan (draft -> submitted -> manager_validated -> finance_validated
+      -> approved), plus les entités de qualification client (catégorie, liste noire,
+      représentants/membres de groupe) gérées depuis la fiche partenaire.
+    models:
+      - microfinance_loan_management/models/microfinance_client_category.py
+      - microfinance_loan_management/models/microfinance_client_blacklist.py
+      - microfinance_loan_management/models/microfinance_client_representative.py
+      - microfinance_loan_management/models/microfinance_client_group_member.py
+      - microfinance_loan_management/models/res_partner.py
+      - microfinance_savings_management/models/res_partner.py
+    views:
+      - microfinance_loan_management/views/microfinance_partner_views.xml
+      - microfinance_savings_management/views/res_partner_views_inherit.xml
+      - microfinance_loan_management/views/microfinance_loan_views.xml   # champs/état de la demande de crédit
+      - microfinance_loan_management/views/microfinance_menus.xml   # menu_clients_root, menu_microfinance_loans
+    referenced_methods_in_loan_py:
+      - microfinance_loan_management/models/microfinance_loan.py   # action_submit, action_manager_validate, action_finance_validate, action_approve, action_generate_schedule (lignes 426-478)
+    security:
+      - microfinance_loan_management/security/ir.model.access.csv   # lignes client.category.*, client.blacklist.*, client.representative.*, client.group.member.*
+    non_wired_code:
+      - path: microfinance_loan_management/models/microfinance_loan_application.py
+        statut: >
+          Modèle présent sur disque (microfinance.loan.application, microfinance.loan.application.tier)
+          mais NON importé dans microfinance_loan_management/models/__init__.py : absent du registre
+          Odoo. Aucune vue, aucun menu, aucune ligne ir.model.access.csv. Confirmé par le commentaire
+          dans microfinance_loan_management/security/microfinance_company_rules.xml (lignes ~23-27).
+          Documenter les champs/états/méthodes de ce fichier comme "présents dans le code mais non
+          activés" ; ne jamais le présenter comme fonctionnel dans l'UI actuelle.
+
+  comptabilite:
+    description: >
+      Décaissement, remboursements, écritures comptables (account.move), frais, radiation,
+      provisionnement comptable, reçus. Couvre microfinance.loan (volet comptable) et
+      microfinance.savings.transaction.
+    models:
+      - microfinance_loan_management/models/microfinance_loan.py   # move_ids, action_disburse, action_charge_fee, action_write_off, action_confirm_write_off, action_post_provisions, inherit account.move (ligne 872)
+      - microfinance_loan_management/models/microfinance_loan_payment.py
+      - microfinance_savings_management/models/microfinance_savings_transaction.py   # inherit account.move (ligne 156)
+      - microfinance_savings_management/models/microfinance_loan_extension.py
+      - microfinance_savings_management/models/microfinance_loan_payment_extension.py
+    wizards:
+      - microfinance_loan_management/wizard/microfinance_loan_payment_wizard.py
+      - microfinance_loan_management/wizard/microfinance_loan_payment_cancel_wizard.py
+      - microfinance_loan_management/wizard/microfinance_loan_writeoff_wizard.py
+    views:
+      - microfinance_loan_management/views/microfinance_loan_payment_views.xml
+      - microfinance_loan_management/views/microfinance_loan_installment_views.xml
+      - microfinance_loan_management/wizard/microfinance_loan_payment_wizard_views.xml
+      - microfinance_loan_management/wizard/microfinance_loan_payment_cancel_wizard_views.xml
+      - microfinance_loan_management/wizard/microfinance_loan_writeoff_wizard_views.xml
+      - microfinance_savings_management/views/microfinance_savings_transaction_views.xml
+      - microfinance_savings_management/views/microfinance_loan_payment_views_inherit.xml
+      - microfinance_loan_management/views/microfinance_menus.xml   # menu_microfinance_installments, menu_microfinance_payments
+      - microfinance_savings_management/views/microfinance_savings_menus.xml   # menu_microfinance_savings_transactions
+    reports:
+      - microfinance_loan_management/report/microfinance_loan_disbursement_receipt.xml
+      - microfinance_savings_management/report/savings_receipt_report.xml
+    security:
+      - microfinance_loan_management/security/ir.model.access.csv   # payment.*, writeoff.wizard.*, payment.cancel.wizard.*, loan.comptable, loan.product.comptable, payment.cashier, loan.cashier
+      - microfinance_savings_management/security/ir.model.access.csv   # savings.transaction.*
+    external_reference: >
+      Le module plan_compta_pcec fournit le plan comptable PCEC et les journaux par défaut
+      consommés par microfinance.loan.product, mais n'est pas une dépendance dure (voir
+      microfinance_loan_management/__manifest__.py, hooks.py). Hors périmètre direct de ce
+      README ; mentionner uniquement comme contexte si le code y fait explicitement référence.
+
+  par_reporting:
+    description: >
+      Suivi des échéances impayées (PAR), visites de recouvrement, analyse échéances/paiements,
+      balance épargne.
+    models:
+      - microfinance_loan_management/models/microfinance_collection_visit.py
+      - microfinance_loan_management/models/microfinance_loan_installment.py   # state, overdue, action_apply_penalty
+    referenced_methods_in_loan_py:
+      - microfinance_loan_management/models/microfinance_loan.py   # overdue_amount, balance_total, action_mark_default, action_view_visits (lignes ~440, 852)
+    views:
+      - microfinance_loan_management/views/microfinance_collection_visit_views.xml
+      - microfinance_loan_management/views/microfinance_menus.xml   # menu_microfinance_collection, menu_microfinance_visits, menu_microfinance_analysis, menu_microfinance_analysis_installments, menu_microfinance_analysis_payments
+      - microfinance_savings_management/views/microfinance_savings_account_views.xml   # action_microfinance_savings_balance_report
+      - microfinance_savings_management/views/microfinance_savings_menus.xml   # menu_microfinance_savings_balance_report
+    security:
+      - microfinance_loan_management/security/ir.model.access.csv   # visit.*
+
+cross_cutting_files_used_by_several_workflows:
+  - microfinance_loan_management/models/microfinance_loan.py
+  - microfinance_loan_management/views/microfinance_loan_views.xml
+  - microfinance_loan_management/views/microfinance_menus.xml
+  - microfinance_loan_management/security/ir.model.access.csv

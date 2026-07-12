@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_mowgli_dev_status_item_tree" model="ir.ui.view">
+        <field name="name">mowgli.dev.status.item.tree</field>
+        <field name="model">mowgli.dev.status.item</field>
+        <field name="arch" type="xml">
+            <tree decoration-danger="impact == 'bloquant'" decoration-warning="impact == 'moyen'" create="0">
+                <field name="workflow"/>
+                <field name="state"/>
+                <field name="title"/>
+                <field name="impact"/>
+                <field name="source_ref"/>
+                <field name="last_inspected"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_dev_status_item_search" model="ir.ui.view">
+        <field name="name">mowgli.dev.status.item.search</field>
+        <field name="model">mowgli.dev.status.item</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="workflow"/>
+                <field name="title"/>
+                <field name="source_ref"/>
+                <filter name="todo" string="À faire" domain="[('state', '=', 'todo')]"/>
+                <filter name="issue" string="Incohérences" domain="[('state', '=', 'issue')]"/>
+                <filter name="done" string="Fait" domain="[('state', '=', 'done')]"/>
+                <group expand="1" string="Regrouper par">
+                    <filter name="group_workflow" string="Workflow" context="{'group_by': 'workflow'}"/>
+                    <filter name="group_state" string="État" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_mowgli_dev_status_item" model="ir.actions.act_window">
+        <field name="name">Statut dev</field>
+        <field name="res_model">mowgli.dev.status.item</field>
+        <field name="view_mode">tree</field>
+        <field name="context">{'search_default_group_workflow': 1}</field>
+    </record>
+
+    <!-- "MOWGLI > Dev" : rattaché au menu racine MOWGLI mais visible uniquement de
+         group_mowgli_developer, jamais des groupes métier CEFOR (isolation stricte). -->
+    <menuitem id="menu_mowgli_dev_root" name="Dev" parent="menu_mowgli_root" sequence="90"
+              groups="microfinance_mowgli_assistant.group_mowgli_developer"/>
+    <menuitem id="menu_mowgli_dev_status" name="Statut dev" parent="menu_mowgli_dev_root"
+              action="action_mowgli_dev_status_item" sequence="10"/>
+</odoo>

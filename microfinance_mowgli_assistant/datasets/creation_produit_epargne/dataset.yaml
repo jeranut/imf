@@ -1,0 +1,232 @@
+workflow: creation_produit_epargne
+name: Création produit d'épargne
+version: "17.0"
+description: >
+  Paramétrage des produits d'épargne CEFOR : conditions financières (taux
+  d'intérêt, méthode de calcul du solde, capitalisation), plafonds et limites
+  (montant minimum d'ouverture, solde minimum, plafond de retrait), frais de
+  tenue de compte, et rattachement aux comptes comptables PCEC et journaux
+  utilisés lors des dépôts et retraits. Porté par le modèle unique
+  microfinance.savings.product.
+sequence: 50
+roles:
+  - agent_epargne
+  - gestionnaire
+categories:
+  - name: Produit d'épargne
+    sequence: 10
+
+articles:
+  - id: creation_produit_epargne-001
+    title: Créer un produit d'épargne
+    category: Produit d'épargne
+    difficulty: beginner
+    roles:
+      - agent_epargne
+      - gestionnaire
+    suggested: true
+    priority: 100
+    questions:
+      - Comment créer un produit d'épargne ?
+      - Comment créer un nouveau produit d'épargne dans MOWGLI ?
+      - Créer un produit d'épargne
+      - Nouveau produit d'épargne
+      - Qui a le droit de créer ou modifier un produit d'épargne ?
+    menu: Microfinance > Configuration > Produits d'épargne
+    model: microfinance.savings.product
+    prerequisites:
+      - Plan comptable PCEC chargé pour la société (pour le pré-remplissage automatique des comptes et journaux)
+    steps:
+      - Ouvrir Microfinance > Configuration > Produits d'épargne et cliquer sur « Nouveau ».
+      - Saisir le nom et le code du produit (le code doit être unique par société).
+      - Choisir le type de produit (Obligatoire / Volontaire / À terme) et la société.
+      - Renseigner les onglets « Intérêts », « Limites » et « Comptabilité ».
+      - Enregistrer ; les règles de validation sont vérifiées à la sauvegarde.
+    tips: >
+      Les comptes PCEC et les journaux de dépôt/retrait se pré-remplissent automatiquement
+      par recherche du code comptable correspondant dans la société courante, s'ils existent
+      (plan PCEC chargé). Seul le groupe Manager épargne peut créer ou modifier un produit
+      d'épargne ; les groupes Agent épargne, Manager crédit et Auditeur microfinance n'ont
+      qu'un accès en lecture.
+    errors: >
+      Le code produit doit être unique par société (contrainte SQL). Le taux d'intérêt, les
+      montants minimum, le plafond de retrait, les frais de tenue de compte et la pénalité de
+      retrait anticipé ne peuvent pas être négatifs.
+    answer: >
+      <p>Depuis Microfinance > Configuration > Produits d'épargne, cliquez sur « Nouveau »,
+      saisissez le nom et le code du produit (unique par société), puis choisissez le type de
+      produit : Obligatoire, Volontaire ou À terme.</p>
+      <p>Renseignez ensuite les onglets « Intérêts » (taux, méthode de calcul du solde,
+      capitalisation), « Limites » (montants minimum, plafond de retrait, frais de tenue de
+      compte) et « Comptabilité » (journaux et comptes PCEC), puis enregistrez.</p>
+      <p>Seul le groupe Manager épargne peut créer ou modifier un produit d'épargne ; les
+      groupes Agent épargne, Manager crédit et Auditeur microfinance ont un accès en lecture
+      seule.</p>
+    keywords:
+      - produit
+      - épargne
+      - création
+      - savings product
+    source_reference: microfinance_savings_management
+    see_also:
+      - creation_produit_epargne-002
+      - creation_produit_epargne-003
+      - creation_produit_epargne-004
+      - creation_produit_epargne-faq-001
+
+  - id: creation_produit_epargne-002
+    title: Configurer la capitalisation des intérêts d'un produit d'épargne
+    category: Produit d'épargne
+    difficulty: intermediate
+    roles:
+      - agent_epargne
+      - gestionnaire
+    suggested: true
+    priority: 80
+    questions:
+      - Où configurer le taux d'intérêt d'un compte d'épargne ?
+      - Comment fonctionne le calcul du solde pour les intérêts d'un produit d'épargne ?
+      - Quelle est la différence entre les méthodes de calcul du solde (minimum, moyen, fin de période) ?
+      - Comment paramétrer la fréquence de capitalisation des intérêts ?
+    menu: Microfinance > Configuration > Produits d'épargne (onglet Intérêts)
+    model: microfinance.savings.product
+    steps:
+      - Ouvrir le produit d'épargne concerné.
+      - Dans l'onglet « Intérêts », renseigner le taux d'intérêt annuel.
+      - Choisir la méthode de calcul du solde : Solde minimum de la période / Solde moyen de la période / Solde en fin de période.
+      - Choisir la fréquence de capitalisation : Mensuelle / Trimestrielle / Annuelle.
+      - Enregistrer.
+    errors: Le taux d'intérêt ne peut pas être négatif.
+    answer: >
+      <p>Dans l'onglet « Intérêts » du produit d'épargne, renseignez le taux d'intérêt annuel,
+      puis choisissez la méthode de calcul du solde (Solde minimum de la période / Solde moyen
+      de la période / Solde en fin de période) et la fréquence de capitalisation (Mensuelle /
+      Trimestrielle / Annuelle).</p>
+      <p>Le taux d'intérêt ne peut pas être négatif ; l'enregistrement est bloqué dans ce cas.</p>
+    keywords:
+      - intérêt
+      - capitalisation
+      - taux
+      - solde
+    source_reference: microfinance_savings_management
+    see_also:
+      - creation_produit_epargne-001
+      - creation_produit_epargne-003
+
+  - id: creation_produit_epargne-003
+    title: Configurer un produit d'épargne à terme
+    category: Produit d'épargne
+    difficulty: intermediate
+    roles:
+      - agent_epargne
+      - gestionnaire
+    suggested: true
+    priority: 70
+    questions:
+      - Comment paramétrer un produit à terme (dépôt à terme) ?
+      - Pourquoi le système me demande une durée en mois pour ce produit d'épargne ?
+    menu: Microfinance > Configuration > Produits d'épargne
+    model: microfinance.savings.product
+    steps:
+      - Choisir Type de produit = « À terme (dépôt à terme) ».
+      - Renseigner la durée en mois (champ obligatoire pour ce type).
+      - Renseigner la pénalité de retrait anticipé (%).
+      - Enregistrer.
+    tips: Pour un produit à terme, définir systématiquement la durée en mois avant tout autre paramétrage, car le champ devient bloquant à l'enregistrement.
+    errors: >
+      « Un produit à terme doit avoir une durée en mois. » si le champ Durée (mois) est vide au
+      moment de l'enregistrement d'un produit de type À terme.
+    answer: >
+      <p>Lorsque le Type de produit est réglé sur « À terme (dépôt à terme) », le champ
+      Durée (mois) devient obligatoire et le champ Pénalité de retrait anticipé (%) apparaît.</p>
+      <p>Si vous enregistrez sans renseigner la durée, Odoo bloque avec le message :
+      « Un produit à terme doit avoir une durée en mois. »</p>
+    keywords:
+      - terme
+      - dépôt à terme
+      - durée
+      - pénalité
+    source_reference: microfinance_savings_management
+    see_also:
+      - creation_produit_epargne-001
+
+  - id: creation_produit_epargne-004
+    title: Configurer les limites et frais d'un produit d'épargne
+    category: Produit d'épargne
+    difficulty: intermediate
+    roles:
+      - agent_epargne
+      - gestionnaire
+    suggested: true
+    priority: 60
+    questions:
+      - Quel est le solde minimum à maintenir sur tel produit d'épargne ?
+      - Comment fonctionne le plafond de retrait sur un produit d'épargne ?
+      - Comment configurer les frais de tenue de compte d'un produit d'épargne ?
+    menu: Microfinance > Configuration > Produits d'épargne (onglet Limites)
+    model: microfinance.savings.product
+    steps:
+      - Ouvrir l'onglet « Limites » du produit d'épargne.
+      - Renseigner le montant minimum d'ouverture.
+      - Renseigner le solde minimum à maintenir.
+      - Renseigner le plafond de retrait (montant + période : Par transaction ou Par mois).
+      - Renseigner les frais de tenue de compte (montant + fréquence : Mensuelle / Trimestrielle / Annuelle).
+    errors: >
+      Les montants minimum (montant minimum d'ouverture, solde minimum à maintenir), le plafond
+      de retrait et les frais de tenue de compte ne peuvent pas être négatifs.
+    answer: >
+      <p>L'onglet « Limites » d'un produit d'épargne regroupe : le montant minimum d'ouverture,
+      le solde minimum à maintenir (solde gelé — un retrait ne peut pas faire descendre le
+      compte en dessous de ce montant sauf dérogation explicite), le plafond de retrait
+      (montant + période : par transaction ou par mois), et les frais de tenue de compte
+      (montant + fréquence : mensuelle, trimestrielle ou annuelle).</p>
+      <p>Aucun de ces montants ne peut être négatif ; l'enregistrement est bloqué sinon.</p>
+    keywords:
+      - limite
+      - solde minimum
+      - plafond de retrait
+      - frais de tenue de compte
+    source_reference: microfinance_savings_management
+    see_also:
+      - creation_produit_epargne-001
+
+faq:
+  - id: creation_produit_epargne-faq-001
+    question: Où configurer les comptes comptables PCEC d'un produit d'épargne ?
+    answer: >
+      <p>Dans l'onglet « Comptabilité » du produit d'épargne : journaux de dépôt et de retrait
+      (domaine banque/caisse, par défaut le journal de code EPG de la société), comptes
+      Épargne obligatoires par type de client (Individuel, Groupe, Entreprise), comptes
+      Intérêts facultatifs (intérêt payé, intérêts comptabilisés d'avance, coût d'intérêt à
+      payer), et comptes partagés facultatifs (pénalités, commission sur épargne, commission
+      sur chèques rejetés, retenue de taxe, papeterie).</p>
+      <p>Tous les comptes se pré-remplissent automatiquement par recherche du compte portant le
+      code PCEC correspondant dans la société courante, et restent vides si ce compte n'existe
+      pas encore (plan PCEC non chargé). Les trois comptes Épargne (Individuel, Groupe,
+      Entreprise) sont obligatoires : l'enregistrement est bloqué si l'un d'eux est vide.</p>
+    keywords:
+      - compte
+      - comptabilité
+      - PCEC
+      - journal
+    see_also:
+      - creation_produit_epargne-001
+
+  - id: creation_produit_epargne-faq-002
+    question: Qui a le droit de créer ou modifier un produit d'épargne ?
+    answer: >
+      <p>Seul le groupe Manager épargne (group_savings_manager) a un accès complet (lecture,
+      écriture, création, suppression) sur les produits d'épargne. Les groupes Agent épargne
+      (group_savings_agent), Manager crédit (group_microfinance_manager) et Auditeur
+      microfinance (group_microfinance_auditor) n'ont qu'un accès en lecture seule.</p>
+      <p>Le menu « Configuration », parent de « Produits d'épargne », est en outre restreint
+      dans son affichage au groupe Manager crédit, ce qui signifie qu'en pratique seul un
+      Manager crédit ou un Manager épargne disposant aussi de ce groupe voit l'entrée de menu,
+      même si l'accès technique en lecture est plus large.</p>
+    keywords:
+      - droits
+      - sécurité
+      - groupe
+      - manager épargne
+    see_also:
+      - creation_produit_epargne-001

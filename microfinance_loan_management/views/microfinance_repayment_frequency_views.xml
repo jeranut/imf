@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_repayment_frequency_tree" model="ir.ui.view">
+        <field name="name">microfinance.repayment.frequency.tree</field>
+        <field name="model">microfinance.repayment.frequency</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="period_kind"/>
+                <field name="period_value"/>
+            </tree>
+        </field>
+    </record>
+    <record id="action_microfinance_repayment_frequency" model="ir.actions.act_window">
+        <field name="name">Périodicités de remboursement</field>
+        <field name="res_model">microfinance.repayment.frequency</field>
+        <field name="view_mode">tree</field>
+    </record>
+</odoo>

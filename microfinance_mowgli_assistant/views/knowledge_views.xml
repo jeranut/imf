@@ -1,0 +1,543 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_mowgli_knowledge_workflow_tree" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.workflow.tree</field>
+        <field name="model">mowgli.knowledge.workflow</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_workflow_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.workflow.form</field>
+        <field name="model">mowgli.knowledge.workflow</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="code"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="group_ids" widget="many2many_tags"/>
+                        </group>
+                    </group>
+                    <field name="description"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mowgli_knowledge_workflows" model="ir.actions.act_window">
+        <field name="name">Workflows</field>
+        <field name="res_model">mowgli.knowledge.workflow</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_mowgli_knowledge_category_tree" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.category.tree</field>
+        <field name="model">mowgli.knowledge.category</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="workflow_id"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_category_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.category.form</field>
+        <field name="model">mowgli.knowledge.category</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="workflow_id"/>
+                        <field name="sequence"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mowgli_knowledge_categories" model="ir.actions.act_window">
+        <field name="name">Catégories</field>
+        <field name="res_model">mowgli.knowledge.category</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_mowgli_knowledge_article_tree" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.article.tree</field>
+        <field name="model">mowgli.knowledge.article</field>
+        <field name="arch" type="xml">
+            <tree decoration-muted="not active">
+                <field name="priority" widget="handle"/>
+                <field name="title"/>
+                <field name="workflow_id"/>
+                <field name="category_id"/>
+                <field name="external_id"/>
+                <field name="difficulty"/>
+                <field name="suggested"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_article_search" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.article.search</field>
+        <field name="model">mowgli.knowledge.article</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="title"/>
+                <field name="question"/>
+                <field name="external_id"/>
+                <field name="workflow_id"/>
+                <field name="category_id"/>
+                <filter name="suggested" string="Suggérées" domain="[('suggested', '=', True)]"/>
+                <filter name="active" string="Actives" domain="[('active', '=', True)]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_workflow" string="Workflow" context="{'group_by': 'workflow_id'}"/>
+                    <filter name="group_category" string="Catégorie" context="{'group_by': 'category_id'}"/>
+                    <filter name="group_difficulty" string="Difficulté" context="{'group_by': 'difficulty'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_article_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.article.form</field>
+        <field name="model">mowgli.knowledge.article</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="title"/>
+                        <h1><field name="title"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="workflow_id"/>
+                            <field name="category_id"/>
+                            <field name="external_id"/>
+                            <field name="version"/>
+                        </group>
+                        <group>
+                            <field name="difficulty"/>
+                            <field name="priority"/>
+                            <field name="sequence"/>
+                            <field name="suggested"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="group_ids" widget="many2many_tags"/>
+                        <field name="menu_path"/>
+                        <field name="target_model"/>
+                        <field name="guide_anchor"/>
+                        <field name="source_reference"/>
+                    </group>
+                    <notebook>
+                        <page string="Question">
+                            <field name="question"/>
+                        </page>
+                        <page string="Réponse">
+                            <field name="answer" widget="html"/>
+                        </page>
+                        <page string="Mots-clés">
+                            <field name="keyword_ids">
+                                <tree editable="bottom">
+                                    <field name="name"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Formulations">
+                            <field name="question_variant_ids">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Workflow">
+                            <group>
+                                <field name="prerequisites"/>
+                                <field name="steps"/>
+                                <field name="tips"/>
+                                <field name="errors"/>
+                            </group>
+                        </page>
+                        <page string="Images">
+                            <field name="image_ids" mode="tree,form">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="title"/>
+                                    <field name="caption"/>
+                                    <field name="active"/>
+                                </tree>
+                                <form>
+                                    <sheet>
+                                        <group>
+                                            <group>
+                                                <field name="title"/>
+                                                <field name="caption"/>
+                                                <field name="sequence"/>
+                                                <field name="active"/>
+                                            </group>
+                                            <group>
+                                                <field name="image" widget="image"/>
+                                            </group>
+                                        </group>
+                                    </sheet>
+                                </form>
+                            </field>
+                        </page>
+                        <page string="Vidéos YouTube">
+                            <field name="video_ids">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="title"/>
+                                    <field name="youtube_url"/>
+                                    <field name="duration"/>
+                                    <field name="active"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Documents PDF">
+                            <field name="document_ids" mode="tree,form">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                    <field name="filename"/>
+                                    <field name="description"/>
+                                    <field name="active"/>
+                                </tree>
+                                <form>
+                                    <sheet>
+                                        <group>
+                                            <field name="name"/>
+                                            <field name="file" filename="filename"/>
+                                            <field name="filename" invisible="1"/>
+                                            <field name="description"/>
+                                            <field name="sequence"/>
+                                            <field name="active"/>
+                                        </group>
+                                    </sheet>
+                                </form>
+                            </field>
+                        </page>
+                        <page string="Liens">
+                            <field name="link_ids">
+                                <tree editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="title"/>
+                                    <field name="url"/>
+                                    <field name="description"/>
+                                    <field name="active"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Questions similaires">
+                            <field name="related_question_ids" widget="many2many_tags"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mowgli_knowledge_articles" model="ir.actions.act_window">
+        <field name="name">Articles</field>
+        <field name="res_model">mowgli.knowledge.article</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_active': 1}</field>
+    </record>
+
+    <record id="action_mowgli_knowledge_images" model="ir.actions.act_window">
+        <field name="name">Images</field>
+        <field name="res_model">mowgli.knowledge.image</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_mowgli_knowledge_image_tree" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.image.tree</field>
+        <field name="model">mowgli.knowledge.image</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="sequence" widget="handle"/>
+                <field name="title"/>
+                <field name="article_id"/>
+                <field name="caption"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_image_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.image.form</field>
+        <field name="model">mowgli.knowledge.image</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="article_id"/>
+                            <field name="title"/>
+                            <field name="caption"/>
+                            <field name="sequence"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="image" widget="image"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mowgli_knowledge_videos" model="ir.actions.act_window">
+        <field name="name">Vidéos YouTube</field>
+        <field name="res_model">mowgli.knowledge.video</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_mowgli_knowledge_video_tree" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.video.tree</field>
+        <field name="model">mowgli.knowledge.video</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="sequence" widget="handle"/>
+                <field name="title"/>
+                <field name="article_id"/>
+                <field name="youtube_url"/>
+                <field name="duration"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_video_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.video.form</field>
+        <field name="model">mowgli.knowledge.video</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="article_id"/>
+                        <field name="title"/>
+                        <field name="youtube_url"/>
+                        <field name="duration"/>
+                        <field name="sequence"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mowgli_knowledge_documents" model="ir.actions.act_window">
+        <field name="name">Documents PDF</field>
+        <field name="res_model">mowgli.knowledge.document</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_mowgli_knowledge_document_tree" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.document.tree</field>
+        <field name="model">mowgli.knowledge.document</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="article_id"/>
+                <field name="filename"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_document_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.document.form</field>
+        <field name="model">mowgli.knowledge.document</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="article_id"/>
+                        <field name="name"/>
+                        <field name="file" filename="filename"/>
+                        <field name="filename" invisible="1"/>
+                        <field name="description"/>
+                        <field name="sequence"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mowgli_knowledge_links" model="ir.actions.act_window">
+        <field name="name">Liens</field>
+        <field name="res_model">mowgli.knowledge.link</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_mowgli_knowledge_link_tree" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.link.tree</field>
+        <field name="model">mowgli.knowledge.link</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="sequence" widget="handle"/>
+                <field name="article_id"/>
+                <field name="title"/>
+                <field name="url"/>
+                <field name="active"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_link_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.link.form</field>
+        <field name="model">mowgli.knowledge.link</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <group>
+                        <field name="article_id"/>
+                        <field name="title"/>
+                        <field name="url"/>
+                        <field name="description"/>
+                        <field name="sequence"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_unanswered_tree" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.unanswered.question.tree</field>
+        <field name="model">mowgli.knowledge.unanswered.question</field>
+        <field name="arch" type="xml">
+            <tree decoration-muted="status in ('done', 'ignored')">
+                <field name="create_date"/>
+                <field name="question"/>
+                <field name="user_id"/>
+                <field name="workflow_suggested"/>
+                <field name="best_score"/>
+                <field name="status"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_mowgli_knowledge_unanswered_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.unanswered.question.form</field>
+        <field name="model">mowgli.knowledge.unanswered.question</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_mark_in_review" type="object" string="Analyser" invisible="status != 'new'"/>
+                    <button name="action_create_article" type="object" string="Créer un article" class="btn-primary"/>
+                    <button name="action_link_existing_article" type="object" string="Lier l'article" invisible="not linked_article_id"/>
+                    <button name="action_mark_done" type="object" string="Marquer traité"/>
+                    <button name="action_mark_ignored" type="object" string="Ignorer"/>
+                    <field name="status" widget="statusbar" statusbar_visible="new,in_review,done"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="user_id"/>
+                            <field name="user_role"/>
+                            <field name="workflow_suggested"/>
+                            <field name="best_score"/>
+                        </group>
+                        <group>
+                            <field name="created_article_id"/>
+                            <field name="linked_article_id"/>
+                        </group>
+                    </group>
+                    <group>
+                        <field name="question"/>
+                        <field name="note"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mowgli_knowledge_unanswered" model="ir.actions.act_window">
+        <field name="name">Questions sans réponse</field>
+        <field name="res_model">mowgli.knowledge.unanswered.question</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_mowgli_knowledge_sync_wizard_form" model="ir.ui.view">
+        <field name="name">mowgli.knowledge.sync.wizard.form</field>
+        <field name="model">mowgli.knowledge.sync.wizard</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <p>
+                        Synchronise les datasets MOWGLI depuis le chemin externe configuré dans les paramètres MOWGLI.
+                        Par défaut, la synchronisation enrichit la base sans supprimer les articles ni les médias manuels.
+                    </p>
+                    <group string="Options de synchronisation">
+                        <field name="create_new_articles"/>
+                        <field name="update_existing_articles"/>
+                        <field name="delete_missing_articles"/>
+                        <field name="reimport_media"/>
+                    </group>
+                    <group string="Import ZIP optionnel">
+                        <field name="zip_file" filename="zip_filename"/>
+                        <field name="zip_filename" invisible="1"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_sync_datasets" type="object" string="Synchroniser les datasets MOWGLI" class="btn-primary"/>
+                    <button name="action_import_zip" type="object" string="Importer un ZIP de datasets" class="btn-secondary"/>
+                    <button string="Fermer" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_mowgli_knowledge_sync" model="ir.actions.act_window">
+        <field name="name">Synchronisation</field>
+        <field name="res_model">mowgli.knowledge.sync.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <record id="action_mowgli_knowledge_statistics" model="ir.actions.act_window">
+        <field name="name">Statistiques</field>
+        <field name="res_model">mowgli.knowledge.article</field>
+        <field name="view_mode">pivot,graph,tree</field>
+        <field name="context">{'group_by': ['workflow_id', 'category_id']}</field>
+    </record>
+
+    <menuitem id="menu_mowgli_root" name="MOWGLI" sequence="20"/>
+    <menuitem id="menu_mowgli_knowledge_workflows" name="Workflows" parent="menu_mowgli_root" action="action_mowgli_knowledge_workflows" sequence="10"/>
+    <menuitem id="menu_mowgli_knowledge_articles" name="Articles" parent="menu_mowgli_root" action="action_mowgli_knowledge_articles" sequence="20"/>
+    <menuitem id="menu_mowgli_knowledge_categories" name="Catégories" parent="menu_mowgli_root" action="action_mowgli_knowledge_categories" sequence="30"/>
+    <menuitem id="menu_mowgli_knowledge_media" name="Médias" parent="menu_mowgli_root" sequence="40"/>
+    <menuitem id="menu_mowgli_knowledge_images" name="Images" parent="menu_mowgli_knowledge_media" action="action_mowgli_knowledge_images" sequence="10"/>
+    <menuitem id="menu_mowgli_knowledge_videos" name="Vidéos YouTube" parent="menu_mowgli_knowledge_media" action="action_mowgli_knowledge_videos" sequence="20"/>
+    <menuitem id="menu_mowgli_knowledge_documents" name="Documents PDF" parent="menu_mowgli_knowledge_media" action="action_mowgli_knowledge_documents" sequence="30"/>
+    <menuitem id="menu_mowgli_knowledge_unanswered" name="Questions sans réponse" parent="menu_mowgli_root" action="action_mowgli_knowledge_unanswered" sequence="50"/>
+    <menuitem id="menu_mowgli_knowledge_sync" name="Synchronisation" parent="menu_mowgli_root" action="action_mowgli_knowledge_sync" sequence="60"/>
+    <menuitem id="menu_mowgli_knowledge_statistics" name="Statistiques" parent="menu_mowgli_root" action="action_mowgli_knowledge_statistics" sequence="70"/>
+</odoo>

@@ -1,0 +1,278 @@
+workflow: garanties_scoring
+name: Garanties et scoring crédit
+version: "17.0"
+description: >
+  Deux volets rattachés à l'appréciation du risque d'un crédit : les
+  garanties/cautions (microfinance.loan.guarantee), leur valorisation
+  pondérée par type via des règles de valorisation
+  (microfinance.guarantee.valuation.rule) et leur cycle de vie
+  (brouillon / validée / libérée) ; et le scoring crédit
+  (microfinance.scoring.profile, microfinance.scoring.rule,
+  microfinance.scoring.line), soit la configuration de profils de scoring
+  par société/produit, de règles de calcul de points selon des métriques
+  du client et du crédit, et l'historisation des calculs appliqués à
+  chaque crédit.
+sequence: 60
+# À COMPLÉTER: le README (section 2) mentionne aussi les groupes Finance
+# microfinance (group_microfinance_finance, lecture seule) et Auditeur
+# microfinance (group_microfinance_auditor, lecture seule) parmi les
+# utilisateurs concernés, mais aucun rôle MOWGLI de la liste autorisée
+# (agent_credit, agent_epargne, caissier, comptable, credit_committee,
+# gestionnaire, admin) ne leur correspond explicitement dans la
+# documentation source. Seuls agent_credit (Agent crédit) et gestionnaire
+# (Manager crédit) sont retenus ci-dessous.
+roles:
+  - agent_credit
+  - gestionnaire
+categories:
+  - name: Garanties de crédit
+    sequence: 10
+  - name: Scoring crédit
+    sequence: 20
+
+articles:
+  - id: garanties_scoring-001
+    title: Ajouter et valider une garantie sur un crédit
+    category: Garanties de crédit
+    difficulty: beginner
+    roles:
+      - agent_credit
+      - gestionnaire
+    suggested: true
+    priority: 100
+    questions:
+      - Comment ajouter une garantie à une demande de crédit ?
+      - Quels types de garanties peut-on enregistrer dans MOWGLI ?
+      - Comment est calculée la valeur reconnue d'une garantie ?
+      - Que se passe-t-il avec les garanties quand un crédit est clôturé ?
+    menu: Microfinance > Crédits > Garanties (également accessible depuis l'onglet « Garanties » de la fiche crédit)
+    model: microfinance.loan.guarantee
+    steps:
+      - Depuis la fiche d'un crédit, ouvrir l'onglet « Garanties » (ou le menu Microfinance > Crédits > Garanties).
+      - Ajouter une ligne : choisir le type de garantie, saisir une description et la valeur estimée.
+      - Si le type est « Garant / caution personnelle », renseigner obligatoirement le partenaire caution.
+      - Joindre éventuellement une pièce justificative (document scanné).
+      - La valeur reconnue se calcule automatiquement selon le ratio de valorisation configuré pour ce type de garantie.
+      - Faire passer la garantie de « Brouillon » à « Validée » une fois le dossier vérifié.
+    tips: >
+      À la clôture du crédit, les garanties non encore libérées sont automatiquement passées à
+      l'état « Libérée », avec un message posté dans le chatter du crédit listant les garanties
+      libérées. Faire valider les garanties avant la soumission du crédit, car seules les
+      garanties à l'état « Validée » comptent dans le total des garanties et dans le contrôle
+      d'éligibilité.
+    errors: >
+      « La caution doit préciser le partenaire qui se porte garant. » (garantie de type
+      « Garant / caution personnelle » sans partenaire renseigné). « La valeur estimée ne peut
+      pas être négative. »
+    answer: >
+      <p>Depuis la fiche d'un crédit, ouvrez l'onglet « Garanties » (ou le menu
+      Microfinance > Crédits > Garanties), ajoutez une ligne : type de garantie (Terrain,
+      Véhicule, Maison, Meuble, Salaire, Garant/caution personnelle, Autre), description et
+      valeur estimée. Pour le type « Garant / caution personnelle », le partenaire caution est
+      obligatoire.</p>
+      <p>La valeur reconnue (recognized_value) se calcule automatiquement = valeur estimée ×
+      ratio de valorisation du type (100 % par défaut si aucune règle n'est configurée pour la
+      société/le type). La garantie passe ensuite de « Brouillon » à « Validée » une fois le
+      dossier vérifié.</p>
+      <p>À la clôture du crédit, toutes les garanties non encore « Libérée » sont automatiquement
+      passées à cet état.</p>
+    keywords:
+      - garantie
+      - caution
+      - valeur reconnue
+      - valorisation
+    source_reference: microfinance_loan_management
+    see_also:
+      - garanties_scoring-002
+      - garanties_scoring-faq-002
+
+  - id: garanties_scoring-002
+    title: Configurer les ratios de valorisation des garanties par type
+    category: Garanties de crédit
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 90
+    questions:
+      - Où configurer les ratios de valorisation des garanties par type de bien ?
+    menu: Microfinance > Configuration > Ratios de valorisation des garanties
+    model: microfinance.guarantee.valuation.rule
+    prerequisites:
+      - Configurer les ratios de valorisation avant la saisie des garanties, afin que la valeur reconnue reflète la politique de risque de l'IMF dès la création
+    steps:
+      - Ouvrir Microfinance > Configuration > Ratios de valorisation des garanties.
+      - Choisir le type de garantie (même liste que sur l'écran Garantie).
+      - Renseigner le ratio de valorisation (%) : pourcentage de la valeur estimée reconnu comme garantie effective.
+      - Renseigner le ratio maximum (%) : plafond au-delà duquel le ratio de valorisation ne peut pas être configuré.
+      - Enregistrer (une seule règle par couple type de garantie / société).
+    errors: >
+      « Le ratio maximum doit être strictement positif. » « Le ratio de valorisation ne peut pas
+      être négatif. » « Le ratio de valorisation (X%) dépasse le plafond autorisé pour ce type de
+      garantie (Y%). »
+    answer: >
+      <p>Dans Microfinance > Configuration > Ratios de valorisation des garanties, chaque règle
+      définit, pour un type de garantie et une société donnés, le ratio de valorisation (%,
+      pourcentage de la valeur estimée reconnu comme garantie effective) et le ratio maximum (%,
+      plafond que le ratio de valorisation ne peut pas dépasser).</p>
+      <p>Une seule règle est autorisée par couple type de garantie / société. Si aucune règle
+      n'est configurée pour un type donné, le ratio par défaut appliqué est 100 %.</p>
+    keywords:
+      - ratio
+      - valorisation
+      - garantie
+    source_reference: microfinance_loan_management
+    see_also:
+      - garanties_scoring-001
+
+  - id: garanties_scoring-003
+    title: Configurer un profil de scoring crédit
+    category: Scoring crédit
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 80
+    questions:
+      - Comment fonctionne le scoring crédit automatique ?
+      - Quelles métriques sont utilisées pour calculer le score d'un client ?
+    menu: Microfinance > Configuration > Scoring crédit
+    model: microfinance.scoring.profile
+    steps:
+      - Dans Microfinance > Configuration > Scoring crédit, créer un profil de scoring (générique société ou spécifique à un produit de crédit).
+      - Renseigner les bornes de score (score minimum / score maximum) et les trois seuils de décision (approbation, revue manuelle, rejet).
+      - Ajouter les règles de scoring du profil dans l'onglet « Règles » : métrique suivie, mode de calcul (Seuil ou Linéaire), opérateur/valeur, type (Bonus/Malus) et points.
+      - Enregistrer.
+    tips: >
+      Ordonner les règles de scoring avec le champ séquence en commençant par une règle
+      « Constante » (métrique de base) servant de score de base, puis les malus, comme dans le
+      profil par défaut fourni. Ne conserver qu'un seul profil de scoring actif par
+      société/produit ; désactiver plutôt que supprimer un ancien profil pour garder l'historique
+      cohérent.
+    errors: >
+      « Un profil de scoring actif existe déjà pour cette société et ce produit. » « Le score
+      minimum doit être inférieur au score maximum. » « Les seuils doivent être compris entre le
+      score minimum et le score maximum. » « Le seuil de recommandation doit être supérieur ou
+      égal au seuil de revue manuelle. » « Un opérateur et une valeur sont requis pour une règle
+      à seuil. » « La valeur between doit contenir deux nombres, par exemple 10,30. » « La valeur
+      de scoring doit être numérique. »
+    answer: >
+      <p>Un profil de scoring (microfinance.scoring.profile) est générique à la société si le
+      produit de crédit est laissé vide, ou spécifique à un produit. Il définit un score minimum
+      et maximum, ainsi que trois seuils de décision : approbation, revue manuelle et rejet. Un
+      seul profil actif est autorisé par société et par produit (ou par société pour les profils
+      génériques).</p>
+      <p>Chaque règle de scoring (microfinance.scoring.rule) porte sur une métrique (parmi 17
+      possibles : Constante, Total crédits, Crédits actifs/clôturés/en défaut, Échéances en
+      retard, Maximum/moyenne jours de retard, Taux de remboursement, Montant total
+      emprunté/payé, Nombre de paiements partiels, Ancienneté client, et des métriques limitées
+      au crédit courant), un mode de calcul (Seuil : points fixes si condition vraie ; Linéaire :
+      points × valeur de la métrique), un opérateur, une valeur, des points et un type
+      (Bonus/Malus).</p>
+    keywords:
+      - scoring
+      - profil
+      - règle
+      - métrique
+    source_reference: microfinance_loan_management
+    see_also:
+      - garanties_scoring-004
+      - garanties_scoring-faq-003
+
+  - id: garanties_scoring-004
+    title: Calcul automatique du score crédit et consultation
+    category: Scoring crédit
+    difficulty: intermediate
+    roles:
+      - agent_credit
+      - gestionnaire
+    suggested: true
+    priority: 70
+    questions:
+      - Comment consulter le détail du calcul de scoring d'un crédit ?
+    menu: Fiche crédit (bouton « Recalculer le score » et bouton statistique « Scoring »)
+    model: microfinance.loan
+    steps:
+      - Le calcul du score se déclenche automatiquement à la soumission du dossier de crédit, ou manuellement via le bouton « Recalculer le score » dans l'en-tête de la fiche crédit.
+      - Le système sélectionne le profil de scoring applicable (celui déjà lié au crédit s'il est actif, sinon le profil actif du produit, sinon le profil générique actif de la société).
+      - Chaque métrique est calculée à partir de l'historique du client et du crédit courant, puis chaque règle active du profil est évaluée dans l'ordre de sa séquence.
+      - Les points des règles qui correspondent sont cumulés puis le score final est borné entre le score minimum et le score maximum du profil.
+      - Le score alimente le Score interne, le Niveau de risque et la Décision scoring sur le crédit, et génère une ligne d'historique par règle appliquée.
+      - Consulter le détail du calcul via le bouton statistique « Scoring » ou l'onglet « Scoring » de la fiche crédit.
+    tips: >
+      Une tâche planifiée recalcule aussi automatiquement le scoring de tous les crédits actifs.
+      Recalculer le scoring manuellement après toute modification manuelle du profil rattaché à
+      un crédit, le score n'étant pas recalculé automatiquement à chaque écriture.
+    errors: >
+      Si aucun profil de scoring n'est trouvé lors d'un calcul déclenché explicitement par
+      l'utilisateur, une erreur bloque le calcul. Un crédit à l'état « Radié » reçoit
+      systématiquement score = 0, risque = « Critique », décision = « Risqué / Rejet
+      recommandé », et son historique de scoring est vidé.
+    answer: >
+      <p>Le score se calcule automatiquement à la soumission de la demande de crédit, ou
+      manuellement via le bouton « Recalculer le score » dans l'en-tête de la fiche crédit. Le
+      profil applicable est déterminé ainsi : profil déjà lié au crédit s'il est actif, sinon
+      profil actif du produit du crédit, sinon profil générique actif de la société.</p>
+      <p>Décision : « Recommandé » si le score atteint le seuil d'approbation ; « Revue manuelle »
+      si le score atteint le seuil de revue manuelle ; sinon « Risqué / Rejet recommandé ».
+      Niveau de risque : « Faible » dans le quart supérieur de l'échelle du profil, « Moyen »
+      dans la moitié supérieure, « Élevé » si le score atteint au moins le seuil de rejet, sinon
+      « Critique ».</p>
+      <p>Le détail du calcul (règles appliquées) se consulte via le bouton statistique
+      « Scoring » ou l'onglet « Scoring » de la fiche crédit.</p>
+    keywords:
+      - score
+      - risque
+      - décision
+      - historique scoring
+    source_reference: microfinance_loan_management
+    see_also:
+      - garanties_scoring-003
+
+faq:
+  - id: garanties_scoring-faq-001
+    question: Pourquoi le système bloque la soumission d'un crédit pour garanties insuffisantes ?
+    answer: >
+      <p>À la soumission d'un crédit, l'éligibilité liée aux garanties est vérifiée : si le
+      produit exige une garantie, au moins une garantie à l'état « Validée » est requise
+      (message « Ce produit exige une garantie validée avant soumission. ») ; si le produit fixe
+      un ratio minimum de garantie, le total des garanties validées doit couvrir ce ratio
+      appliqué au montant du crédit (message détaillant le montant manquant, « Garanties
+      insuffisantes : il manque X pour atteindre le ratio minimum requis... »).</p>
+    keywords:
+      - garanties insuffisantes
+      - soumission
+      - éligibilité
+    see_also:
+      - garanties_scoring-001
+
+  - id: garanties_scoring-faq-002
+    question: Que se passe-t-il avec les garanties quand un crédit est clôturé ?
+    answer: >
+      <p>À la clôture d'un crédit, toutes les garanties non encore à l'état « Libérée » sont
+      automatiquement passées à cet état, avec un message posté dans le chatter du crédit
+      listant les garanties libérées.</p>
+    keywords:
+      - clôture
+      - libération
+      - garantie
+    see_also:
+      - garanties_scoring-001
+
+  - id: garanties_scoring-faq-003
+    question: Qui peut valider ou modifier un profil de scoring ?
+    answer: >
+      <p>Seul le groupe Manager crédit (group_microfinance_manager) a un accès complet (lecture,
+      écriture, création, suppression) sur les profils et règles de scoring. Le groupe Agent
+      crédit (group_microfinance_user) n'a qu'un accès en lecture seule sur les profils et
+      règles de scoring (mais un accès complet sur les lignes d'historique, qui restent de toute
+      façon générées uniquement par le calcul automatique). Le groupe Auditeur microfinance a
+      également un accès en lecture seule.</p>
+      <p>Le menu « Configuration », parent de « Scoring crédit », n'est affiché qu'au groupe
+      Manager crédit.</p>
+    keywords:
+      - droits
+      - sécurité
+      - profil de scoring
+    see_also:
+      - garanties_scoring-003

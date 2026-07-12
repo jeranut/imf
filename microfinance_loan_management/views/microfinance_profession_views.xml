@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_profession_tree" model="ir.ui.view">
+        <field name="name">microfinance.profession.tree</field>
+        <field name="model">microfinance.profession</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="name"/>
+                <field name="active" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+    <record id="action_microfinance_profession" model="ir.actions.act_window">
+        <field name="name">Professions</field>
+        <field name="res_model">microfinance.profession</field>
+        <field name="view_mode">tree</field>
+    </record>
+</odoo>

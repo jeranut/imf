@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="microfinance_loan_management.MicrofinanceLoanDashboard" t-inherit="microfinance_loan_management.MicrofinanceLoanDashboard" t-inherit-mode="extension">
+        <xpath expr="//div[hasclass('o_microfinance_kpi_grid')]" position="inside">
+            <article class="o_microfinance_kpi o_microfinance_kpi--savings-count">
+                <div class="o_microfinance_kpi__body">
+                    <span class="o_microfinance_kpi__icon"><i class="fa fa-bank" role="img" aria-label="Comptes épargne actifs"/></span>
+                    <div class="o_microfinance_kpi__content">
+                        <strong t-esc="formatNumber(kpis.active_savings_account_count)"/>
+                        <span>Comptes épargne actifs</span>
+                    </div>
+                </div>
+                <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.savings.account', [['state', '=', 'active']], 'Comptes épargne actifs')">Voir les comptes épargne</a>
+            </article>
+            <article class="o_microfinance_kpi o_microfinance_kpi--savings-outstanding">
+                <div class="o_microfinance_kpi__body">
+                    <span class="o_microfinance_kpi__icon"><i class="fa fa-google-wallet" role="img" aria-label="Encours épargne"/></span>
+                    <div class="o_microfinance_kpi__content">
+                        <strong t-esc="formatMoney(kpis.savings_outstanding_total)"/>
+                        <span>Encours épargne</span>
+                    </div>
+                </div>
+                <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.savings.account', [['state', '=', 'active']], 'Encours épargne')">Voir l'encours épargne</a>
+            </article>
+        </xpath>
+    </t>
+</templates>

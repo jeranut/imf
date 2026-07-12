@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Cloisonnement multi-société : chaque société (agence) ne voit et ne modifie que
+         ses propres enregistrements. groups vide = s'applique à tous les groupes, y compris
+         managers et auditeurs, pour un cloisonnement non contournable. -->
+
+    <record id="microfinance_savings_product_company_rule" model="ir.rule">
+        <field name="name">Microfinance produit d'épargne : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_savings_product"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_savings_account_company_rule" model="ir.rule">
+        <field name="name">Microfinance compte épargne : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_savings_account"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_savings_transaction_company_rule" model="ir.rule">
+        <field name="name">Microfinance transaction épargne : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_savings_transaction"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+</odoo>

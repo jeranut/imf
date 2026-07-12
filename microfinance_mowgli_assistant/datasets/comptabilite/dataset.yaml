@@ -1,0 +1,396 @@
+workflow: comptabilite
+name: Workflow Comptabilité
+version: "17.0"
+description: >
+  Workflow métier Comptabilité CEFOR : décaissement d'un crédit approuvé
+  (écriture account.move), encaissement des frais de dossier, enregistrement
+  et comptabilisation des remboursements (allocation pénalité → intérêt →
+  capital, puis écriture), annulation par contre-passation d'un remboursement
+  déjà comptabilisé, radiation (write-off) d'un crédit, provisionnement
+  comptable périodique du portefeuille, et transactions d'épargne (dépôt,
+  retrait, intérêt crédité, frais, prélèvement automatique, virement) avec
+  leur comptabilisation. Couvre microfinance.loan (volet comptable),
+  microfinance.loan.payment et microfinance.savings.transaction.
+sequence: 90
+# À COMPLÉTER: les groupes "Finance microfinance" (group_microfinance_finance)
+# et "Auditeur microfinance" (group_microfinance_auditor) cités en section 2
+# du README n'ont pas d'équivalent direct parmi les 7 rôles CEFOR autorisés
+# (agent_credit, agent_epargne, caissier, comptable, credit_committee,
+# gestionnaire, admin). Les articles concernant des actions réservées à
+# "Manager/Finance" restent visibles au rôle gestionnaire (Manager crédit,
+# qui dispose des mêmes droits ou plus sur ces actions) ; le rôle Finance en
+# tant que tel n'est pas représentable tant qu'aucun rôle CEFOR dédié n'existe.
+roles:
+  - comptable
+  - caissier
+  - gestionnaire
+  - agent_credit
+  - agent_epargne
+categories:
+  - name: Décaissement
+    sequence: 10
+  - name: Remboursement
+    sequence: 20
+  - name: Annulation de remboursement
+    sequence: 30
+  - name: Radiation
+    sequence: 40
+  - name: Provisionnement
+    sequence: 50
+  - name: Transactions d'épargne
+    sequence: 60
+
+articles:
+  - id: comptabilite-001
+    title: Décaisser un crédit approuvé et encaisser les frais de dossier
+    category: Décaissement
+    difficulty: intermediate
+    roles:
+      - comptable
+      - caissier
+      - gestionnaire
+    suggested: true
+    priority: 100
+    questions:
+      - Comment décaisser un crédit approuvé dans MOWGLI ?
+      - Pourquoi le bouton Décaisser n'apparaît-il pas sur ce dossier ?
+      - Qui peut encaisser les frais de dossier ou décaisser un crédit ?
+      - Comment encaisser les frais de dossier avant décaissement ?
+    menu: Microfinance > Crédits > Demande de crédit
+    model: microfinance.loan
+    prerequisites:
+      - Le crédit doit être à l'état Approuvé.
+      - Si le produit facture les frais de dossier avant décaissement (fee_charged_before_disbursement=True), les frais doivent être encaissés avant de décaisser.
+      - Le journal de décaissement, son compte par défaut et le compte principal en cours du produit doivent être configurés (comptes PCEC).
+    steps:
+      - Si le produit facture les frais de dossier avant décaissement et que des frais sont dus, cliquer « Encaisser les frais de dossier » (action_charge_fee) sur la fiche crédit : crée et poste une écriture d'encaissement des frais, fee_paid passe à True.
+      - Cliquer « Activer / Décaisser » (action_disburse) : génère l'échéancier s'il est absent, crée et poste l'écriture de décaissement, passe le crédit en Actif et renseigne la date de décaissement.
+    tips: >
+      Vérifier la configuration comptable complète du produit (journal de
+      décaissement, compte principal, compte commission crédit) avant la
+      première utilisation, pour éviter les blocages au moment du
+      décaissement. Si le produit ne facture pas les frais avant
+      décaissement, le montant net remis en caisse (net_disbursed_amount)
+      est réduit des frais de dossier, nettés directement dans l'écriture
+      de décaissement ; sinon les frais sont encaissés séparément et le
+      montant net remis correspond au montant du crédit. Le capital dû
+      (loan_amount) reste toujours plein.
+    errors: >
+      « Le crédit doit être approuvé avant décaissement. » ; « Les frais de
+      dossier doivent être encaissés avant le décaissement. » (produit à
+      frais préalables) ; « Les frais de dossier ne peuvent être encaissés
+      que sur un crédit approuvé. » / « Les frais de dossier ont déjà été
+      encaissés. » / « Aucun frais de dossier à encaisser pour ce crédit. »
+      ; « Configurez le journal de décaissement, son compte par défaut et
+      le compte principal en cours du produit. » / « Configurez le journal
+      d'encaissement des frais... » / « Configurez le compte commission sur
+      crédit du produit pour netter les frais... » (comptes PCEC manquants).
+    answer: >
+      <p>Depuis Microfinance > Crédits > Demande de crédit, ouvrez le
+      dossier à l'état <strong>Approuvé</strong>.</p>
+      <ol>
+        <li>Si le produit facture les frais de dossier avant décaissement
+        et que des frais sont dus, cliquez « Encaisser les frais de
+        dossier » : l'écriture d'encaissement est créée et postée.</li>
+        <li>Cliquez « Activer / Décaisser » : l'échéancier est généré si
+        besoin, l'écriture de décaissement est créée et postée, le crédit
+        passe en <strong>Actif</strong>.</li>
+      </ol>
+      <p>Ces deux boutons sont réservés au groupe Finance microfinance.
+      Comptable et Caissier ont un accès en lecture seule sur le crédit.</p>
+    keywords:
+      - décaissement
+      - frais de dossier
+      - action_disburse
+      - action_charge_fee
+      - net_disbursed_amount
+    source_reference: microfinance_loan_management
+
+  - id: comptabilite-002
+    title: Enregistrer et comptabiliser un remboursement
+    category: Remboursement
+    difficulty: beginner
+    roles:
+      - agent_credit
+      - caissier
+      - comptable
+      - gestionnaire
+    suggested: true
+    priority: 90
+    questions:
+      - Comment enregistrer un remboursement et voir la ventilation entre capital, intérêt et pénalité ?
+      - Pourquoi le système me dit « Surpaiement interdit » sur ce remboursement ?
+      - Pourquoi un crédit se clôture-t-il automatiquement après un remboursement ?
+      - Comment comptabiliser un remboursement en brouillon ?
+    menu: Microfinance > Crédits > Remboursements (ou bouton « Enregistrer remboursement » sur la fiche crédit)
+    model: microfinance.loan.payment
+    prerequisites:
+      - Le crédit doit être à l'état Actif ou En défaut.
+    steps:
+      - Depuis la fiche crédit (Actif/En défaut), cliquer « Enregistrer remboursement » (action_open_payment_wizard) pour ouvrir l'assistant.
+      - Saisir montant, date, journal, note ; « Comptabiliser maintenant » (post_now) est cochée par défaut ; cliquer « Valider » (action_create_payment) : crée le remboursement en brouillon puis, si post_now, appelle immédiatement la comptabilisation.
+      - La comptabilisation (action_post) alloue le montant échéance par échéance (pénalité → intérêt → capital, échéances triées par date puis séquence), crée et poste l'écriture de remboursement, passe le paiement en Comptabilisé ; si le solde du crédit atteint 0, le crédit est automatiquement clôturé.
+      - Alternative : depuis le menu Remboursements, ouvrir un paiement brouillon existant et cliquer « Comptabiliser » directement.
+    tips: >
+      L'allocation (_allocate_to_installments) suit toujours l'ordre
+      pénalité → intérêt → capital, échéance par échéance dans l'ordre
+      chronologique, sans jamais dépasser le résiduel dû de chaque poste.
+      Un remboursement ne peut pas dépasser le solde restant du crédit
+      (balance_total, tolérance de 0,01).
+    errors: >
+      « Le crédit doit être actif ou en défaut pour enregistrer un
+      remboursement. » ; « Surpaiement interdit. Solde restant : %.2f » ;
+      « Le montant du remboursement doit être positif. » ; « Le journal de
+      paiement doit avoir un compte par défaut. » ; « Configurez le compte
+      pénalités crédits du produit pour comptabiliser ce remboursement. »
+      (si une pénalité est allouée mais le compte n'est pas configuré) ;
+      « Impossible de clôturer : solde restant à payer. » (si la clôture
+      automatique est appelée alors que le solde n'est pas nul).
+    answer: >
+      <p>Depuis la fiche crédit à l'état Actif ou En défaut, cliquez
+      « Enregistrer remboursement » pour ouvrir l'assistant. Saisissez le
+      montant, la date, le journal et une note éventuelle ; la case
+      « Comptabiliser maintenant » est cochée par défaut. Cliquez
+      « Valider ».</p>
+      <p>Le montant est alloué échéance par échéance dans l'ordre
+      pénalité → intérêt → capital, l'écriture comptable est postée, et si
+      le solde du crédit atteint 0 le crédit est automatiquement
+      clôturé.</p>
+      <p>Vous pouvez aussi comptabiliser un remboursement laissé en
+      brouillon depuis Microfinance > Crédits > Remboursements en cliquant
+      « Comptabiliser ».</p>
+    keywords:
+      - remboursement
+      - action_post
+      - allocation
+      - pénalité
+      - intérêt
+      - capital
+      - surpaiement
+    source_reference: microfinance_loan_management
+    see_also:
+      - comptabilite-003
+
+  - id: comptabilite-003
+    title: Annuler un remboursement déjà comptabilisé (contre-passation)
+    category: Annulation de remboursement
+    difficulty: advanced
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 80
+    questions:
+      - Comment annuler un remboursement déjà comptabilisé sans casser la comptabilité ?
+      - Comment contre-passer une écriture de remboursement ?
+    menu: Microfinance > Crédits > Remboursements
+    model: microfinance.loan.payment
+    prerequisites:
+      - Le remboursement doit être à l'état Comptabilisé.
+      - Action réservée aux groupes Manager crédit et Finance microfinance.
+    steps:
+      - Depuis la fiche du remboursement Comptabilisé, cliquer « Annuler (contre-passation) » (action_open_cancel_wizard) pour ouvrir l'assistant d'annulation.
+      - Saisir le motif (obligatoire) et cliquer « Confirmer l'annulation » (action_confirm) : contre-passe l'écriture d'origine, restitue aux échéances les montants alloués, repasse le crédit en Actif s'il avait été clôturé automatiquement par ce paiement, et passe le paiement en Annulé.
+    tips: >
+      Toujours passer par cet assistant pour un remboursement Comptabilisé,
+      plutôt que de tenter une suppression manuelle : c'est le seul chemin
+      qui contre-passe l'écriture et restitue correctement les montants aux
+      échéances. La restitution se fait dans l'ordre inverse de
+      l'allocation initiale (échéances les plus récemment touchées en
+      premier), et le système vérifie que la date de l'écriture d'origine
+      n'est pas dans une période verrouillée avant toute contre-passation.
+    errors: >
+      « Le motif d'annulation est obligatoire. »
+    answer: >
+      <p>Depuis Microfinance > Crédits > Remboursements, ouvrez le
+      remboursement <strong>Comptabilisé</strong> concerné et cliquez
+      « Annuler (contre-passation) » (réservé aux groupes Manager crédit et
+      Finance microfinance). Saisissez le motif d'annulation (obligatoire)
+      et confirmez.</p>
+      <p>L'écriture d'origine est contre-passée, les montants sont
+      restitués aux échéances concernées, et le paiement passe en
+      <strong>Annulé</strong>. Si ce paiement avait déclenché la clôture
+      automatique du crédit, le crédit repasse en Actif.</p>
+    keywords:
+      - annulation
+      - contre-passation
+      - action_cancel
+      - reversal_move_id
+    source_reference: microfinance_loan_management
+    see_also:
+      - comptabilite-002
+
+  - id: comptabilite-004
+    title: Radier (write-off) un crédit irrécouvrable
+    category: Radiation
+    difficulty: advanced
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 70
+    questions:
+      - Quelles sont les étapes pour radier un crédit irrécouvrable ?
+      - Comment passer un crédit en perte sur créance ?
+    menu: Microfinance > Crédits > Demande de crédit
+    model: microfinance.loan
+    prerequisites:
+      - Le crédit doit être à l'état Actif ou En défaut.
+      - Action réservée aux groupes Manager crédit et Finance microfinance.
+      - Le compte de crédits passés en perte doit être configuré sur le produit et un journal des opérations diverses doit être configuré pour la société.
+    steps:
+      - Depuis la fiche crédit (Actif/En défaut), cliquer « Radier » (action_write_off) pour ouvrir l'assistant de radiation.
+      - Saisir la date de radiation et le motif (obligatoire), cliquer « Radier » (action_confirm) : crée et poste une écriture de perte sur créance pour le solde restant, passe le crédit en Radié.
+    tips: >
+      Réserver la radiation aux groupes Manager crédit et Finance
+      microfinance conformément aux restrictions posées sur le bouton,
+      plutôt que de contourner via l'accès technique au modèle.
+    errors: >
+      « Le motif de radiation est obligatoire. » ; « La radiation n'est
+      possible que pour un crédit actif ou en défaut. » ; « Aucun solde
+      restant à radier. Utilisez la clôture normale. » ; « Configurez le
+      compte de crédits passés en perte pour ce produit avant de radier ce
+      crédit. » ; « Aucun journal des opérations diverses n'est configuré
+      pour cette société. »
+    answer: >
+      <p>Depuis la fiche crédit à l'état Actif ou En défaut, cliquez
+      « Radier » (réservé aux groupes Manager crédit et Finance
+      microfinance) pour ouvrir l'assistant de radiation. Saisissez la date
+      de radiation et le motif (obligatoire) puis cliquez « Radier ».</p>
+      <p>Une écriture de perte sur créance est postée pour le solde
+      restant et le crédit passe en <strong>Radié</strong>.</p>
+    keywords:
+      - radiation
+      - write-off
+      - perte sur créance
+      - action_write_off
+    source_reference: microfinance_loan_management
+
+  - id: comptabilite-005
+    title: Comptabiliser les provisions du portefeuille de crédits
+    category: Provisionnement
+    difficulty: advanced
+    roles:
+      - comptable
+      - gestionnaire
+    suggested: false
+    priority: 50
+    questions:
+      - Comment se déclenche le provisionnement comptable des crédits ?
+      - Comment mettre à jour les provisions du portefeuille de crédits ?
+    menu: Microfinance > Crédits > Demande de crédit (vue liste, menu Actions)
+    model: microfinance.loan
+    prerequisites:
+      - Action réservée aux groupes Manager crédit et Finance microfinance.
+      - Les comptes de provision (coût et contrepartie) doivent être configurés sur le produit.
+    steps:
+      - Depuis Microfinance > Crédits > Demande de crédit, en vue liste, sélectionner un ou plusieurs crédits puis utiliser le menu Actions > « Comptabiliser les provisions » (action_post_provisions) ; le provisionnement peut aussi être exécuté par une tâche planifiée périodique.
+      - Pour chaque crédit dont la provision requise (provision_amount) diffère de la provision déjà comptabilisée (provision_posted_amount), crée et poste une écriture de dotation (delta positif) ou de reprise (delta négatif), puis met à jour provision_posted_amount.
+    tips: >
+      Le taux de provision applicable est recherché dans les règles de
+      provision selon le nombre de jours de retard maximal du crédit et la
+      société ; la provision requise correspond au minimum entre
+      (solde restant × taux / 100) et le solde restant, et elle est nulle
+      si le crédit n'est pas Actif ou En défaut. Exécuter ce
+      provisionnement régulièrement (ou vérifier que la tâche planifiée
+      cron_post_provisions est active) afin que la provision comptabilisée
+      reste synchronisée avec le risque réel du portefeuille.
+    errors: >
+      « Configurez les comptes de provision (coût et contrepartie) pour le
+      produit... »
+    answer: >
+      <p>Depuis Microfinance > Crédits > Demande de crédit, en vue liste,
+      sélectionnez un ou plusieurs crédits puis utilisez le menu
+      Actions > « Comptabiliser les provisions » (réservé aux groupes
+      Manager crédit et Finance microfinance). Le provisionnement peut
+      aussi s'exécuter automatiquement via une tâche planifiée
+      périodique.</p>
+      <p>Pour chaque crédit dont la provision requise diffère de la
+      provision déjà comptabilisée, une écriture de dotation ou de reprise
+      est créée et postée, puis la provision comptabilisée est mise à
+      jour.</p>
+    keywords:
+      - provisionnement
+      - provision_amount
+      - provision_posted_amount
+      - action_post_provisions
+    source_reference: microfinance_loan_management
+
+  - id: comptabilite-006
+    title: Enregistrer et comptabiliser une transaction d'épargne
+    category: Transactions d'épargne
+    difficulty: beginner
+    roles:
+      - agent_epargne
+      - gestionnaire
+    suggested: true
+    priority: 60
+    questions:
+      - Comment enregistrer un dépôt ou un retrait sur un compte épargne et imprimer le reçu ?
+      - Comment comptabiliser une transaction d'épargne ?
+    menu: Microfinance > Épargne > Transactions épargne
+    model: microfinance.savings.transaction
+    prerequisites:
+      - Les comptes PCEC épargne (compte épargne, compte intérêt payé, compte commission, journal de dépôt/retrait) doivent être configurés sur le produit.
+    steps:
+      - Depuis Microfinance > Épargne > Transactions épargne, créer une transaction (dépôt, retrait, intérêt crédité, frais prélevés, prélèvement automatique, virement), état Brouillon.
+      - Cliquer « Comptabiliser » (action_post) : crée et poste l'écriture correspondant au type (comptes de contrepartie différents selon dépôt/retrait), passe la transaction en Comptabilisé.
+      - Un prélèvement automatique peut aussi être généré par une tâche planifiée (cron_process_savings_auto_debit, module MSM) : elle crée à la fois la transaction d'épargne et le remboursement crédit lié.
+      - Une fois Comptabilisé, imprimer le reçu via le bouton « Imprimer le reçu ».
+    tips: >
+      La comptabilisation utilise un compte de contrepartie différent
+      selon le type de transaction : journal de dépôt/retrait du produit
+      pour dépôt/retrait/virement, compte intérêt payé pour l'intérêt
+      crédité, compte commission pour les frais prélevés. bypass_min_balance
+      autorise un retrait à descendre sous le solde minimum du produit
+      (clôture de compte, prélèvement automatique autorisé).
+    errors: >
+      « Le montant de la transaction doit être positif. » ; « Retrait
+      refusé : le solde après retrait (%.2f) descendrait sous le solde
+      minimum du produit (%.2f). » ; « Les retraits ne sont autorisés que
+      sur un compte épargne actif. » / « Dépôt impossible sur un compte
+      clôturé ou dormant. » ; « Configurez le compte épargne sur le
+      produit... » / « Configurez le compte intérêt payé... » / « Configurez
+      le compte commission sur épargne... » / « Configurez le journal de
+      dépôt/retrait et son compte par défaut... »
+    answer: >
+      <p>Depuis Microfinance > Épargne > Transactions épargne, créez une
+      transaction (dépôt, retrait, intérêt crédité, frais prélevés,
+      prélèvement automatique, virement) ; elle est créée à l'état
+      Brouillon.</p>
+      <p>Cliquez « Comptabiliser » : l'écriture correspondante est créée
+      et postée, la transaction passe en <strong>Comptabilisé</strong>.
+      Vous pouvez alors imprimer le reçu.</p>
+      <p>Un prélèvement automatique peut aussi être généré automatiquement
+      par une tâche planifiée, qui crée à la fois la transaction d'épargne
+      et le remboursement crédit lié.</p>
+    keywords:
+      - épargne
+      - dépôt
+      - retrait
+      - action_post
+      - prélèvement automatique
+    source_reference: microfinance_savings_management
+
+faq:
+  - id: comptabilite-faq-001
+    question: Pourquoi le système refuse-t-il mon remboursement avec « Surpaiement interdit » ?
+    answer: >
+      <p>Un remboursement ne peut jamais dépasser le solde restant du
+      crédit (balance_total), avec une tolérance de 0,01. Vérifiez le
+      solde restant affiché dans le message d'erreur avant de corriger le
+      montant saisi.</p>
+    keywords:
+      - surpaiement
+      - remboursement
+    source_reference: microfinance_loan_management
+  - id: comptabilite-faq-002
+    question: Pourquoi un crédit passe-t-il automatiquement en Clôturé après un remboursement ?
+    answer: >
+      <p>Après la comptabilisation d'un remboursement, si le solde restant
+      du crédit atteint 0, le crédit est automatiquement clôturé
+      (action_close). Cette clôture est annulée automatiquement si le
+      remboursement à l'origine est ensuite annulé par contre-passation,
+      le crédit repassant alors en Actif.</p>
+    keywords:
+      - clôture
+      - action_close
+    source_reference: microfinance_loan_management

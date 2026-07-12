@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Cloisonnement multi-société : chaque société (agence) ne voit et ne modifie que
+         ses propres enregistrements. Contrairement aux règles déjà en place sur le scoring
+         et le provisionnement (security/groups.xml), ces règles ne ciblent aucun groupe
+         particulier (groups vide) : elles s'appliquent à tous les utilisateurs internes,
+         y compris les managers et auditeurs, pour un cloisonnement non contournable. -->
+
+    <record id="microfinance_loan_product_company_rule" model="ir.rule">
+        <field name="name">Microfinance produit de crédit : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_loan_product"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_loan_company_rule" model="ir.rule">
+        <field name="name">Microfinance crédit : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_loan"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <!-- microfinance.loan.application (dossier d'instruction) n'est pas encore câblé dans le
+         module (absent de models/__init__.py, d'ir.model.access.csv et de toute vue) : le
+         modèle n'existe pas dans le registre Odoo tant que cet import manque. Règle omise ici
+         pour ne pas bloquer le chargement du module ; à ajouter dans le même mouvement que le
+         câblage de ce modèle, hors périmètre de ce prompt (voir signalement séparé). -->
+
+    <record id="microfinance_loan_installment_company_rule" model="ir.rule">
+        <field name="name">Microfinance échéance : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_loan_installment"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_loan_payment_company_rule" model="ir.rule">
+        <field name="name">Microfinance remboursement : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_loan_payment"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_loan_guarantee_company_rule" model="ir.rule">
+        <field name="name">Microfinance garantie : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_loan_guarantee"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_guarantee_valuation_rule_company_rule" model="ir.rule">
+        <field name="name">Microfinance règle de valorisation de garantie : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_guarantee_valuation_rule"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_loan_reschedule_history_company_rule" model="ir.rule">
+        <field name="name">Microfinance historique de rééchelonnement : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_loan_reschedule_history"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <!-- Pas de company_id propre sur les lignes d'historique : cloisonnement via l'historique parent. -->
+    <record id="microfinance_loan_reschedule_history_line_company_rule" model="ir.rule">
+        <field name="name">Microfinance ligne d'historique de rééchelonnement : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_loan_reschedule_history_line"/>
+        <field name="domain_force">[('history_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_collection_visit_company_rule" model="ir.rule">
+        <field name="name">Microfinance visite de recouvrement : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_collection_visit"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+</odoo>

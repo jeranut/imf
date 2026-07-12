@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Catégorie et groupe dédiés à l'assistant dev MOWGLI (commandes /todo, /done).
+         Séparés de la catégorie métier "MOWGLI" (module_category_mowgli_assistant,
+         voir MowgliBotAssistant._ensure_groups) : isolation stricte par groupe de
+         sécurité, pas par simple convention d'usage. Aucun implied_ids vers/depuis
+         les groupes métier CEFOR. -->
+
+    <record id="module_category_mowgli_dev" model="ir.module.category">
+        <field name="name">Mowgli - Développement</field>
+        <field name="sequence">31</field>
+    </record>
+
+    <record id="group_mowgli_developer" model="res.groups">
+        <field name="name">Développeur MOWGLI</field>
+        <field name="category_id" ref="module_category_mowgli_dev"/>
+    </record>
+</odoo>

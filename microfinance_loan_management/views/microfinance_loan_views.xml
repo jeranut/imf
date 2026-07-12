@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.tree</field>
+        <field name="model">microfinance.loan</field>
+        <field name="arch" type="xml">
+            <tree decoration-danger="state == 'defaulted'" decoration-muted="state == 'written_off'" decoration-success="state == 'closed'" decoration-warning="overdue_amount &gt; 0">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="product_id"/>
+                <field name="loan_amount"/>
+                <field name="balance_total"/>
+                <field name="overdue_amount"/>
+                <field name="internal_score" widget="progressbar"/>
+                <field name="state" widget="badge"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_kanban" model="ir.ui.view">
+        <field name="name">microfinance.loan.kanban</field>
+        <field name="model">microfinance.loan</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="state">
+                <field name="name"/><field name="partner_id"/><field name="loan_amount"/><field name="balance_total"/><field name="internal_score"/><field name="state"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div class="oe_kanban_global_click o_kanban_record">
+                            <strong><field name="name"/></strong>
+                            <div><field name="partner_id"/></div>
+                            <div>Montant : <field name="loan_amount"/></div>
+                            <div>Solde : <field name="balance_total"/></div>
+                            <div>Score : <field name="internal_score"/></div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_search" model="ir.ui.view">
+        <field name="name">microfinance.loan.search</field>
+        <field name="model">microfinance.loan</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="product_id"/>
+                <filter name="active" string="Actifs" domain="[('state','=','active')]"/>
+                <filter name="overdue" string="Avec impayés" domain="[('overdue_amount','&gt;',0)]"/>
+                <filter name="defaulted" string="En défaut" domain="[('state','=','defaulted')]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_state" string="État" context="{'group_by':'state'}"/>
+                    <filter name="group_product" string="Produit" context="{'group_by':'product_id'}"/>
+                    <filter name="group_agent" string="Agent" context="{'group_by':'officer_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.form</field>
+        <field name="model">microfinance.loan</field>
+        <field name="arch" type="xml">
+            <form string="Crédit">
+                <header>
+                    <button name="action_submit" string="Soumettre" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_manager_validate" string="Valider manager" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'submitted'"/>
+                    <button name="action_finance_validate" string="Valider finance" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'manager_validated'"/>
+                    <button name="action_approve" string="Approuver" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'finance_validated'"/>
+                    <button name="action_generate_schedule" string="Générer échéancier" type="object" invisible="state not in ('draft','submitted','manager_validated','finance_validated','approved')"/>
+                    <button name="action_charge_fee" string="Encaisser les frais de dossier" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved' or fee_paid or fee_amount_due &lt;= 0"/>
+                    <button name="action_disburse" string="Activer / Décaisser" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
+                    <button name="action_open_payment_wizard" string="Enregistrer remboursement" type="object" class="btn-primary" invisible="state not in ('active','defaulted')"/>
+                    <button name="action_reschedule" string="Rééchelonner" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'active'"/>
+                    <button name="action_mark_default" string="Marquer en défaut" type="object" invisible="state != 'active'"/>
+                    <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
+                    <button name="action_write_off" string="Radier" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state not in ('active','defaulted')"/>
+                    <button name="%(action_report_microfinance_loan_disbursement_receipt)d" string="Imprimer le reçu" type="action" invisible="state in ('draft','submitted','manager_validated','finance_validated','approved','cancelled')"/>
+                    <button name="action_recompute_risk" string="Recalculer le score" type="object"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,submitted,manager_validated,finance_validated,approved,active,closed,defaulted,written_off"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_installments" type="object" class="oe_stat_button" icon="fa-calendar"><field name="installment_count" widget="statinfo" string="Échéances"/></button>
+                        <button name="action_view_payments" type="object" class="oe_stat_button" icon="fa-money"><field name="payment_count" widget="statinfo" string="Paiements"/></button>
+                        <button name="action_view_visits" type="object" class="oe_stat_button" icon="fa-map-marker"><field name="visit_count" widget="statinfo" string="Visites"/></button>
+                        <button name="action_view_moves" type="object" class="oe_stat_button" icon="fa-book"><field name="move_count" widget="statinfo" string="Écritures"/></button>
+                    </div>
+                    <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
+                    <group>
+                        <group string="Dossier">
+                            <field name="partner_id"/>
+                            <field name="product_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="currency_id"/>
+                            <field name="loan_amount"/>
+                            <field name="term"/>
+                            <field name="repayment_frequency_mode" invisible="1"/>
+                            <field name="allowed_repayment_frequency_ids" invisible="1"/>
+                            <field name="repayment_frequency_id" readonly="repayment_frequency_mode == 'fixed'"/>
+                            <field name="co_borrower_id"/>
+                        </group>
+                        <group string="Suivi">
+                            <field name="application_date"/>
+                            <field name="approval_date" readonly="1"/>
+                            <field name="disbursement_date" readonly="1"/>
+                            <field name="officer_id"/>
+                            <field name="manager_id"/>
+                            <field name="finance_user_id"/>
+                            <field name="collection_agent_id"/>
+                            <field name="reschedule_count"/>
+                        </group>
+                    </group>
+                    <group string="Résumé financier">
+                        <field name="principal_total" readonly="1"/>
+                        <field name="interest_total" readonly="1"/>
+                        <field name="penalty_total" readonly="1"/>
+                        <field name="paid_total" readonly="1"/>
+                        <field name="balance_total" readonly="1"/>
+                        <field name="overdue_amount" readonly="1"/>
+                        <field name="overdue_installment_count" readonly="1"/>
+                        <field name="internal_score" widget="progressbar" readonly="1"/>
+                        <field name="provision_amount" readonly="1"/>
+                        <field name="provision_posted_amount" readonly="1"/>
+                        <field name="guarantee_total" readonly="1"/>
+                        <field name="fee_amount_due" readonly="1"/>
+                        <field name="fee_paid" readonly="1"/>
+                        <field name="fee_move_id" readonly="1"/>
+                        <field name="net_disbursed_amount" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Échéancier"><field name="installment_ids" readonly="1"/></page>
+                        <page string="Remboursements"><field name="payment_ids" readonly="1"/></page>
+                        <page string="Garanties"><field name="guarantee_ids" context="{'default_loan_id': id}"/></page>
+                        <page string="Recouvrement"><field name="visit_ids"/></page>
+                        <page string="Historique de rééchelonnement">
+                            <field name="reschedule_history_ids" readonly="1">
+                                <tree>
+                                    <field name="reschedule_date"/>
+                                    <field name="user_id"/>
+                                    <field name="reason"/>
+                                </tree>
+                                <form>
+                                    <group>
+                                        <field name="reschedule_date"/>
+                                        <field name="user_id"/>
+                                        <field name="currency_id" invisible="1"/>
+                                        <field name="reason"/>
+                                    </group>
+                                    <field name="old_installment_ids">
+                                        <tree create="0" edit="0" delete="0">
+                                            <field name="sequence"/>
+                                            <field name="due_date"/>
+                                            <field name="currency_id" column_invisible="1"/>
+                                            <field name="principal_amount"/>
+                                            <field name="interest_amount"/>
+                                            <field name="penalty_amount"/>
+                                            <field name="paid_principal"/>
+                                            <field name="paid_interest"/>
+                                            <field name="paid_penalty"/>
+                                            <field name="residual_amount"/>
+                                        </tree>
+                                    </field>
+                                </form>
+                            </field>
+                        </page>
+                        <page string="Notes"><field name="note"/></page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_loan" model="ir.actions.act_window">
+        <field name="name">Crédits</field>
+        <field name="res_model">microfinance.loan</field>
+        <field name="view_mode">kanban,tree,form</field>
+        <field name="context">{'search_default_active': 1}</field>
+    </record>
+</odoo>

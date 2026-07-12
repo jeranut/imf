@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_form_inherit_savings" model="ir.ui.view">
+        <field name="name">microfinance.loan.form.inherit.savings</field>
+        <field name="model">microfinance.loan</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_form"/>
+        <field name="arch" type="xml">
+            <field name="co_borrower_id" position="after">
+                <field name="savings_requirement_type" invisible="1"/>
+                <field name="savings_account_id"/>
+            </field>
+            <field name="fee_move_id" position="after">
+                <field name="savings_target_amount" invisible="savings_requirement_type != 'target_during_loan'" readonly="1"/>
+                <field name="savings_target_reached" invisible="savings_requirement_type != 'target_during_loan'" readonly="1"/>
+                <field name="guarantee_savings_required" invisible="not guarantee_savings_required" readonly="1"/>
+                <field name="guarantee_savings_balance" invisible="not guarantee_savings_required" readonly="1"/>
+                <field name="guarantee_savings_verified" invisible="not guarantee_savings_required" readonly="1"/>
+            </field>
+        </field>
+    </record>
+</odoo>

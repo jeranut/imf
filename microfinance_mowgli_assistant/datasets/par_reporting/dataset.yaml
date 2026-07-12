@@ -1,0 +1,253 @@
+workflow: par_reporting
+name: Workflow PAR / Reporting
+version: "17.0"
+description: >
+  Workflow métier PAR / Reporting CEFOR : suivi du portefeuille à risque
+  (PAR) via l'état des échéances impayées (microfinance.loan.installment),
+  les visites de recouvrement terrain (microfinance.collection.visit), les
+  vues d'analyse échéances/paiements, et la balance des comptes d'épargne.
+  Documente le champ state et les champs de retard de
+  microfinance.loan.installment, ainsi que les champs agrégés
+  overdue_amount/balance_total de microfinance.loan sous l'angle
+  analyse/reporting.
+sequence: 100
+# À COMPLÉTER: les groupes "Agent recouvrement" (group_microfinance_collection_agent,
+# acteur principal des visites de recouvrement), "Finance microfinance" et
+# "Auditeur microfinance" cités en section 2 du README n'ont pas d'équivalent
+# direct parmi les 7 rôles CEFOR autorisés (agent_credit, agent_epargne,
+# caissier, comptable, credit_committee, gestionnaire, admin). Le rôle
+# credit_committee n'est pas mentionné du tout dans la section 2 de ce
+# workflow (le Comité de crédit n'a pas d'accès dédié aux visites ni aux
+# échéances) et n'est donc pas utilisé ici. Faute de rôle "agent_recouvrement"
+# dédié, les articles concernant les visites de recouvrement restent visibles
+# au rôle gestionnaire (Manager crédit, accès complet) et à agent_credit
+# (lecture seule) en attendant clarification du rôle exact à créer côté
+# CEFOR.
+roles:
+  - gestionnaire
+  - agent_credit
+  - agent_epargne
+categories:
+  - name: Suivi des échéances en retard
+    sequence: 10
+  - name: Visites de recouvrement
+    sequence: 20
+  - name: Analyse échéances et paiements
+    sequence: 30
+  - name: Balance épargne
+    sequence: 40
+
+articles:
+  - id: par_reporting-001
+    title: Suivre les échéances en retard et le portefeuille à risque (PAR)
+    category: Suivi des échéances en retard
+    difficulty: beginner
+    roles:
+      - gestionnaire
+      - agent_credit
+    suggested: true
+    priority: 100
+    questions:
+      - Comment voir la liste des échéances en retard dans MOWGLI ?
+      - Quel est le montant total impayé sur un crédit donné ?
+      - Qu'est-ce que le PAR (portefeuille à risque) et comment est-il calculé dans MOWGLI ?
+      - Pourquoi une échéance passe-t-elle automatiquement en « En retard » ?
+    menu: Microfinance > Analyse > Analyse échéances
+    model: microfinance.loan.installment
+    prerequisites: []
+    steps:
+      - Le champ state de chaque échéance (pending/partial/paid/overdue) est recalculé automatiquement dès que son montant résiduel ou sa date d'échéance change.
+      - Une tâche planifiée quotidienne (cron_update_overdue_and_penalties) applique les pénalités de retard sur toutes les échéances pending/partial/overdue, puis recalcule le scoring de tous les crédits actifs.
+      - Depuis Microfinance > Analyse > Analyse échéances, utiliser le filtre « En retard » (state = overdue) pour visualiser les impayés, ou regrouper par État/Crédit.
+      - Sur la fiche crédit, les champs calculés overdue_amount (montant en retard) et overdue_installment_count (nombre d'échéances en retard) résument la situation ; balance_total donne le solde global restant dû.
+      - Si la situation se dégrade, cliquer « Marquer en défaut » (action_mark_default) sur la fiche crédit pour passer le crédit en En défaut.
+    tips: >
+      L'état d'une échéance est calculé ainsi : Payé si le résiduel est
+      quasi nul, sinon Partiel si le résiduel est inférieur au montant
+      total, sinon En retard si la date d'échéance est dépassée, sinon À
+      payer. S'assurer que la tâche planifiée
+      cron_update_overdue_and_penalties est active afin que les pénalités
+      de retard et l'état des échéances restent à jour quotidiennement,
+      condition nécessaire à la fiabilité des indicateurs PAR du tableau
+      de bord. Consulter Microfinance > Analyse > Analyse échéances
+      régulièrement plutôt que de se fier uniquement au tableau de bord,
+      pour identifier précisément les échéances individuelles en cause
+      derrière un indicateur agrégé.
+    errors: >
+      Ce workflow ne présente pas de message de blocage qui lui soit
+      propre. Le bouton « Marquer en défaut » n'est visible que si le
+      crédit est à l'état Actif.
+    answer: >
+      <p>Depuis Microfinance > Analyse > Analyse échéances, appliquez le
+      filtre <strong>« En retard »</strong> pour visualiser les échéances
+      impayées, ou regroupez par État/Crédit.</p>
+      <p>Sur la fiche du crédit concerné, les champs
+      <strong>overdue_amount</strong> (montant en retard) et
+      <strong>overdue_installment_count</strong> (nombre d'échéances en
+      retard) résument la situation, et <strong>balance_total</strong>
+      donne le solde global restant dû.</p>
+      <p>L'état des échéances (À payer / Partiel / Payé / En retard) est
+      recalculé automatiquement à chaque changement de montant résiduel ou
+      de date d'échéance, et une tâche planifiée quotidienne applique les
+      pénalités de retard. Si la situation se dégrade, le bouton
+      « Marquer en défaut » permet de passer le crédit en État de
+      défaut.</p>
+    keywords:
+      - PAR
+      - échéance
+      - overdue_amount
+      - en retard
+      - portefeuille à risque
+    source_reference: microfinance_loan_management
+    see_also:
+      - par_reporting-002
+
+  - id: par_reporting-002
+    title: Créer et suivre une visite de recouvrement
+    category: Visites de recouvrement
+    difficulty: beginner
+    roles:
+      - gestionnaire
+      - agent_credit
+    suggested: true
+    priority: 90
+    questions:
+      - Comment enregistrer une visite de recouvrement chez un client ?
+      - Comment consigner une promesse de paiement lors d'une visite terrain ?
+      - Qui peut créer ou modifier une visite de recouvrement ?
+    menu: Microfinance > Recouvrement > Visites terrain (ou bouton statistique « Visites » sur la fiche crédit)
+    model: microfinance.collection.visit
+    prerequisites: []
+    steps:
+      - Depuis la fiche crédit (bouton statistique « Visites », action_view_visits) ou depuis Microfinance > Recouvrement > Visites terrain, créer une nouvelle visite.
+      - Renseigner le crédit, l'agent terrain (utilisateur courant par défaut), la date de visite, le statut (Planifiée par défaut).
+      - Après la visite, mettre à jour manuellement le statut (Réalisée/Manquée/Annulée), consigner les remarques, et le cas échéant la promesse de paiement (date + montant).
+      - Planifier la prochaine visite (next_visit_date), consultable aussi en vue calendrier (couleur par agent).
+    tips: >
+      Programmer systématiquement une date de prochaine visite
+      (next_visit_date) à l'issue de chaque visite de recouvrement, pour
+      permettre le suivi via la vue calendrier. La mise à jour du statut
+      (Planifiée / Réalisée / Manquée / Annulée) se fait manuellement sur
+      le formulaire de la visite, aucun bouton dédié n'est proposé pour ce
+      changement.
+    errors: >
+      Ce workflow ne présente pas de message de blocage qui lui soit
+      propre pour les visites de recouvrement.
+    answer: >
+      <p>Depuis la fiche crédit, cliquez sur le bouton statistique
+      « Visites », ou allez dans Microfinance > Recouvrement > Visites
+      terrain pour créer une nouvelle visite. Renseignez le crédit,
+      l'agent terrain (utilisateur courant par défaut) et la date de
+      visite ; le statut est <strong>Planifiée</strong> par défaut.</p>
+      <p>Après la visite, mettez à jour manuellement le statut
+      (Réalisée / Manquée / Annulée), consignez vos remarques et, le cas
+      échéant, une promesse de paiement (date et montant). Pensez à
+      planifier la prochaine visite pour un suivi en vue calendrier.</p>
+    keywords:
+      - visite de recouvrement
+      - promesse de paiement
+      - collection.visit
+    source_reference: microfinance_loan_management
+    see_also:
+      - par_reporting-001
+
+  - id: par_reporting-003
+    title: Analyser les échéances/paiements et marquer un crédit en défaut
+    category: Analyse échéances et paiements
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+      - agent_credit
+    suggested: false
+    priority: 70
+    questions:
+      - Comment marquer un crédit en défaut ?
+      - Comment une pénalité de retard est-elle appliquée à une échéance impayée ?
+    menu: Microfinance > Analyse > Analyse échéances / Microfinance > Analyse > Analyse paiements
+    model: microfinance.loan.installment
+    prerequisites:
+      - action_mark_default nécessite que le crédit soit à l'état Actif.
+    steps:
+      - Consulter Microfinance > Analyse > Analyse échéances (échéances) ou Microfinance > Analyse > Analyse paiements (paiements) pour examiner en détail la situation d'un crédit.
+      - Sur une échéance non déjà penalty_applied, à l'état pending/partial/overdue, dont la date d'échéance + délai de grâce du produit est dépassée, la pénalité de retard peut être appliquée via « Appliquer pénalité » (action_apply_penalty) sur la fiche échéance : montant fixe du produit, ou taux appliqué au résiduel selon le type de pénalité du produit ; l'action marque penalty_applied=True pour empêcher toute réapplication.
+      - Depuis la fiche d'un crédit Actif dont overdue_installment_count est élevé, cliquer « Marquer en défaut » (action_mark_default) : le crédit passe en En défaut, ce qui l'inclut dans le calcul de provision et le rend éligible à la radiation (workflow comptabilite).
+    tips: >
+      « Marquer en défaut » n'est soumis à aucune restriction de groupe :
+      il est accessible à tout utilisateur ayant accès en écriture à la
+      fiche crédit. Ne marquer un crédit En défaut qu'après une évaluation
+      réelle du dossier (visites de recouvrement effectuées, promesses de
+      paiement non tenues). Le nombre maximal de jours de retard parmi les
+      échéances en retard d'un crédit sert à la fois au calcul du PAR et
+      au calcul de la provision comptable (workflow comptabilite).
+    errors: >
+      Ce workflow ne présente pas de message de blocage qui lui soit
+      propre. Le bouton « Marquer en défaut » n'est visible que si le
+      crédit est à l'état Actif.
+    answer: >
+      <p>Utilisez Microfinance > Analyse > Analyse échéances ou
+      Microfinance > Analyse > Analyse paiements pour examiner en détail
+      la situation d'un crédit.</p>
+      <p>Une pénalité de retard peut être appliquée sur une échéance via
+      le bouton « Appliquer pénalité » dès que la date d'échéance
+      augmentée du délai de grâce du produit est dépassée ; le montant
+      est fixe ou calculé en taux sur le résiduel selon le type de
+      pénalité du produit, et l'échéance ne peut recevoir qu'une seule
+      application de pénalité.</p>
+      <p>Si un crédit Actif présente un nombre élevé d'échéances en
+      retard, le bouton « Marquer en défaut » sur sa fiche permet de le
+      faire passer en <strong>En défaut</strong>, ce qui l'inclut dans le
+      calcul de provision et le rend éligible à la radiation.</p>
+    keywords:
+      - marquer en défaut
+      - action_mark_default
+      - pénalité
+      - action_apply_penalty
+    source_reference: microfinance_loan_management
+    see_also:
+      - par_reporting-001
+
+  - id: par_reporting-004
+    title: Consulter la balance des comptes d'épargne
+    category: Balance épargne
+    difficulty: beginner
+    roles:
+      - agent_epargne
+      - gestionnaire
+    suggested: true
+    priority: 60
+    questions:
+      - Comment consulter la balance des comptes d'épargne par produit ?
+    menu: Microfinance > Analyse > Balance épargne
+    model: microfinance.savings.account
+    prerequisites: []
+    steps:
+      - Ouvrir Microfinance > Analyse > Balance épargne : liste des comptes d'épargne filtrée par défaut sur les comptes actifs et regroupée par produit.
+      - Le solde (balance) est totalisé par la vue liste.
+    tips: ""
+    errors: >
+      Ce workflow ne présente pas de message de blocage qui lui soit
+      propre pour la balance épargne.
+    answer: >
+      <p>Depuis Microfinance > Analyse > Balance épargne, consultez la
+      liste des comptes d'épargne, filtrée par défaut sur les comptes
+      actifs et regroupée par produit. Le solde de chaque compte est
+      totalisé par la vue liste.</p>
+    keywords:
+      - balance épargne
+      - savings.account
+      - solde
+    source_reference: microfinance_savings_management
+
+faq:
+  - id: par_reporting-faq-001
+    question: Le PAR (portefeuille à risque) génère-t-il des messages de blocage particuliers ?
+    answer: >
+      <p>Non. Ce workflow ne présente pas de message de blocage qui lui
+      soit propre. Les seuls messages d'erreur qu'un utilisateur peut
+      rencontrer en lien avec les échéances (surpaiement, crédit non actif
+      pour un remboursement) proviennent de l'enregistrement d'un
+      remboursement et sont documentés dans le workflow comptabilite.</p>
+    keywords:
+      - PAR
+      - erreurs
+    source_reference: microfinance_loan_management

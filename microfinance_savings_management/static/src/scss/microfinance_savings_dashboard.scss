@@ -1,0 +1,17 @@
+// Mêmes couleurs que les tuiles crédit "credits" (violet) et "decaisse" (vert) du module
+// loan_management — coïncidence du tableau de couleurs fourni, pas de dépendance SCSS
+// inter-module : valeurs dupliquées ici volontairement pour garder chaque module autonome.
+.o_microfinance_kpi {
+    &--savings-count {
+        background: #EEF6E9;
+        border-color: darken(#EEF6E9, 10%);
+        .o_microfinance_kpi__icon { background: #C0DD97; color: #27500A; }
+        .o_microfinance_kpi__link { color: #3B6D11; border-top-color: #C0DD97; }
+    }
+    &--savings-outstanding {
+        background: #F4F3FC;
+        border-color: darken(#F4F3FC, 10%);
+        .o_microfinance_kpi__icon { background: #CECBF6; color: #3C3489; }
+        .o_microfinance_kpi__link { color: #534AB7; border-top-color: #CECBF6; }
+    }
+}

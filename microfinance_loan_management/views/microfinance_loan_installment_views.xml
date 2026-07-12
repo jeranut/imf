@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_installment_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.installment.tree</field>
+        <field name="model">microfinance.loan.installment</field>
+        <field name="arch" type="xml">
+            <tree decoration-danger="state == 'overdue'" decoration-success="state == 'paid'" decoration-warning="state == 'partial'">
+                <field name="loan_id"/>
+                <field name="partner_id"/>
+                <field name="sequence"/>
+                <field name="due_date"/>
+                <field name="principal_amount"/>
+                <field name="interest_amount"/>
+                <field name="penalty_amount"/>
+                <field name="total_amount"/>
+                <field name="residual_amount"/>
+                <field name="state" widget="badge"/>
+                <field name="penalty_applied"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_installment_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.installment.form</field>
+        <field name="model">microfinance.loan.installment</field>
+        <field name="arch" type="xml">
+            <form>
+                <header><button name="action_apply_penalty" string="Appliquer pénalité" type="object" invisible="penalty_applied"/></header>
+                <sheet>
+                    <field name="penalty_applied" invisible="1"/>
+                    <group>
+                        <field name="loan_id"/>
+                        <field name="partner_id"/>
+                        <field name="sequence"/>
+                        <field name="due_date"/>
+                        <field name="state"/>
+                    </group>
+                    <group>
+                        <field name="principal_amount"/>
+                        <field name="interest_amount"/>
+                        <field name="penalty_amount"/>
+                        <field name="total_amount"/>
+                        <field name="paid_principal"/>
+                        <field name="paid_interest"/>
+                        <field name="paid_penalty"/>
+                        <field name="residual_amount"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="view_microfinance_installment_search" model="ir.ui.view">
+        <field name="name">microfinance.loan.installment.search</field>
+        <field name="model">microfinance.loan.installment</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="loan_id"/><field name="partner_id"/>
+                <filter name="overdue" string="En retard" domain="[('state','=','overdue')]"/>
+                <filter name="paid" string="Payées" domain="[('state','=','paid')]"/>
+                <filter name="partial" string="Partielles" domain="[('state','=','partial')]"/>
+                <filter name="today" string="Aujourd'hui" domain="[('due_date','=',context_today().strftime('%Y-%m-%d'))]"/>
+                <group expand="0" string="Regrouper par"><filter name="group_state" string="État" context="{'group_by':'state'}"/><filter name="group_loan" string="Crédit" context="{'group_by':'loan_id'}"/></group>
+            </search>
+        </field>
+    </record>
+    <record id="action_microfinance_installment" model="ir.actions.act_window">
+        <field name="name">Échéances</field>
+        <field name="res_model">microfinance.loan.installment</field>
+        <field name="view_mode">tree,form,graph,pivot</field>
+    </record>
+</odoo>

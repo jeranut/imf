@@ -1,0 +1,246 @@
+workflow: reechelonnement
+name: Workflow Rééchelonnement
+version: "17.0"
+description: >
+  Rééchelonnement de l'échéancier restant d'un crédit actif (microfinance.loan,
+  état active) : modification de la durée restante et/ou de la date de première
+  échéance restante, avec conservation d'un historique structuré de l'ancien
+  échéancier avant réécriture. Ne couvre pas la génération de l'échéancier
+  initial, le recouvrement des impayés ni la radiation.
+sequence: 70
+roles:
+  - gestionnaire
+  - agent_credit
+categories:
+  - name: Rééchelonnement
+    sequence: 10
+articles:
+  - id: reechelonnement-001
+    title: Rééchelonner un crédit actif
+    category: Rééchelonnement
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 100
+    questions:
+      - Comment rééchelonner un crédit en retard de paiement ?
+      - Où se trouve le bouton pour rééchelonner un crédit dans Odoo ?
+      - Comment modifier l'échéancier d'un crédit actif ?
+      - Rééchelonner un crédit
+    menu: >
+      Aucun menu dédié : le bouton Rééchelonner apparaît uniquement dans l'en-tête
+      de la fiche crédit (microfinance.loan), accessible via
+      Microfinance > Crédits > Demande de crédit, lorsque le crédit est à l'état actif.
+    model: microfinance.loan
+    prerequisites:
+      - Le crédit (microfinance.loan) doit être à l'état actif (state = 'active').
+      - Il doit rester au moins une échéance non payée (installment_ids avec state != 'paid').
+      - Seul un utilisateur du groupe Manager crédit (ou Gestionnaire, qui hérite de ses droits) voit le bouton.
+    steps:
+      - Ouvrir la fiche du crédit actif concerné depuis Microfinance > Crédits > Demande de crédit.
+      - Cliquer sur le bouton Rééchelonner dans l'en-tête de la fiche crédit.
+      - Le wizard microfinance.loan.reschedule.wizard s'ouvre avec le crédit préchargé.
+      - Renseigner au moins l'un des deux champs new_term (nouvelle durée restante) et/ou new_first_due_date (nouvelle date de première échéance restante), et éventuellement un motif (reason).
+      - Cliquer sur le bouton Rééchelonner (action_apply) du wizard pour valider.
+      - Le système archive l'ancien échéancier non payé dans l'historique, calcule le nouveau capital restant, régénère les échéances restantes, incrémente reschedule_count et poste un message dans le chatter.
+    tips: >
+      Toujours renseigner un motif (reason) : c'est le seul champ texte libre conservé
+      dans l'historique et dans le message du chatter pour justifier a posteriori la
+      modification. Vérifier le nombre d'échéances en retard (overdue_installment_count)
+      et le solde total du crédit (balance_total) avant de choisir une nouvelle durée
+      cohérente avec la capacité de remboursement réelle du client.
+    errors: >
+      « Le rééchelonnement n'est possible que pour un crédit actif. » si le crédit n'est
+      pas à l'état actif. « Aucune échéance restante à rééchelonner. » si toutes les
+      échéances sont déjà payées. Le bouton Rééchelonner reste invisible si l'utilisateur
+      n'a pas les droits requis ou si le crédit n'est pas actif.
+    answer: >
+      <p>Pour rééchelonner un crédit actif, ouvrez la fiche du crédit depuis
+      <strong>Microfinance &gt; Crédits &gt; Demande de crédit</strong>, puis cliquez sur le
+      bouton <strong>Rééchelonner</strong> dans l'en-tête (visible uniquement si le crédit est
+      à l'état actif et pour un manager crédit ou un gestionnaire). Le wizard qui s'ouvre
+      permet de renseigner une nouvelle durée restante et/ou une nouvelle date de première
+      échéance, ainsi qu'un motif. En validant, l'ancien échéancier non payé est archivé dans
+      l'historique, le nouveau capital restant est calculé et les échéances restantes sont
+      régénérées.</p>
+    keywords:
+      - rééchelonnement
+      - échéancier
+      - crédit actif
+      - wizard
+      - bouton rééchelonner
+    source_reference: microfinance_loan_management
+    see_also:
+      - reechelonnement-002
+      - reechelonnement-004
+      - reechelonnement-005
+
+  - id: reechelonnement-002
+    title: Champs du wizard et règles de calcul du nouvel échéancier
+    category: Rééchelonnement
+    difficulty: intermediate
+    roles:
+      - gestionnaire
+    suggested: false
+    priority: 50
+    questions:
+      - Quels champs renseigner dans le wizard de rééchelonnement ?
+      - Comment est calculé le nouvel échéancier après un rééchelonnement ?
+      - Les intérêts déjà courus sont-ils perdus lors d'un rééchelonnement ?
+      - Faut-il indiquer un motif pour rééchelonner un crédit ?
+    menu: Ouvert depuis le bouton Rééchelonner de la fiche crédit (pas de menu dédié).
+    model: microfinance.loan.reschedule.wizard
+    steps:
+      - loan_id (Crédit) : crédit concerné, readonly, préchargé par le contexte.
+      - new_term (Nouvelle durée restante (échéances)) : nombre d'échéances à générer pour le solde restant.
+      - new_first_due_date (Nouvelle date de 1ère échéance restante) : date de départ du nouvel échéancier.
+      - reason (Motif du rééchelonnement) : texte libre, tracé dans l'historique.
+    tips: >
+      Ne modifier que l'un des deux champs (new_term ou new_first_due_date) si l'objectif
+      est ciblé (allonger la durée OU décaler le départ), afin de limiter l'impact sur le
+      calcul des intérêts recalculés. Un motif (reason) n'est pas techniquement obligatoire
+      mais reste la seule trace écrite consultable dans l'historique et le chatter.
+    errors: >
+      « Renseignez une nouvelle durée et/ou une nouvelle date de première échéance. » si
+      aucun des deux champs n'est rempli. « La nouvelle durée doit être un nombre
+      d'échéances positif. » si new_term est saisi à 0 ou négatif.
+    answer: >
+      <p>Le wizard de rééchelonnement (<em>microfinance.loan.reschedule.wizard</em>) demande
+      une nouvelle durée restante (<code>new_term</code>) et/ou une nouvelle date de première
+      échéance restante (<code>new_first_due_date</code>), plus un motif optionnel. Le solde
+      restant (<code>remaining_principal</code>) est la somme des montants restant dus sur les
+      échéances non payées ; il est réparti linéairement sur la nouvelle durée à partir de la
+      nouvelle date, selon la même périodicité que le crédit. Sur les échéances en retard ou
+      partiellement payées, les intérêts et pénalités déjà courus sont reportés sur une ligne
+      dédiée à la date d'échéance d'origine plutôt que perdus ; les échéances futures
+      simplement en attente sont recalculées à neuf selon la méthode d'intérêt du produit
+      (flat ou dégressif).</p>
+    keywords:
+      - wizard
+      - new_term
+      - new_first_due_date
+      - remaining_principal
+      - intérêts courus
+    source_reference: microfinance_loan_management
+    see_also:
+      - reechelonnement-001
+
+  - id: reechelonnement-003
+    title: Consulter l'historique des rééchelonnements d'un crédit
+    category: Rééchelonnement
+    difficulty: beginner
+    roles:
+      - agent_credit
+      - gestionnaire
+    suggested: true
+    priority: 40
+    questions:
+      - Que devient l'ancien échéancier après un rééchelonnement ?
+      - Comment consulter l'historique des rééchelonnements d'un client ?
+      - Combien de fois un même crédit peut-il être rééchelonné ?
+    menu: Fiche crédit (microfinance.loan), onglet Historique de rééchelonnement.
+    model: microfinance.loan.reschedule.history
+    steps:
+      - Ouvrir la fiche du crédit concerné.
+      - Consulter l'onglet Historique de rééchelonnement (reschedule_history_ids) : chaque rééchelonnement y crée une entrée.
+      - Chaque entrée contient la date (reschedule_date), l'utilisateur (user_id), le motif (reason) et l'ancien échéancier figé (old_installment_ids, avec sequence, due_date, principal_amount, interest_amount, penalty_amount, paid_principal, paid_interest, paid_penalty, residual_amount).
+      - Le compteur reschedule_count sur la fiche crédit indique le nombre total de rééchelonnements déjà appliqués à ce crédit.
+    tips: >
+      L'historique est la seule trace de l'échéancier précédent : à consulter avant toute
+      nouvelle opération sur un crédit déjà rééchelonné plusieurs fois. Aucun groupe,
+      y compris le manager crédit, ne dispose du droit de suppression sur l'historique ou
+      ses lignes : il n'est jamais supprimable depuis l'UI standard.
+    answer: >
+      <p>Chaque rééchelonnement crée une entrée dans l'onglet <strong>Historique de
+      rééchelonnement</strong> de la fiche crédit, avec un snapshot complet (readonly) des
+      échéances non payées telles qu'elles étaient avant la modification. Le compteur
+      <code>reschedule_count</code> indique combien de fois le crédit a déjà été
+      rééchelonné. L'agent crédit peut consulter cet historique en lecture seule ; le
+      manager crédit ou le gestionnaire peut le consulter et y ajouter des entrées (via le
+      rééchelonnement), mais personne ne peut le supprimer.</p>
+    keywords:
+      - historique
+      - reschedule_count
+      - reschedule_history_ids
+      - échéancier archivé
+    source_reference: microfinance_loan_management
+    see_also:
+      - reechelonnement-001
+
+  - id: reechelonnement-004
+    title: Droits d'accès au rééchelonnement
+    category: Rééchelonnement
+    difficulty: beginner
+    roles:
+      - gestionnaire
+      - agent_credit
+    suggested: false
+    priority: 30
+    questions:
+      - Qui a le droit de rééchelonner un crédit chez MOWGLI ?
+      - Pourquoi je ne vois pas le bouton Rééchelonner sur la fiche crédit ?
+    menu: Fiche crédit (microfinance.loan), bouton Rééchelonner (en-tête).
+    model: microfinance.loan
+    errors: >
+      Le bouton Rééchelonner n'apparaît pas pour un agent crédit (groupe Agent crédit) :
+      seul un utilisateur du groupe Manager crédit (ou Gestionnaire, qui hérite de ses
+      droits via implied_ids) peut le voir et l'utiliser. L'agent crédit peut uniquement
+      consulter l'historique de rééchelonnement en lecture seule si des rééchelonnements
+      antérieurs existent.
+    answer: >
+      <p>Seul un utilisateur du groupe Manager crédit peut déclencher un rééchelonnement ;
+      le Gestionnaire hérite de ces droits et peut donc également le faire. L'agent crédit
+      n'a qu'un accès en lecture seule à l'historique de rééchelonnement, sans accès au
+      bouton ni au wizard. La Finance microfinance et l'Auditeur microfinance ont
+      également un accès en lecture seule à l'historique, sans accès au bouton ni au
+      wizard. Si le bouton Rééchelonner n'apparaît pas sur une fiche crédit, vérifiez que
+      le crédit est bien à l'état actif et que votre profil dispose des droits requis.</p>
+    keywords:
+      - droits
+      - accès
+      - manager crédit
+      - gestionnaire
+      - bouton invisible
+    source_reference: microfinance_loan_management
+    see_also:
+      - reechelonnement-001
+      - reechelonnement-003
+
+  - id: reechelonnement-005
+    title: Erreurs fréquentes lors d'un rééchelonnement
+    category: Rééchelonnement
+    difficulty: beginner
+    roles:
+      - gestionnaire
+    suggested: true
+    priority: 60
+    questions:
+      - Le rééchelonnement d'un crédit clôturé est-il possible ?
+      - Pourquoi mon rééchelonnement échoue-t-il avec un message d'erreur ?
+    menu: Fiche crédit (microfinance.loan), bouton Rééchelonner, puis wizard.
+    model: microfinance.loan
+    errors: >
+      « Renseignez une nouvelle durée et/ou une nouvelle date de première échéance. » —
+      aucun des deux champs du wizard n'a été rempli. « La nouvelle durée doit être un
+      nombre d'échéances positif. » — new_term saisi à 0 ou négatif. « Le rééchelonnement
+      n'est possible que pour un crédit actif. » — tentative sur un crédit draft, approved,
+      closed, defaulted, written_off ou cancelled. « Aucune échéance restante à
+      rééchelonner. » — toutes les échéances du crédit sont déjà à l'état paid (crédit
+      soldé). Bouton Rééchelonner invisible — l'utilisateur n'a pas les droits requis, ou
+      le crédit n'est pas à l'état actif.
+    answer: >
+      <p>Un rééchelonnement échoue le plus souvent parce que le crédit n'est pas à l'état
+      actif (impossible sur un crédit clôturé, radié ou en défaut), parce qu'aucune
+      échéance restante n'est éligible (crédit déjà soldé), ou parce qu'aucun des deux
+      champs du wizard (nouvelle durée, nouvelle date) n'a été renseigné. Si le bouton
+      Rééchelonner est absent, vérifiez l'état du crédit et vos droits d'accès.</p>
+    keywords:
+      - erreur
+      - blocage
+      - crédit clôturé
+      - message d'erreur
+    source_reference: microfinance_loan_management
+    see_also:
+      - reechelonnement-001
+      - reechelonnement-004

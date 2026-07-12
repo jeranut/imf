@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+    <t t-name="microfinance_loan_management.DashboardSectionHeader">
+        <div class="o_microfinance_section_header">
+            <span class="o_microfinance_section_header__label" t-esc="label"/>
+            <span class="o_microfinance_section_header__line"/>
+        </div>
+    </t>
+
+    <t t-name="microfinance_loan_management.MicrofinanceLoanDashboard">
+        <div class="o_microfinance_dashboard">
+            <div class="o_microfinance_dashboard__header">
+                <div>
+                    <p class="o_microfinance_dashboard__eyebrow">Microfinance</p>
+                    <h1>Tableau de bord</h1>
+                    <p t-if="companyInfo.address_subtitle" class="o_microfinance_dashboard__address" t-esc="companyInfo.address_subtitle"/>
+                </div>
+                <div class="o_microfinance_dashboard__company" t-att-title="companyInfo.name">
+                    <img t-if="companyInfo.has_logo" class="o_microfinance_dashboard__company_logo" t-att-src="'/web/image/res.company/' + companyInfo.id + '/logo'" t-att-alt="companyInfo.name"/>
+                    <span t-else="" class="o_microfinance_dashboard__company_logo o_microfinance_dashboard__company_logo--fallback">
+                        <i class="fa fa-bank" role="img" aria-label="Logo societe"/>
+                    </span>
+                    <span class="o_microfinance_dashboard__company_name" t-esc="companyInfo.name"/>
+                </div>
+            </div>
+
+            <t t-if="state.loading">
+                <div class="o_microfinance_dashboard__loading">Chargement du tableau de bord...</div>
+            </t>
+            <t t-elif="state.error">
+                <div class="o_microfinance_dashboard__empty">Impossible de charger les donnees du dashboard.</div>
+            </t>
+            <t t-else="">
+                <t t-call="microfinance_loan_management.DashboardSectionHeader">
+                    <t t-set="label">Vue d'ensemble</t>
+                </t>
+                <div class="o_microfinance_kpi_grid">
+                    <article class="o_microfinance_kpi o_microfinance_kpi--credits">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-users" role="img" aria-label="Credits actifs"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatNumber(kpis.active_loan_count)"/>
+                                <span>Credits actifs</span>
+                            </div>
+                        </div>
+                        <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.loan', [['state', '=', 'active']], 'Credits actifs')">Voir les credits actifs</a>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--decaisse">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-money" role="img" aria-label="Montant decaisse"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(kpis.disbursed_amount)"/>
+                                <span>Montant decaisse</span>
+                            </div>
+                        </div>
+                        <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.loan', [['state', 'in', ['active', 'closed', 'defaulted']]], 'Credits decaisses')">Voir les credits decaisses</a>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--encours">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-usd" role="img" aria-label="Encours total"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(kpis.outstanding_amount)"/>
+                                <span>Encours total</span>
+                            </div>
+                        </div>
+                        <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.loan', [['state', 'in', ['active', 'defaulted']]], 'Portefeuille en cours')">Voir le portefeuille</a>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--impayes">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-credit-card" role="img" aria-label="Impayes"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(kpis.overdue_amount)"/>
+                                <span>Impayes</span>
+                            </div>
+                        </div>
+                        <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.loan.installment', [['state', '=', 'overdue']], 'Echeances impayees')">Voir les impayes</a>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--defaut">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-exclamation-triangle" role="img" aria-label="Taux defaut"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatPercent(kpis.default_rate)"/>
+                                <span>Taux defaut</span>
+                            </div>
+                        </div>
+                        <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.loan', [['state', '=', 'defaulted']], 'Credits en defaut')">Voir les credits en defaut</a>
+                    </article>
+                </div>
+
+                <t t-call="microfinance_loan_management.DashboardSectionHeader">
+                    <t t-set="label">Analyses</t>
+                </t>
+                <div class="o_microfinance_dashboard__grid">
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Credits par etat</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="stateChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel o_microfinance_panel--wide">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Decaissements par mois</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="disbursementChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel o_microfinance_panel--wide">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Remboursements vs impayes</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="repaymentChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Evolution des impayes</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="overdueTrendChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel o_microfinance_panel--wide">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Portefeuille a risque (PAR) par anciennete</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="parChart"/>
+                    </section>
+                </div>
+
+                <section class="o_microfinance_panel o_microfinance_panel--table">
+                    <div class="o_microfinance_panel__title">
+                        <h2>Credits les plus en retard</h2>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle o_microfinance_table">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Credit</th>
+                                    <th class="text-end">Montant du</th>
+                                    <th class="text-end">Jours de retard</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="topOverdueLoans" t-as="line" t-key="line.loan">
+                                    <td t-esc="line.partner"/>
+                                    <td t-esc="line.loan"/>
+                                    <td class="text-end" t-esc="formatMoney(line.amount_due)"/>
+                                    <td class="text-end" t-esc="formatNumber(line.days_overdue)"/>
+                                </tr>
+                                <tr t-if="!topOverdueLoans.length">
+                                    <td colspan="4" class="text-center text-muted py-4">Aucun credit en retard.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <t t-call="microfinance_loan_management.DashboardSectionHeader">
+                    <t t-set="label">Activite recente</t>
+                </t>
+                <div class="o_microfinance_activity_grid">
+                    <section class="o_microfinance_activity_panel o_microfinance_activity_panel--loans">
+                        <div class="o_microfinance_activity_panel__header">
+                            <h2>Derniers prets</h2>
+                            <button type="button" class="btn btn-primary btn-sm" t-on-click="openNewLoan">Nouveau pret</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle o_microfinance_table">
+                                <thead>
+                                    <tr>
+                                        <th>Reference</th>
+                                        <th>Client</th>
+                                        <th class="text-end">Montant</th>
+                                        <th class="text-end">Duree</th>
+                                        <th>Date</th>
+                                        <th>Statut</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="recentLoans" t-as="loan" t-key="loan.id">
+                                        <td t-esc="loan.name"/>
+                                        <td t-esc="loan.partner"/>
+                                        <td class="text-end" t-esc="formatMoney(loan.loan_amount)"/>
+                                        <td class="text-end" t-esc="loan.term"/>
+                                        <td t-esc="formatDate(loan.date)"/>
+                                        <td><span t-attf-class="badge rounded-pill text-bg-{{loan.badge_class}}" t-esc="loan.badge_label"/></td>
+                                    </tr>
+                                    <tr t-if="!recentLoans.length">
+                                        <td colspan="6" class="text-center text-muted py-4">Aucun pret enregistre.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <a href="#" class="o_microfinance_activity_panel__link" t-on-click.prevent="openAllLoans">Voir tous les prets</a>
+                    </section>
+
+                    <section class="o_microfinance_activity_panel o_microfinance_activity_panel--installments">
+                        <div class="o_microfinance_activity_panel__header">
+                            <h2>Echeances du jour</h2>
+                            <span class="badge rounded-pill text-bg-secondary" t-esc="todayInstallmentsCount"/>
+                        </div>
+                        <ul class="o_microfinance_activity_list">
+                            <li t-foreach="todayInstallments" t-as="line" t-key="line.loan_id + '_' + line.sequence" class="o_microfinance_activity_list__item">
+                                <div class="o_microfinance_activity_list__info">
+                                    <strong t-esc="line.partner"/>
+                                    <span t-esc="line.loan_name + ' - Echeance ' + line.sequence"/>
+                                </div>
+                                <div class="o_microfinance_activity_list__amount" t-esc="formatMoney(line.residual_amount)"/>
+                                <button type="button" class="btn btn-outline-primary btn-sm" t-on-click="() => this.openPaymentWizard(line.loan_id)">Encaisser</button>
+                            </li>
+                            <li t-if="!todayInstallments.length" class="o_microfinance_activity_list__empty">Aucune echeance aujourd'hui.</li>
+                        </ul>
+                        <a href="#" class="o_microfinance_activity_panel__link" t-on-click.prevent="openAllInstallments">Voir toutes les echeances</a>
+                    </section>
+                </div>
+            </t>
+        </div>
+    </t>
+</templates>

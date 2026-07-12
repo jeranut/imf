@@ -1,0 +1,234 @@
+workflow: dashboard
+name: Dashboard
+version: "17.0"
+description: >
+  Tableau de bord agrégé du portefeuille de crédit (indicateurs clés, répartition des
+  crédits par état, tendances mensuelles sur 12 mois glissants, répartition du risque,
+  portefeuille à risque par ancienneté et crédits les plus en retard). Écran exclusivement
+  en lecture : aucune saisie, création, modification ou suppression n'y est possible.
+sequence: 30
+roles:
+  - agent_credit
+  - caissier
+  - credit_committee
+  - gestionnaire
+categories:
+  - name: Indicateurs clés
+    sequence: 10
+  - name: Analyse du risque et retards
+    sequence: 20
+  - name: Accès et sécurité
+    sequence: 30
+
+articles:
+  - id: dashboard-001
+    title: Lire les indicateurs clés (KPI) du tableau de bord
+    category: Indicateurs clés
+    roles:
+      - agent_credit
+      - caissier
+      - credit_committee
+      - gestionnaire
+    questions:
+      - Combien de crédits sont actuellement actifs dans mon agence ?
+      - Quel est le montant total des impayés sur les crédits actifs ?
+      - Quel est le montant total décaissé ?
+      - Quel est l'encours total du portefeuille ?
+      - Comment consulter les indicateurs clés du portefeuille de crédit ?
+    menu: Microfinance > Tableau de bord
+    model: microfinance.dashboard
+    steps:
+      - Cliquer sur le menu Microfinance > Tableau de bord.
+      - L'écran se charge automatiquement et calcule les indicateurs pour la seule société active du sélecteur Odoo.
+      - Les 5 cartes KPI s'affichent en premier, avant les graphiques et le tableau des crédits en retard.
+    tips: >
+      Tous les indicateurs sont recalculés à chaque ouverture de l'écran et toujours
+      scopés à la société active unique du sélecteur Odoo, même si plusieurs sociétés
+      sont cochées : il n'existe jamais de vue consolidée multi-société.
+    answer: >
+      <p>Le tableau de bord (Microfinance > Tableau de bord) affiche 5 cartes KPI,
+      calculées à chaque ouverture pour la société active :</p>
+      <ul>
+        <li><strong>Crédits actifs</strong> : nombre de crédits à l'état actif, pour la société active.</li>
+        <li><strong>Montant décaissé</strong> : somme des montants des crédits actifs, clôturés ou en défaut.</li>
+        <li><strong>Encours total</strong> : somme des soldes restants dus des crédits actifs et en défaut.</li>
+        <li><strong>Impayés</strong> : somme des montants en retard des crédits actifs et en défaut.</li>
+        <li><strong>Taux de défaut (%)</strong> : nombre de crédits en défaut / nombre de crédits actifs × 100.</li>
+      </ul>
+      <p>La devise affichée est celle de la société active.</p>
+    keywords:
+      - kpi
+      - crédits actifs
+      - montant décaissé
+      - encours
+      - impayés
+    source_reference: microfinance_loan_management
+    see_also:
+      - dashboard-002
+      - dashboard-003
+
+  - id: dashboard-002
+    title: Consulter la répartition des crédits par état et les tendances mensuelles
+    category: Indicateurs clés
+    roles:
+      - agent_credit
+      - caissier
+      - credit_committee
+      - gestionnaire
+    questions:
+      - Quelle est la répartition des crédits par état (actif, clôturé, en défaut) ?
+      - Comment évoluent les remboursements par rapport aux impayés sur les 12 derniers mois ?
+      - Quel est le montant total décaissé ce mois-ci ?
+      - Comment consulter les tendances mensuelles de décaissement du portefeuille ?
+    menu: Microfinance > Tableau de bord
+    model: microfinance.dashboard
+    steps:
+      - Ouvrir Microfinance > Tableau de bord.
+      - Consulter le graphique « Crédits par état » (histogramme du nombre de crédits par état : actif, clôturé, en défaut, etc.).
+      - Consulter les graphiques « Décaissements par mois » et « Remboursements vs impayés » pour la tendance sur 12 mois glissants (mois courant inclus + 11 mois précédents).
+    tips: >
+      Les libellés du graphique « Crédits par état » sont ceux définis sur le champ
+      statut du crédit (microfinance.loan) ; les statuts explicitement pris en compte
+      dans les calculs du dashboard sont actif, clôturé et en défaut.
+    answer: >
+      <p>Le graphique « Crédits par état » (Microfinance > Tableau de bord) montre un
+      histogramme du nombre de crédits par état. Les graphiques « Décaissements par mois »
+      et « Remboursements vs impayés » présentent les décaissements, remboursements et
+      impayés sur les 12 derniers mois glissants (mois courant inclus + 11 mois précédents).
+      Il n'existe pas de vue « ce mois uniquement » isolée : la lecture du mois en cours se
+      fait sur le dernier point de la série mensuelle.</p>
+    keywords:
+      - répartition par état
+      - tendances mensuelles
+      - décaissements
+      - remboursements
+      - impayés
+    source_reference: microfinance_loan_management
+    see_also:
+      - dashboard-001
+      - dashboard-003
+
+  - id: dashboard-003
+    title: Consulter le taux de défaut et la répartition de risque
+    category: Analyse du risque et retards
+    roles:
+      - agent_credit
+      - caissier
+      - credit_committee
+      - gestionnaire
+    questions:
+      - Quel est le taux de défaut du portefeuille en ce moment ?
+      - Combien de crédits sont classés en risque élevé actuellement ?
+      - Comment est calculée la répartition de risque du portefeuille ?
+    menu: Microfinance > Tableau de bord
+    model: microfinance.dashboard
+    steps:
+      - Ouvrir Microfinance > Tableau de bord.
+      - Consulter la carte KPI « Taux de défaut (%) ».
+      - Consulter le graphique de répartition de risque (nombre de crédits actifs/en défaut par niveau de risque : faible/moyen/élevé).
+    tips: >
+      La répartition de risque regroupe le niveau de risque « critique » du crédit dans
+      la catégorie « élevé » : le dashboard ne distingue que 3 niveaux (faible/moyen/élevé).
+      Cette répartition est une photographie instantanée, sans historique conservé.
+    answer: >
+      <p>Le taux de défaut affiché sur la carte KPI du tableau de bord se calcule comme
+      le nombre de crédits en défaut divisé par le nombre de crédits actifs, multiplié
+      par 100. Le graphique de répartition de risque montre le nombre de crédits
+      actifs/en défaut par niveau de risque (faible/moyen/élevé) ; le niveau « critique »
+      est regroupé dans la catégorie « élevé ». Ces deux indicateurs sont recalculés à
+      chaque ouverture de l'écran, sans historique conservé.</p>
+    keywords:
+      - taux de défaut
+      - répartition de risque
+      - risque élevé
+    source_reference: microfinance_loan_management
+    see_also:
+      - dashboard-001
+      - dashboard-004
+
+  - id: dashboard-004
+    title: Consulter le portefeuille à risque (PAR) et les crédits les plus en retard
+    category: Analyse du risque et retards
+    roles:
+      - agent_credit
+      - caissier
+      - credit_committee
+      - gestionnaire
+    questions:
+      - Quels sont les crédits les plus en retard aujourd'hui ?
+      - Comment consulter le portefeuille à risque (PAR) par ancienneté ?
+    menu: Microfinance > Tableau de bord
+    model: microfinance.dashboard
+    steps:
+      - Ouvrir Microfinance > Tableau de bord.
+      - Consulter le graphique « Portefeuille à risque (PAR) par ancienneté » (tranches d'impayés par ancienneté de retard).
+      - Consulter le tableau « Crédits les plus en retard » (partenaire, crédit, montant dû, jours de retard), en bas de l'écran.
+    tips: >
+      Le tableau « Crédits les plus en retard » ne retient que les échéances en retard
+      avec un montant restant dû strictement positif, agrégées par crédit, triées par
+      jours de retard décroissants puis montant dû décroissant, et limitées à 10 lignes
+      (top 10).
+    answer: >
+      <p>Le graphique « Portefeuille à risque (PAR) par ancienneté » (Microfinance >
+      Tableau de bord) présente les tranches d'impayés par ancienneté de retard. Le
+      tableau « Crédits les plus en retard » liste, pour chaque crédit, le partenaire, le
+      montant dû et les jours de retard : il est limité aux 10 crédits les plus en retard
+      (échéances en retard à montant restant dû strictement positif, triées par jours de
+      retard puis montant dû décroissants).</p>
+    keywords:
+      - PAR
+      - portefeuille à risque
+      - crédits en retard
+      - recouvrement
+    source_reference: microfinance_loan_management
+    see_also:
+      - dashboard-003
+
+  - id: dashboard-005
+    title: Accès au tableau de bord et erreurs de chargement
+    category: Accès et sécurité
+    roles:
+      - agent_credit
+      - caissier
+      - credit_committee
+      - gestionnaire
+    questions:
+      - Pourquoi je ne vois pas le menu Tableau de bord dans mon compte ?
+      - Le tableau de bord montre-t-il les chiffres de toutes les agences en même temps ?
+      - Que faire si le tableau de bord affiche une erreur de chargement ?
+    menu: Microfinance > Tableau de bord
+    model: microfinance.dashboard
+    errors: >
+      Menu « Tableau de bord » invisible : l'utilisateur n'appartient à aucun des groupes
+      autorisés sur le menu racine Microfinance (Agent crédit, Manager crédit, Finance
+      microfinance, Auditeur microfinance, Agent recouvrement, ainsi que Caissier, Comité
+      de crédit et Gestionnaire par héritage) — cas typique : utilisateur uniquement
+      Comptable, qui n'est pas rattaché au menu racine. Message « Impossible de charger
+      les données du dashboard. » : échec du chargement des données, le plus souvent
+      parce que l'utilisateur connecté n'a pas les droits de lecture nécessaires sur les
+      crédits, échéances ou remboursements. Graphiques absents mais KPI/tableau
+      présents : la bibliothèque de graphiques ne s'est pas chargée côté navigateur, sans
+      bloquer l'affichage des KPI et du tableau.
+    tips: >
+      Basculer explicitement de société (sélecteur Odoo) pour consulter le dashboard de
+      chaque agence : les indicateurs ne sont jamais agrégés sur plusieurs sociétés, même
+      si plusieurs sociétés sont cochées.
+    answer: >
+      <p>L'accès au menu Microfinance > Tableau de bord est réservé aux groupes suivants
+      (menu racine Microfinance) : Agent crédit, Manager crédit, Finance microfinance,
+      Auditeur microfinance, Agent recouvrement, ainsi que Caissier, Comité de crédit et
+      Gestionnaire par héritage. Un utilisateur uniquement Comptable ne voit pas ce menu,
+      sauf s'il détient un autre groupe Microfinance en plus. Au-delà de l'accès au menu,
+      l'affichage effectif des indicateurs dépend aussi des droits de lecture sur les
+      crédits, échéances et remboursements ; des droits insuffisants provoquent le
+      message « Impossible de charger les données du dashboard. » Tous les indicateurs
+      sont toujours scopés à la société active unique du sélecteur Odoo : il n'existe
+      jamais de vue consolidée multi-société.</p>
+    keywords:
+      - accès
+      - sécurité
+      - droits
+      - erreur de chargement
+    source_reference: microfinance_loan_management
+    see_also:
+      - dashboard-001
