@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="login_layout_db_manager_link" inherit_id="website.login_layout"
+              name="Restore Manage Databases Link">
+        <xpath expr="//div[hasclass('oe_website_login_container')]" position="after">
+            <div class="text-center small mt-4 pt-3 border-top" t-if="not disable_footer">
+                <t t-if="not disable_database_manager">
+                    <a class="border-end pe-2 me-1" href="/web/database/manager">Manage Databases</a>
+                </t>
+            </div>
+        </xpath>
+    </template>
+</odoo>

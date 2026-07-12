@@ -1,0 +1,9 @@
+# Third-party OCA module, not tracked in this repo
+web_responsive/
+
+# Python
+__pycache__/
+*.pyc
+
+# Odoo
+*.pot
