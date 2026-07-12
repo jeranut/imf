@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_web_responsive_app_shortcut_system,web.responsive.app.shortcut system,model_web_responsive_app_shortcut,base.group_system,1,1,1,1

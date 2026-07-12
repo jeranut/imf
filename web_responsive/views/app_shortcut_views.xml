@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="web_responsive_app_shortcut_view_tree" model="ir.ui.view">
+        <field name="name">web.responsive.app.shortcut.tree</field>
+        <field name="model">web.responsive.app.shortcut</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom" default_order="sequence,id">
+                <field name="sequence" widget="handle"/>
+                <field name="icon" widget="image" options="{'size': [40, 40]}"/>
+                <field name="name"/>
+                <field name="menu_id"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="web_responsive_app_shortcut_view_form" model="ir.ui.view">
+        <field name="name">web.responsive.app.shortcut.form</field>
+        <field name="model">web.responsive.app.shortcut</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <field name="icon" widget="image" class="oe_avatar"/>
+                    <group>
+                        <field name="name"/>
+                        <field name="menu_id" options="{'no_create': True}"/>
+                        <field name="sequence"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="web_responsive_app_shortcut_action" model="ir.actions.act_window">
+        <field name="name">Application Shortcuts</field>
+        <field name="res_model">web.responsive.app.shortcut</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <menuitem
+        id="web_responsive_app_shortcut_menu"
+        name="Application Shortcuts"
+        parent="base.menu_administration_shortcut"
+        action="web_responsive_app_shortcut_action"
+        sequence="10"
+        groups="base.group_system"
+    />
+</odoo>

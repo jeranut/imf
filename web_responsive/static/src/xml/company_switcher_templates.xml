@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-inherit="web.SwitchCompanyMenu" t-inherit-mode="extension">
+    <xpath expr="//Dropdown" position="attributes">
+        <attribute name="class">'o_switch_company_menu o_web_responsive_company_switcher d-none d-md-block'</attribute>
+    </xpath>
+    <xpath expr="//t[@t-set-slot='toggler']/span" position="replace">
+        <span class="oe_topbar_name d-none d-lg-flex align-items-center gap-1">
+            <span t-esc="getCompanyLabel(companyService.currentCompany)"/>
+            <span
+                t-if="getCompanyCode(companyService.currentCompany)"
+                class="o_wr_company_code o_wr_company_code_topbar"
+                t-esc="getCompanyCode(companyService.currentCompany)"
+            />
+        </span>
+    </xpath>
+    <xpath expr="//Dropdown/t[@t-foreach]" position="before">
+        <div class="o_wr_company_search">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text">
+                    <i class="fa fa-search"/>
+                </span>
+                <input
+                    class="form-control"
+                    type="search"
+                    placeholder="Search companies..."
+                    t-att-value="companySearchValue"
+                    t-on-click.stop="() => {}"
+                    t-on-input="onCompanySearchInput"
+                />
+                <button
+                    t-if="companySearchValue"
+                    class="btn btn-secondary"
+                    type="button"
+                    t-on-click.stop="clearCompanySearch"
+                    aria-label="Clear company search">
+                    <i class="fa fa-times"/>
+                </button>
+            </div>
+        </div>
+    </xpath>
+    <xpath expr="//Dropdown/t[@t-foreach]" position="attributes">
+        <attribute name="t-foreach">sortedFilteredRootCompanies</attribute>
+    </xpath>
+</t>
+
+<t t-inherit="web.SwitchCompanyItem" t-inherit-mode="extension">
+    <xpath expr="//div[contains(@class, 'log_into')]" position="attributes">
+        <attribute name="class">d-flex align-items-center w-100 log_into o_wr_company_entry</attribute>
+        <attribute name="t-att-class">isCurrent ? 'active' : ''</attribute>
+    </xpath>
+    <xpath expr="//span[contains(@class, 'company_label')]" position="replace">
+        <span
+            class="o_wr_company_content d-flex align-items-center w-100 min-w-0">
+            <img
+                class="o_wr_company_logo"
+                t-att-src="companyLogoUrl"
+                t-att-alt="companyLabel"
+            />
+            <span class="o_wr_company_text min-w-0">
+                <span
+                    class="company_label o_wr_company_name text-truncate d-block"
+                    t-att-class="isCurrent ? 'text-900 fw-bold' : ''"
+                    t-out="companyLabel"
+                />
+                <span
+                    t-if="companyCode"
+                    class="o_wr_company_code"
+                    t-out="companyCode"
+                />
+            </span>
+            <span t-if="isCurrent" class="o_wr_current_badge">Active</span>
+        </span>
+    </xpath>
+    <xpath expr="//t[@t-foreach='props.company.child_ids']" position="attributes">
+        <attribute name="t-foreach">visibleChildCompanies</attribute>
+        <attribute name="t-as">company</attribute>
+        <attribute name="t-key">company.id</attribute>
+    </xpath>
+    <xpath expr="//SwitchCompanyItem" position="attributes">
+        <attribute name="company">company</attribute>
+    </xpath>
+</t>
+
+<t t-inherit="web.MobileSwitchCompanyMenu" t-inherit-mode="extension">
+    <xpath expr="//div[contains(@class, 'o_burger_menu_user_title')]" position="after">
+        <div class="o_wr_company_search mb-2">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="fa fa-search"/>
+                </span>
+                <input
+                    class="form-control"
+                    type="search"
+                    placeholder="Search companies..."
+                    t-att-value="companySearchValue"
+                    t-on-input="onCompanySearchInput"
+                />
+                <button
+                    t-if="companySearchValue"
+                    class="btn btn-secondary"
+                    type="button"
+                    t-on-click="clearCompanySearch"
+                    aria-label="Clear company search">
+                    <i class="fa fa-times"/>
+                </button>
+            </div>
+        </div>
+    </xpath>
+    <xpath expr="//div[contains(@class, 'o_burger_menu_companies')]/t[@t-foreach]" position="attributes">
+        <attribute name="t-foreach">sortedFilteredRootCompanies</attribute>
+    </xpath>
+</t>
+
+<t t-inherit="web.MobileSwitchCompanyItem" t-inherit-mode="extension">
+    <xpath expr="//div[contains(@class, 'log_into')]" position="attributes">
+        <attribute name="class">d-flex align-items-center w-100 log_into o_wr_company_entry</attribute>
+        <attribute name="t-att-class">isCurrent ? 'active' : ''</attribute>
+    </xpath>
+    <xpath expr="//span[contains(@class, 'company_label')]" position="replace">
+        <span
+            class="o_wr_company_content d-flex align-items-center w-100 min-w-0">
+            <img
+                class="o_wr_company_logo"
+                t-att-src="companyLogoUrl"
+                t-att-alt="companyLabel"
+            />
+            <span class="o_wr_company_text min-w-0">
+                <span
+                    class="company_label o_wr_company_name text-truncate d-block"
+                    t-att-class="isCurrent ? 'text-900 fw-bold' : ''"
+                    t-esc="companyLabel"
+                />
+                <span
+                    t-if="companyCode"
+                    class="o_wr_company_code"
+                    t-esc="companyCode"
+                />
+            </span>
+            <span t-if="isCurrent" class="o_wr_current_badge">Active</span>
+        </span>
+    </xpath>
+    <xpath expr="//small[@t-if='isCurrent']" position="replace"/>
+    <xpath expr="//t[@t-foreach='props.company.child_ids']" position="attributes">
+        <attribute name="t-foreach">visibleChildCompanies</attribute>
+        <attribute name="t-as">company</attribute>
+        <attribute name="t-key">company.id</attribute>
+    </xpath>
+    <xpath expr="//MobileSwitchCompanyItem" position="attributes">
+        <attribute name="company">company</attribute>
+    </xpath>
+</t>
+
+</templates>
