@@ -1,0 +1,19 @@
+<odoo>
+    <record id="hr_payslip_form_inherit_advance" model="ir.ui.view">
+        <field name="name">hr.payslip.form.inherit.advance</field>
+        <field name="model">hr.payslip</field>
+        <field name="inherit_id" ref="payroll.hr_payslip_view_form"/>
+        <field name="arch" type="xml">
+            <!-- On cible la page computation -->
+            <xpath expr="//page[@name='computation']" position="inside">
+                <group>
+                    <field name="advance_amount" string="Avance sur salaire"/>
+                    <button name="action_add_advance"
+                            string="Envoyer"
+                            type="object"
+                            class="oe_highlight"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

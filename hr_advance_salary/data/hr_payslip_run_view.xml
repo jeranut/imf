@@ -1,0 +1,15 @@
+
+<odoo>
+    <record id="view_hr_payslip_form_inherit_journal" model="ir.ui.view">
+        <field name="name">hr.payslip.form.inherit.journal</field>
+        <field name="model">hr.payslip</field>
+        &lt;!&ndash; XML ID exact de la vue originale &ndash;&gt;
+        <field name="inherit_id" ref="payroll.hr_payslip_view_form"/>
+        <field name="arch" type="xml">
+            &lt;!&ndash; On place le champ journal juste après employee_id &ndash;&gt;
+            <xpath expr="//field[@name='employee_id']" position="after">
+                <field name="journal_id"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

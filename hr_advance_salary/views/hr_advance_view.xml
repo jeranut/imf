@@ -1,0 +1,53 @@
+<odoo>
+    <!-- Form view -->
+    <record id="hr_advance_salary_form" model="ir.ui.view">
+        <field name="name">hr.advance.salary.form</field>
+        <field name="model">hr.advance.salary</field>
+        <field name="arch" type="xml">
+            <form string="Advance Salary">
+                <sheet>
+                    <group>
+                        <field name="company_id" readonly="1"/>
+                        <field name="employee_id"/>
+                        <field name="date"/>
+                        <field name="amount"/>
+                        <field name="state"/>
+                    </group>
+                    <footer>
+                        <button string="Approve" type="object" name="action_approve"
+                                class="btn-primary"/>
+                    </footer>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- Tree view -->
+    <record id="hr_advance_salary_tree" model="ir.ui.view">
+        <field name="name">hr.advance.salary.tree</field>
+        <field name="model">hr.advance.salary</field>
+        <field name="arch" type="xml">
+            <tree string="Advance Salary">
+                <field name="company_id"/>
+                <field name="employee_id"/>
+                <field name="date"/>
+                <field name="amount"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="action_hr_advance_salary" model="ir.actions.act_window">
+        <field name="name">Advance Salaries</field>
+        <field name="res_model">hr.advance.salary</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="oe_view_nocontent_create">Créer une avance pour un employé.</p>
+        </field>
+    </record>
+
+    <!-- Menu -->
+    <menuitem id="menu_hr_advance_salary_root" name="Advance Salary" parent="hr.menu_hr_root"/>
+    <menuitem id="menu_hr_advance_salary" name="Avances" parent="menu_hr_advance_salary_root" action="action_hr_advance_salary"/>
+</odoo>
