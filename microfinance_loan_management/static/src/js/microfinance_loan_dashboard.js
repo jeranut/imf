@@ -9,7 +9,10 @@ export class MicrofinanceLoanDashboard extends Component {
         this.rpc = useService("rpc");
         this.orm = useService("orm");
         this.actionService = useService("action");
-        this.state = useState({ loading: true, error: false, data: null });
+        // activeTopic : vrai systeme d'onglets (un seul topic rendu a la fois via t-if dans le
+        // template, pas juste une ancre/scroll) - "apercu" (Vue d'ensemble) est le topic par
+        // defaut au chargement.
+        this.state = useState({ loading: true, error: false, data: null, activeTopic: "apercu" });
         this.charts = [];
         this.shouldRenderCharts = false;
         this.stateChartRef = useRef("stateChart");
@@ -17,6 +20,8 @@ export class MicrofinanceLoanDashboard extends Component {
         this.repaymentChartRef = useRef("repaymentChart");
         this.overdueTrendChartRef = useRef("overdueTrendChart");
         this.parChartRef = useRef("parChart");
+        this.fondMultiChartRef = useRef("fondMultiChart");
+        this.fondSingleChartRef = useRef("fondSingleChart");
 
         onMounted(async () => {
             await this.loadDashboard();
@@ -46,6 +51,34 @@ export class MicrofinanceLoanDashboard extends Component {
         }
     }
 
+    /**
+     * Bascule vers un autre onglet (topic). Seul l'onglet "analyses" contient des graphiques
+     * ApexCharts (aucun sur "apercu"/"activite") : c'est le seul cas ou l'ordre de rendu compte.
+     *
+     * Strategie retenue : lazy render, pas resize(). ApexCharts rend du SVG dans le <div>
+     * reference (t-ref) au moment de chart.render() ; tant que "analyses" n'est pas le topic
+     * actif, son contenu est retire du DOM par le t-if du template (pas seulement masque en CSS),
+     * donc les refs des graphiques sont "null" et mountChart() (qui verifie deja "if (!ref.el)
+     * return") les ignore silencieusement - aucun graphique n'est jamais monte dans un conteneur
+     * a largeur nulle. On force simplement un nouveau passage de renderCharts() a chaque fois que
+     * "analyses" redevient actif (via shouldRenderCharts + onPatched, meme mecanisme que le
+     * chargement initial), pour re-creer les graphiques avec la taille reelle du conteneur
+     * desormais visible. Les instances existantes sont detruites en quittant "analyses" (elles
+     * pointeraient sinon vers des noeuds DOM deja retires par le t-if).
+     */
+    setActiveTopic(topic) {
+        if (this.state.activeTopic === topic) {
+            return;
+        }
+        if (this.state.activeTopic === "analyses") {
+            this.destroyCharts();
+        }
+        this.state.activeTopic = topic;
+        if (topic === "analyses") {
+            this.shouldRenderCharts = true;
+        }
+    }
+
     get kpis() {
         return this.state.data?.kpis || {};
     }
@@ -68,6 +101,14 @@ export class MicrofinanceLoanDashboard extends Component {
 
     get todayInstallmentsCount() {
         return this.state.data?.today_installments_count || 0;
+    }
+
+    get fondMultiChart() {
+        return this.state.data?.fond_multi_chart || { visible: false, labels: [], contributions: [], decaissements: [] };
+    }
+
+    get fondSingleChart() {
+        return this.state.data?.fond_single_chart || { labels: [], values: [] };
     }
 
     formatNumber(value) {
@@ -237,6 +278,31 @@ export class MicrofinanceLoanDashboard extends Component {
             dataLabels: { enabled: false },
             markers: { size: 4 },
             yaxis: { labels: { formatter: (value) => Math.round(value) } },
+            grid: { borderColor: "#e2e8f0" },
+        });
+
+        if (data.fond_multi_chart?.visible) {
+            this.mountChart(this.fondMultiChartRef, {
+                chart: { ...baseChart, type: "bar", height: 300 },
+                series: [
+                    { name: "Contributions", data: data.fond_multi_chart.contributions },
+                    { name: "Decaissements", data: data.fond_multi_chart.decaissements },
+                ],
+                xaxis: { categories: data.fond_multi_chart.labels },
+                colors: ["#0891b2", "#2563eb"],
+                plotOptions: { bar: { borderRadius: 5, columnWidth: "55%" } },
+                dataLabels: { enabled: false },
+                grid: { borderColor: "#e2e8f0" },
+            });
+        }
+
+        this.mountChart(this.fondSingleChartRef, {
+            chart: { ...baseChart, type: "bar", height: 300 },
+            series: [{ name: "Solde disponible", data: data.fond_single_chart?.values || [] }],
+            xaxis: { categories: data.fond_single_chart?.labels || [] },
+            colors: ["#0891b2"],
+            plotOptions: { bar: { borderRadius: 5, columnWidth: "48%" } },
+            dataLabels: { enabled: false },
             grid: { borderColor: "#e2e8f0" },
         });
     }

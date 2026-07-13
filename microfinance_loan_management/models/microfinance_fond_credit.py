@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from collections import defaultdict
+
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
@@ -228,4 +230,80 @@ class MicrofinanceFondCredit(models.Model):
             'res_model': 'microfinance.loan',
             'view_mode': 'tree,form',
             'domain': [('fond_credit_id', '=', self.id)],
+        }
+
+    @api.model
+    def get_dashboard_kpi(self, company_id):
+        """Solde total et nombre de fonds actifs visibles pour la société company_id, pour la
+        tuile KPI "Fonds bailleurs" du dashboard : les fonds 'single_company' de cette société +
+        tous les fonds 'multi_company' (visibles de toutes les agences par nature). Recherche ORM
+        standard, sans sudo() : le domaine explicite ci-dessous ET l'ir.rule de partage optionnel
+        déjà en place s'appliquent tous les deux, un fonds single_company d'une autre agence
+        n'apparaît donc jamais dans ce total."""
+        funds = self.search([
+            ('active', '=', True),
+            '|', ('company_id', '=', company_id), ('scope', '=', 'multi_company'),
+        ])
+        return {
+            'total': sum(funds.mapped('solde_disponible')),
+            'count': len(funds),
+        }
+
+    @api.model
+    def get_multi_company_usage_chart(self):
+        """Utilisation des fonds partagés (scope='multi_company', tous confondus dans cette
+        première version — pas de ventilation par fonds individuel, cf. ecarts_lpf.md) par
+        agence : contributions nettes (dépôts - retraits, groupées par saisie_company_id) et
+        décaissements (groupés par company_id du crédit, pas celle du fonds puisqu'un fonds
+        multi_company n'a pas de société propre).
+
+        sudo() sur microfinance.loan : son ir.rule reste strict, sans la clause de partage
+        optionnel des fonds/contributions, donc nécessaire pour consolider entre agences.
+        sudo() sur microfinance.fond.contribution : nécessaire pour une raison différente —
+        group_microfinance_user (accès de base au dashboard) n'a AUCUN droit ir.model.access sur
+        ce modèle (choix volontaire du Lot 1 : lecture seule sur fonds/bailleurs, aucun accès
+        contribution pour ce groupe). Sans sudo() ici, un simple agent crédit consultant son
+        dashboard obtiendrait un AccessError sur toute cette section dès qu'un fonds partagé
+        existe. Ce sudo() ne fuite que des montants agrégés par agence, jamais les
+        enregistrements de contribution individuels au frontend."""
+        multi_funds = self.search([('active', '=', True), ('scope', '=', 'multi_company')])
+        result = {'visible': bool(multi_funds), 'labels': [], 'contributions': [], 'decaissements': []}
+        if not multi_funds:
+            return result
+
+        contributions = self.env['microfinance.fond.contribution'].sudo().search([
+            ('fond_id', 'in', multi_funds.ids), ('state', '=', 'posted'),
+        ])
+        contrib_by_company = defaultdict(float)
+        for contribution in contributions:
+            sign = 1.0 if contribution.type_mouvement == 'depot' else -1.0
+            contrib_by_company[contribution.saisie_company_id] += sign * contribution.amount
+
+        disbursed_states = ('active', 'closed', 'defaulted', 'written_off')
+        loans = self.env['microfinance.loan'].sudo().search([
+            ('fond_credit_id', 'in', multi_funds.ids), ('state', 'in', disbursed_states),
+        ])
+        disbursed_by_company = defaultdict(float)
+        for loan in loans:
+            disbursed_by_company[loan.company_id] += loan.loan_amount
+
+        companies = sorted(set(contrib_by_company) | set(disbursed_by_company), key=lambda c: c.name)
+        result['labels'] = [company.name for company in companies]
+        result['contributions'] = [contrib_by_company.get(company, 0.0) for company in companies]
+        result['decaissements'] = [disbursed_by_company.get(company, 0.0) for company in companies]
+        return result
+
+    @api.model
+    def get_single_company_chart(self, company_id):
+        """Solde disponible de chaque fonds 'single_company' de la société company_id : une
+        agence peut avoir plusieurs fonds propres, ce graphique liste donc chaque fonds
+        individuellement plutôt qu'un agrégat unique. Naturellement filtré à la société courante
+        par le domaine explicite ci-dessous (les fonds single_company d'une autre agence
+        n'apparaissent jamais)."""
+        funds = self.search([
+            ('active', '=', True), ('scope', '=', 'single_company'), ('company_id', '=', company_id),
+        ])
+        return {
+            'labels': funds.mapped('name'),
+            'values': funds.mapped('solde_disponible'),
         }

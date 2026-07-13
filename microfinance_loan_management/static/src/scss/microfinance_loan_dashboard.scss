@@ -108,6 +108,75 @@
         gap: 16px;
         align-items: stretch;
     }
+
+    // Lot 7 : panneau lateral de navigation (onglets) + zone de contenu. flex plutot que grid,
+    // pour laisser le panneau garder une largeur fixe et le contenu prendre le reste.
+    &__body {
+        display: flex;
+        align-items: flex-start;
+        gap: 20px;
+    }
+
+    &__content {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+.o_microfinance_dashboard__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 0 0 200px;
+    width: 200px;
+    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    position: sticky;
+    top: 0;
+}
+
+.o_microfinance_dashboard__nav_item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+
+    i {
+        width: 18px;
+        font-size: 16px;
+        text-align: center;
+        flex: 0 0 auto;
+    }
+
+    &:hover {
+        background: #F4F3FC;
+        color: #3C3489;
+    }
+
+    &--active {
+        background: #3C3489;
+        color: #ffffff;
+
+        &:hover {
+            background: #3C3489;
+            color: #ffffff;
+        }
+    }
+}
+
+.o_microfinance_dashboard__nav_label {
+    overflow-wrap: anywhere;
 }
 
 .o_microfinance_section_header {
@@ -240,6 +309,14 @@
         border-color: darken(#FFEBEB, 10%);
         .o_microfinance_kpi__icon { background: #FFB3B3; color: #FF0000; }
         .o_microfinance_kpi__link { color: #FF0000; border-top-color: #FFB3B3; }
+    }
+    // 6e tuile (Lot 6, fonds bailleurs) : teinte sarcelle non alerte, encore inutilisée parmi les
+    // 5 couleurs existantes, même motif fond pastel / icône-lien plus foncé.
+    &--fonds {
+        background: #E0F2F3;
+        border-color: darken(#E0F2F3, 10%);
+        .o_microfinance_kpi__icon { background: #A6DEE1; color: #0B4A4D; }
+        .o_microfinance_kpi__link { color: #0E6367; border-top-color: #A6DEE1; }
     }
 }
 
@@ -422,6 +499,31 @@
 @media (max-width: 992px) {
     .o_microfinance_kpi_grid {
         grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    }
+
+    // Lot 7 : sous ce seuil, le panneau d'onglets se réduit à une colonne d'icônes seules (le
+    // libellé reste accessible en tooltip via l'attribut title="" déjà posé sur chaque bouton),
+    // plutôt que de disparaître complètement.
+    .o_microfinance_dashboard__nav {
+        flex: 0 0 56px;
+        width: 56px;
+    }
+
+    .o_microfinance_dashboard__nav_item {
+        justify-content: center;
+        padding: 10px;
+    }
+
+    .o_microfinance_dashboard__nav_label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        clip-path: inset(50%);
+        border: 0;
     }
 }
 

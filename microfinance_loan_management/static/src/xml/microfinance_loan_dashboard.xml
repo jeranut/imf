@@ -31,6 +31,32 @@
                 <div class="o_microfinance_dashboard__empty">Impossible de charger les donnees du dashboard.</div>
             </t>
             <t t-else="">
+            <div class="o_microfinance_dashboard__body">
+                <nav class="o_microfinance_dashboard__nav">
+                    <button type="button"
+                            t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === 'apercu' ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
+                            title="Vue d'ensemble"
+                            t-on-click="() => this.setActiveTopic('apercu')">
+                        <i class="fa fa-tachometer" role="img" aria-label="Vue d'ensemble"/>
+                        <span class="o_microfinance_dashboard__nav_label">Vue d'ensemble</span>
+                    </button>
+                    <button type="button"
+                            t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === 'analyses' ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
+                            title="Analyses"
+                            t-on-click="() => this.setActiveTopic('analyses')">
+                        <i class="fa fa-bar-chart" role="img" aria-label="Analyses"/>
+                        <span class="o_microfinance_dashboard__nav_label">Analyses</span>
+                    </button>
+                    <button type="button"
+                            t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === 'activite' ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
+                            title="Activite recente"
+                            t-on-click="() => this.setActiveTopic('activite')">
+                        <i class="fa fa-history" role="img" aria-label="Activite recente"/>
+                        <span class="o_microfinance_dashboard__nav_label">Activite recente</span>
+                    </button>
+                </nav>
+                <div class="o_microfinance_dashboard__content">
+                <t t-if="state.activeTopic === 'apercu'">
                 <t t-call="microfinance_loan_management.DashboardSectionHeader">
                     <t t-set="label">Vue d'ensemble</t>
                 </t>
@@ -85,8 +111,20 @@
                         </div>
                         <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.loan', [['state', '=', 'defaulted']], 'Credits en defaut')">Voir les credits en defaut</a>
                     </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--fonds">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-university" role="img" aria-label="Fonds bailleurs"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(kpis.fond_bailleur_total)"/>
+                                <span>Fonds bailleurs (<t t-esc="formatNumber(kpis.fond_bailleur_count)"/> actifs)</span>
+                            </div>
+                        </div>
+                        <a href="#" class="o_microfinance_kpi__link" t-on-click.prevent="() => this.openKpiAction('microfinance.fond.credit', [['active', '=', true]], 'Fonds de credit actifs')">Voir les fonds actifs</a>
+                    </article>
                 </div>
+                </t>
 
+                <t t-if="state.activeTopic === 'analyses'">
                 <t t-call="microfinance_loan_management.DashboardSectionHeader">
                     <t t-set="label">Analyses</t>
                 </t>
@@ -127,6 +165,26 @@
                     </section>
                 </div>
 
+                <t t-call="microfinance_loan_management.DashboardSectionHeader">
+                    <t t-set="label">Fonds bailleurs</t>
+                </t>
+                <div class="o_microfinance_dashboard__grid">
+                    <section t-if="fondMultiChart.visible" class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Utilisation des fonds partages par agence</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="fondMultiChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Fonds propres a l'agence</h2>
+                        </div>
+                        <div t-if="fondSingleChart.labels.length" class="o_microfinance_chart" t-ref="fondSingleChart"/>
+                        <div t-else="" class="o_microfinance_dashboard__empty">Aucun fonds propre a cette agence.</div>
+                    </section>
+                </div>
+
                 <section class="o_microfinance_panel o_microfinance_panel--table">
                     <div class="o_microfinance_panel__title">
                         <h2>Credits les plus en retard</h2>
@@ -155,7 +213,9 @@
                         </table>
                     </div>
                 </section>
+                </t>
 
+                <t t-if="state.activeTopic === 'activite'">
                 <t t-call="microfinance_loan_management.DashboardSectionHeader">
                     <t t-set="label">Activite recente</t>
                 </t>
@@ -214,6 +274,9 @@
                         <a href="#" class="o_microfinance_activity_panel__link" t-on-click.prevent="openAllInstallments">Voir toutes les echeances</a>
                     </section>
                 </div>
+                </t>
+                </div>
+            </div>
             </t>
         </div>
     </t>

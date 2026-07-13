@@ -48,6 +48,119 @@ Périmètre : `microfinance_loan_management` uniquement. Aucune modification de
     ce chantier (reproduit sur une base neuve, module fraîchement installé, sans aucun fichier de
     ce chantier impliqué dans l'exécution).
 
+## Lot 6 — Tuile dashboard "Fonds bailleurs"
+
+**Audit ciblé préalable** : l'audit du dashboard révèle un écart avec l'hypothèse du prompt — la
+section "Vue d'ensemble" comptait **5 tuiles KPI sur une grille à 5 colonnes** (`credits`,
+`decaisse`, `encours`, `impayes`, `defaut`), pas 7. La 6ᵉ tuile ajoutée se place donc naturellement
+en ligne 2, colonne 1 (CSS Grid gère l'auto-wrap), sans modifier `grid-template-columns`.
+
+**Tuile ajoutée** (`o_microfinance_kpi--fonds`, icône `fa-university`) : libellé "Fonds bailleurs
+(N actifs)", valeur = somme de `solde_disponible` de tous les `microfinance.fond.credit` actifs
+visibles pour la société courante (fonds `single_company` de cette société + tous les fonds
+`multi_company`). Clic → liste des fonds actifs, réutilise le mécanisme générique `openKpiAction`
+déjà en place pour les autres tuiles.
+
+**Mécanisme de calcul** : trois nouvelles méthodes `@api.model` sur `microfinance.fond.credit`
+(`get_dashboard_kpi`, `get_multi_company_usage_chart`, `get_single_company_chart`), appelées
+depuis `MicrofinanceDashboardController.dashboard_data()` — même convention que les méthodes
+dashboard existantes (`Loan.get_par_buckets`, `Loan.get_recent_loans`), ce qui les rend testables
+directement sans contexte HTTP, comme fait dans `tests/test_fond_bailleur_dashboard.py` (6 tests,
+exécutés réellement, aucune régression sur les 131 tests du module hormis l'échec pré-existant
+déjà documenté ci-dessus).
+
+- `get_dashboard_kpi(company_id)` : recherche ORM standard (pas de `sudo()`), domaine explicite
+  `company_id = company_id OR scope = multi_company`, redondant avec l'`ir.rule` déjà en place
+  mais qui rend la méthode testable indépendamment du contexte de session (même convention que
+  `get_recent_loans`/`get_par_buckets`).
+- `get_multi_company_usage_chart()` : agrège les fonds `multi_company` par agence (contributions
+  nettes par `saisie_company_id`, décaissements par `company_id` du crédit). **Bug réel trouvé à
+  l'exécution des tests** : `group_microfinance_user` (groupe de base du dashboard) n'a *aucun*
+  droit `ir.model.access` sur `microfinance.fond.contribution` (choix volontaire du Lot 1) — sans
+  correctif, un simple agent crédit consultant son dashboard aurait obtenu un `AccessError` dès
+  qu'un fonds partagé existe. Corrigé par un `sudo()` ciblé sur cette recherche (comme déjà fait
+  sur `microfinance.loan` dans la même méthode pour la consolidation inter-agences) : ce `sudo()`
+  n'expose que des montants agrégés par agence, jamais les enregistrements individuels.
+- `get_single_company_chart(company_id)` : liste chaque fonds `single_company` de l'agence
+  (pas d'agrégat unique), filtré par domaine explicite sur `company_id`.
+
+**Compromis de layout** : aucun redesign de la grille KPI (5→6 tuiles gérées par le flow naturel
+de CSS Grid). La nouvelle sous-section "Fonds bailleurs" (Analyses) réutilise telle quelle la
+grille 2-colonnes existante (`.o_microfinance_dashboard__grid`), insérée après la ligne PAR et
+avant le tableau "Crédits les plus en retard" ; le Graphique A ("Utilisation des fonds partagés
+par agence") est masqué proprement (`t-if`) s'il n'existe aucun fonds `multi_company` visible ; le
+Graphique B ("Fonds propres à l'agence") affiche un état vide texte si l'agence n'a aucun fonds
+`single_company`, cohérent avec le pattern déjà utilisé ailleurs sur ce dashboard
+("Aucun crédit en retard.").
+
+**Limitation assumée (signalée, pas résolue)** : le Graphique A agrège tous les fonds
+`multi_company` confondus, sans ventilation par fonds individuel — si plusieurs fonds partagés
+existent un jour, leurs contributions/décaissements sont additionnés ensemble par agence. Une
+version future pourrait ajouter un filtre par fonds si le besoin se présente.
+
+**Non testé en navigateur (au moment du Lot 6)** : le clic sur la tuile et le rendu visuel réel des
+deux graphiques n'avaient pas été vérifiés dans un navigateur à ce stade — seule la couche de
+données avait été testée par des tests automatisés. **Mis à jour au Lot 7** : le clic sur la tuile
+"Fonds bailleurs" a depuis été vérifié dans un navigateur réel (Playwright/Chromium headless,
+voir Lot 7 ci-dessous) et navigue correctement vers la liste filtrée. Le rendu visuel des deux
+graphiques fonds bailleurs eux-mêmes (avec des fonds `multi_company`/`single_company` réels) n'a
+en revanche pas encore été exercé en navigateur (la base de test utilisée pour la vérification du
+Lot 7 ne contenait aucun fonds), seulement leurs états vides.
+
+## Lot 7 — Panneau latéral de navigation (onglets)
+
+**Audit ciblé** : confirmé que le dashboard est un client action OWL (`MicrofinanceLoanDashboard`,
+`static/src/js/microfinance_loan_dashboard.js`), alimenté par une route JSON contrôleur
+(`/microfinance/dashboard/data`), avec les graphiques rendus par **ApexCharts** (SVG, pas canvas)
+via `new ApexCharts(ref.el, options); chart.render();`. Le point d'attention du prompt est donc
+bien réel : un graphique monté dans un conteneur à largeur nulle (masqué) se serait retrouvé
+cassé.
+
+**Structure retenue** : exactement les 3 onglets posés en hypothèse, aucune 4ᵉ section
+"Fonds bailleurs" séparée — son contenu (tuile + les deux graphiques du Lot 6) reste réparti dans
+"Vue d'ensemble" et "Analyses", tel quel. Un seul topic rendu à la fois via `t-if` dans le template
+(pas juste masqué en CSS) : les topics inactifs sont réellement retirés du DOM par OWL.
+
+**Stratégie retenue pour les graphiques masqués/affichés : (a) lazy render**, pas de
+`resize()`/redraw. Puisque les topics inactifs sont retirés du DOM (pas juste `display:none`), les
+refs des graphiques de l'onglet "Analyses" (le seul à contenir des graphiques) sont `null` tant
+qu'il n'est pas actif ; `mountChart()` (qui vérifiait déjà `if (!ref.el) return`) les ignore donc
+silencieusement sans jamais monter de graphique dans un conteneur cassé. `setActiveTopic()`
+redéclenche `shouldRenderCharts = true` à chaque fois que "analyses" redevient actif (même
+mécanisme `onPatched` que le chargement initial), et détruit les instances ApexCharts existantes
+en quittant cet onglet (sinon elles pointeraient vers des nœuds DOM déjà retirés par le `t-if`).
+
+**Vérifié réellement dans un navigateur** (pas seulement lu/relu) : Odoo lancé sur une base jetable
+dédiée (port 8071, distinct de l'instance déjà en service), piloté par Playwright/Chromium headless
+(module Python `playwright`, installé pour l'occasion). Résultats observés :
+- Au chargement, seul "Vue d'ensemble" est visible (les 6 tuiles KPI, dont la tuile "Fonds
+  bailleurs" du Lot 6) ; "Analyses" et "Activité récente" sont bien absents du DOM.
+- Clic sur "Analyses" : les 5 graphiques du portefeuille se rendent avec des tailles réelles non
+  nulles (ex. 408×300, 632×320 — mesuré via `bounding_box()` sur chaque `<svg>`), pas de graphique
+  écrasé à largeur nulle.
+- 4 allers-retours rapides "Vue d'ensemble" ↔ "Analyses" : toujours exactement 5 `<svg>` avec les
+  mêmes tailles correctes après coup, aucune erreur console capturée.
+- Clic sur "Activité récente" : affiche "Derniers prêts"/"Échéances du jour", masque bien les deux
+  autres onglets.
+- Clic sur le lien "Voir les fonds actifs" de la tuile "Fonds bailleurs" (depuis "Vue d'ensemble") :
+  navigue correctement vers la liste `microfinance.fond.credit`, breadcrumb "Dashboard > Fonds de
+  crédit actifs" correct, aucune erreur console — confirme que la restructuration en onglets n'a
+  cassé aucun lien existant.
+- Aucune régression sur la suite de tests Python (131 tests, seul l'échec pré-existant déjà
+  documenté persiste) : le Lot 7 ne touche que JS/XML/SCSS, aucun modèle Python modifié.
+
+**Non vérifié en navigateur** : le rendu des deux graphiques fonds bailleurs eux-mêmes avec des
+données réelles (base de test vide, sans fonds), et le changement de société active en cours de
+session (nécessiterait une configuration multi-société complète dans le navigateur de test) — ce
+dernier point repose sur le mécanisme déjà en place (remount du client action + refetch RPC complet
+à chaque montage, aucune donnée mise en cache côté client au-delà de `state.data`), inchangé par ce
+lot, mais pas exercé "en live" avec un changement de société réel.
+
+**Responsive** : sous 992px (seuil déjà utilisé pour la grille KPI, repris par cohérence), le
+panneau latéral se réduit à une colonne d'icônes seules de 56px, libellé accessible via l'attribut
+`title` natif du bouton (tooltip navigateur, pas de librairie JS supplémentaire) — non vérifié en
+navigateur à cette largeur précise (fait par ajustement CSS raisonné, pas testé visuellement).
+
 ## Écarts vs LPF (à confirmer)
 
 1. **`verification_disponibilite='at_request'` sans effet observable.** Son point d'ancrage naturel
