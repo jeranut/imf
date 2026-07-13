@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_fond_credit_tree" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.tree</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="arch" type="xml">
+            <tree decoration-muted="not active">
+                <field name="code" string="Code"/>
+                <field name="name" string="Nom du fonds"/>
+                <field name="bailleur_id" string="Bailleur de fonds"/>
+                <field name="scope" string="Portée"/>
+                <field name="company_id" string="Société" groups="base.group_multi_company"/>
+                <field name="date_debut" string="Date de début"/>
+                <field name="date_cloture" string="Date de clôture"/>
+                <field name="total_contributions" string="Total contributions"/>
+                <field name="total_decaisse" string="Total décaissé"/>
+                <field name="total_rembourse" string="Total remboursé"/>
+                <field name="solde_disponible" string="Solde disponible"/>
+                <field name="active" string="Actif" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_fond_credit_form" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.form</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="arch" type="xml">
+            <form string="Fonds de crédit bailleur">
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_contributions" type="object" class="oe_stat_button" icon="fa-money"
+                                string="Contributions"/>
+                        <button name="action_view_loans" type="object" class="oe_stat_button" icon="fa-book"
+                                string="Crédits rattachés"/>
+                    </div>
+                    <div class="oe_title">
+                        <h1><field name="name" string="Nom du fonds" placeholder="Nom du fonds"/></h1>
+                    </div>
+                    <group>
+                        <group string="Identification">
+                            <field name="code" string="Code"/>
+                            <field name="bailleur_id" string="Bailleur de fonds"/>
+                            <field name="scope" string="Portée du fonds" readonly="id"/>
+                            <field name="company_id" string="Société" readonly="id or scope == 'multi_company'"
+                                   invisible="scope == 'multi_company'"/>
+                            <field name="currency_id" string="Devise" groups="base.group_multi_currency"/>
+                            <field name="active" string="Actif"/>
+                        </group>
+                        <group string="Période">
+                            <field name="date_debut" string="Date de début"/>
+                            <field name="date_cloture" string="Date de clôture"/>
+                        </group>
+                    </group>
+                    <group string="Comptabilisation">
+                        <field name="passer_gl" string="Passer au grand livre"/>
+                        <field name="account_id" string="Compte comptable bailleur" required="passer_gl"/>
+                        <field name="verification_disponibilite" string="Vérifier la disponibilité des fonds"/>
+                    </group>
+                    <group string="Solde">
+                        <field name="total_contributions" string="Total contributions (net)"/>
+                        <field name="total_decaisse" string="Total décaissé"/>
+                        <field name="total_rembourse" string="Total remboursé"/>
+                        <field name="solde_disponible" string="Solde disponible"/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="view_microfinance_fond_credit_search" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.search</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name" string="Nom du fonds"/>
+                <field name="code" string="Code"/>
+                <field name="bailleur_id" string="Bailleur de fonds"/>
+                <field name="company_id" string="Société"/>
+                <filter name="active" string="Actifs" domain="[('active', '=', True)]"/>
+                <filter name="single_company" string="Agence unique" domain="[('scope', '=', 'single_company')]"/>
+                <filter name="multi_company" string="Multi-agences" domain="[('scope', '=', 'multi_company')]"/>
+                <filter name="date_debut" string="Date de début" date="date_debut"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_bailleur" string="Bailleur" context="{'group_by': 'bailleur_id'}"/>
+                    <filter name="group_company" string="Société" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_scope" string="Portée" context="{'group_by': 'scope'}"/>
+                    <filter name="group_date_debut" string="Date de début (mois)" context="{'group_by': 'date_debut:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="action_microfinance_fond_credit" model="ir.actions.act_window">
+        <field name="name">Fonds de crédit</field>
+        <field name="res_model">microfinance.fond.credit</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- Rapport "Utilisation des fonds" : vue liste + pivot sur microfinance.fond.credit
+         lui-même (total_contributions/total_decaisse/total_rembourse/solde_disponible sont déjà
+         des champs stockés agrégés par fonds), filtrable bailleur/société/période via la
+         recherche ci-dessus. Pour un fonds multi_company, ces 4 champs sont calculés en sudo()
+         (voir _compute_fond_totals) : l'affichage est donc bien identique quelle que soit
+         l'agence consultante. Pas de QWeb PDF dans cette itération. -->
+    <record id="view_microfinance_fond_usage_pivot" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.usage.pivot</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="arch" type="xml">
+            <pivot string="Utilisation des fonds">
+                <field name="bailleur_id" type="row"/>
+                <field name="total_contributions" type="measure" string="Total contributions"/>
+                <field name="total_decaisse" type="measure" string="Total décaissé"/>
+                <field name="total_rembourse" type="measure" string="Total remboursé"/>
+                <field name="solde_disponible" type="measure" string="Solde disponible"/>
+            </pivot>
+        </field>
+    </record>
+    <record id="view_microfinance_fond_usage_tree" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.usage.tree</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="arch" type="xml">
+            <tree string="Utilisation des fonds" create="0" edit="0">
+                <field name="bailleur_id" string="Bailleur de fonds"/>
+                <field name="code" string="Code"/>
+                <field name="name" string="Nom du fonds"/>
+                <field name="company_id" string="Société" groups="base.group_multi_company"/>
+                <field name="date_debut" string="Date de début"/>
+                <field name="total_contributions" string="Total contributions"/>
+                <field name="total_decaisse" string="Total décaissé"/>
+                <field name="total_rembourse" string="Total remboursé"/>
+                <field name="solde_disponible" string="Solde disponible"/>
+            </tree>
+        </field>
+    </record>
+    <record id="action_microfinance_fond_usage_report" model="ir.actions.act_window">
+        <field name="name">Utilisation des fonds</field>
+        <field name="res_model">microfinance.fond.credit</field>
+        <field name="view_mode">tree,pivot</field>
+        <field name="context">{'search_default_active': 1}</field>
+        <field name="help" type="html">
+            <p>Vue consolidée par fonds/bailleur : contributions, décaissements, remboursements et
+               solde disponible. Filtrez par bailleur, société ou période via la recherche.</p>
+        </field>
+    </record>
+</odoo>

@@ -21,5 +21,10 @@ from . import test_partner_microfinance_fields
 from . import test_dashboard_overdue_flux
 from . import test_dashboard_recent_activity
 from . import test_dashboard_company_header
+<<<<<<< HEAD
 from . import test_agency_code
 from . import test_agency_numbering
+=======
+from . import test_fond_bailleur
+from . import test_fond_bailleur_dashboard
+>>>>>>> origin/main

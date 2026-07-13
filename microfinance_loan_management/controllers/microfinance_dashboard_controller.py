@@ -84,6 +84,11 @@ class MicrofinanceDashboardController(http.Controller):
 
         par_buckets = Loan.get_par_buckets(company.id)
 
+        FondCredit = env['microfinance.fond.credit']
+        fond_kpi = FondCredit.get_dashboard_kpi(company.id)
+        fond_multi_chart = FondCredit.get_multi_company_usage_chart()
+        fond_single_chart = FondCredit.get_single_company_chart(company.id)
+
         # Badge/libellé "En cours" (vert) / "En attente" (orange) pour les états simplifiés
         # demandés par le panneau "Derniers prêts" ; les autres états réutilisent leur libellé
         # existant (state_selection) avec une couleur cohérente avec les decoration- déjà
@@ -160,8 +165,12 @@ class MicrofinanceDashboardController(http.Controller):
                 'outstanding_amount': outstanding_amount,
                 'overdue_amount': overdue_amount,
                 'default_rate': default_rate,
+                'fond_bailleur_total': fond_kpi['total'],
+                'fond_bailleur_count': fond_kpi['count'],
             },
             'loans_by_state': loans_by_state,
+            'fond_multi_chart': fond_multi_chart,
+            'fond_single_chart': fond_single_chart,
             'monthly': {
                 'labels': month_labels,
                 'disbursement': [monthly_disbursement[key] for key in month_keys],

@@ -16,4 +16,7 @@ from . import microfinance_client_representative
 from . import microfinance_client_blacklist
 from . import microfinance_client_category
 from . import microfinance_client_group_member
+from . import microfinance_bailleur_fonds
+from . import microfinance_fond_credit
+from . import microfinance_fond_contribution
 from . import res_partner

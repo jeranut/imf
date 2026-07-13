@@ -15,6 +15,16 @@ class MicrofinanceLoan(models.Model):
     name = fields.Char(string='Référence', default='Nouveau', copy=False, readonly=True, tracking=True)
     partner_id = fields.Many2one('res.partner', string='Emprunteur', required=True, tracking=True)
     product_id = fields.Many2one('microfinance.loan.product', string='Produit', required=True, tracking=True)
+    fond_credit_id = fields.Many2one(
+        'microfinance.fond.credit', string='Fonds de crédit rotatif', tracking=True,
+        domain="[('active', '=', True), "
+               "'|', ('date_cloture', '=', False), ('date_cloture', '>=', context_today().strftime('%Y-%m-%d')), "
+               "'|', '&', ('scope', '=', 'single_company'), ('company_id', '=', company_id), ('scope', '=', 'multi_company')]",
+        help="Fonds bailleur rotatif dont ce crédit consomme le solde disponible au décaissement. "
+             "Un fonds « Agence unique » d'une autre société n'apparaît jamais dans ce domaine ; "
+             "un fonds « Multi-agences » (scope='multi_company') est toujours proposé, quelle que "
+             "soit la société courante.",
+    )
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True, tracking=True)
     currency_id = fields.Many2one('res.currency', string='Devise', default=lambda self: self.env.company.currency_id, required=True)
     loan_amount = fields.Monetary(string='Montant crédit', required=True, tracking=True)
@@ -752,12 +762,63 @@ class MicrofinanceLoan(models.Model):
             loan.message_post(body=_('Frais de dossier encaissés (%.2f). Écriture : %s') % (loan.fee_amount_due, move.name))
         return True
 
+    def _get_principal_outstanding(self):
+        """Principal restant dû de ce crédit (hors intérêts/pénalités) : somme des
+        principal_amount des échéances diminuée du principal déjà payé ; si aucune échéance
+        n'existe encore (crédit approuvé, pas encore décaissé), retombe sur loan_amount (capital
+        plein déjà réservé sur le fonds bailleur dès l'approbation). Partagé entre
+        MicrofinanceFondCredit._compute_fond_totals() (agrégat par fonds) et
+        _check_fond_disponibilite() ci-dessous (réservation du crédit en cours de traitement)."""
+        self.ensure_one()
+        if self.installment_ids:
+            return sum(self.installment_ids.mapped('principal_amount')) - sum(self.installment_ids.mapped('paid_principal'))
+        return self.loan_amount
+
+    def _check_fond_disponibilite(self):
+        """Vérifie la disponibilité du fonds de crédit rotatif rattaché (fond_credit_id), selon
+        fond_credit_id.verification_disponibilite. Méthode réutilisable, mais avec un seul point
+        d'ancrage réel pour l'instant : action_disburse() ci-dessous, qui ne déclenche un contrôle
+        que si verification_disponibilite == 'at_disbursement'. 'never' ET 'at_request' laissent
+        donc tous deux passer le décaissement sans contrôle ici : 'at_request' n'a et ne doit avoir
+        AUCUN effet observable tant que microfinance.loan.application (son point d'ancrage prévu,
+        la transition vers l'état "submitted") reste hors-périmètre, non câblé au module. Ne pas
+        le traiter comme un repli silencieux vers 'at_disbursement' : ce serait un comportement de
+        blocage non documenté et non voulu par la configuration choisie par l'utilisateur."""
+        for loan in self:
+            fond = loan.fond_credit_id
+            if not fond or fond.verification_disponibilite != 'at_disbursement':
+                continue
+            today = fields.Date.context_today(loan)
+            if fond.date_debut > today:
+                raise UserError(_(
+                    'Le fonds "%(fond)s" n\'est pas encore actif (date de début : %(date)s).'
+                ) % {'fond': fond.name, 'date': fond.date_debut})
+            if fond.date_cloture and fond.date_cloture < today:
+                raise UserError(_(
+                    'Le fonds "%(fond)s" est clôturé depuis le %(date)s.'
+                ) % {'fond': fond.name, 'date': fond.date_cloture})
+            # fond.solde_disponible a déjà déduit la réservation de CE crédit lui-même (déjà à
+            # l'état 'approved', donc déjà compté dans l'encours agrégé du fonds) : on la
+            # rajoute pour obtenir le solde réellement disponible AVANT ce crédit, seule base de
+            # comparaison correcte pour distinguer "fonds vide" de "solde insuffisant".
+            solde_avant_ce_credit = fond.solde_disponible + loan._get_principal_outstanding()
+            if solde_avant_ce_credit <= 0:
+                raise UserError(_(
+                    "Ce fonds ne dispose d'aucun solde disponible. Veuillez l'approvisionner via "
+                    "une contribution avant de poursuivre."
+                ))
+            if solde_avant_ce_credit < loan.loan_amount:
+                raise UserError(_(
+                    'Solde insuffisant sur le fonds « %(fond)s » (disponible : %(disponible)s, demandé : %(demande)s).'
+                ) % {'fond': fond.name, 'disponible': solde_avant_ce_credit, 'demande': loan.loan_amount})
+
     def action_disburse(self):
         for loan in self:
             if loan.state != 'approved':
                 raise UserError(_('Le crédit doit être approuvé avant décaissement.'))
             if loan.product_id.fee_charged_before_disbursement and not loan.fee_paid and loan.fee_amount_due > 0:
                 raise UserError(_('Les frais de dossier doivent être encaissés avant le décaissement.'))
+            loan._check_fond_disponibilite()
             if not loan.installment_ids:
                 loan.action_generate_schedule()
             move = self.env['account.move'].with_context(
