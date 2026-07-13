@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_bailleur_fonds_tree" model="ir.ui.view">
+        <field name="name">microfinance.bailleur.fonds.tree</field>
+        <field name="model">microfinance.bailleur.fonds</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="name" string="Nom du bailleur"/>
+                <field name="code" string="Code"/>
+                <field name="active" string="Actif"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_bailleur_fonds_form" model="ir.ui.view">
+        <field name="name">microfinance.bailleur.fonds.form</field>
+        <field name="model">microfinance.bailleur.fonds</field>
+        <field name="arch" type="xml">
+            <form string="Bailleur de fonds">
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" string="Nom du bailleur" placeholder="Nom du bailleur"/></h1></div>
+                    <group>
+                        <field name="code" string="Code"/>
+                        <field name="active" string="Actif"/>
+                    </group>
+                    <group string="Remarques">
+                        <field name="note" string="Remarques" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="view_microfinance_bailleur_fonds_search" model="ir.ui.view">
+        <field name="name">microfinance.bailleur.fonds.search</field>
+        <field name="model">microfinance.bailleur.fonds</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name" string="Nom du bailleur"/>
+                <field name="code" string="Code"/>
+                <filter name="inactive" string="Inactifs" domain="[('active', '=', False)]"/>
+            </search>
+        </field>
+    </record>
+    <record id="action_microfinance_bailleur_fonds" model="ir.actions.act_window">
+        <field name="name">Bailleurs de fonds</field>
+        <field name="res_model">microfinance.bailleur.fonds</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

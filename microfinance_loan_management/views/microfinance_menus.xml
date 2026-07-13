@@ -12,11 +12,13 @@
     <menuitem id="menu_microfinance_installments" name="Échéances" parent="menu_credits_root" action="action_microfinance_installment" sequence="2"/>
     <menuitem id="menu_microfinance_payments" name="Remboursements" parent="menu_credits_root" action="action_microfinance_payment" sequence="3"/>
     <menuitem id="menu_microfinance_guarantees" name="Garanties" parent="menu_credits_root" action="action_microfinance_guarantee" sequence="4"/>
+    <menuitem id="menu_microfinance_fond_contribution" name="Contributions bailleurs" parent="menu_credits_root" action="action_microfinance_fond_contribution" sequence="5"/>
     <menuitem id="menu_microfinance_collection" name="Recouvrement" parent="menu_microfinance_root" sequence="20"/>
     <menuitem id="menu_microfinance_visits" name="Visites terrain" parent="menu_microfinance_collection" action="action_microfinance_visit" sequence="1"/>
     <menuitem id="menu_microfinance_analysis" name="Analyse" parent="menu_microfinance_root" sequence="30"/>
     <menuitem id="menu_microfinance_analysis_installments" name="Analyse échéances" parent="menu_microfinance_analysis" action="action_microfinance_installment" sequence="1"/>
     <menuitem id="menu_microfinance_analysis_payments" name="Analyse paiements" parent="menu_microfinance_analysis" action="action_microfinance_payment" sequence="2"/>
+    <menuitem id="menu_microfinance_analysis_fond_usage" name="Utilisation des fonds" parent="menu_microfinance_analysis" action="action_microfinance_fond_usage_report" sequence="3"/>
     <menuitem id="menu_microfinance_config" name="Configuration" parent="menu_microfinance_root" sequence="90" groups="microfinance_loan_management.group_microfinance_manager"/>
     <menuitem id="menu_microfinance_products" name="Produits de crédit" parent="menu_microfinance_config" action="action_microfinance_loan_product" sequence="1"/>
     <menuitem id="menu_microfinance_repayment_frequency" name="Périodicités de remboursement" parent="menu_microfinance_config" action="action_microfinance_repayment_frequency" sequence="2"/>
@@ -24,4 +26,6 @@
     <menuitem id="menu_microfinance_provision_rule" name="Règles de provisionnement" parent="menu_microfinance_config" action="action_microfinance_provision_rule" sequence="3"/>
     <menuitem id="menu_microfinance_guarantee_valuation_rule" name="Ratios de valorisation des garanties" parent="menu_microfinance_config" action="action_microfinance_guarantee_valuation_rule" sequence="4"/>
     <menuitem id="menu_microfinance_profession" name="Professions" parent="menu_microfinance_config" action="action_microfinance_profession" sequence="5"/>
+    <menuitem id="menu_microfinance_bailleur_fonds" name="Bailleurs de fonds" parent="menu_microfinance_config" action="action_microfinance_bailleur_fonds" sequence="6"/>
+    <menuitem id="menu_microfinance_fond_credit" name="Fonds de crédit" parent="menu_microfinance_config" action="action_microfinance_fond_credit" sequence="7"/>
 </odoo>

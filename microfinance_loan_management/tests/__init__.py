@@ -21,3 +21,4 @@ from . import test_partner_microfinance_fields
 from . import test_dashboard_overdue_flux
 from . import test_dashboard_recent_activity
 from . import test_dashboard_company_header
+from . import test_fond_bailleur

@@ -12,6 +12,7 @@
     'data': [
         'security/groups.xml',
         'security/microfinance_company_rules.xml',
+        'security/microfinance_fond_bailleur_rules.xml',
         'security/ir.model.access.csv',
         'data/sequence.xml',
         'data/cron.xml',
@@ -23,6 +24,9 @@
         'report/microfinance_loan_disbursement_receipt.xml',
         'views/microfinance_res_company_views.xml',
         'views/microfinance_loan_product_views.xml',
+        'views/microfinance_bailleur_fonds_views.xml',
+        'views/microfinance_fond_credit_views.xml',
+        'views/microfinance_fond_contribution_views.xml',
         'views/microfinance_profession_views.xml',
         'views/microfinance_repayment_frequency_views.xml',
         'views/microfinance_provision_rule_views.xml',

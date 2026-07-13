@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_fond_contribution_tree" model="ir.ui.view">
+        <field name="name">microfinance.fond.contribution.tree</field>
+        <field name="model">microfinance.fond.contribution</field>
+        <field name="arch" type="xml">
+            <tree decoration-success="state == 'posted'" decoration-muted="state == 'draft'">
+                <field name="date" string="Date"/>
+                <field name="fond_id" string="Fonds de crédit"/>
+                <field name="type_mouvement" string="Type de mouvement"/>
+                <field name="amount" string="Montant"/>
+                <field name="mode_paiement" string="Mode de paiement"/>
+                <field name="saisie_company_id" string="Agence de saisie" groups="base.group_multi_company"/>
+                <field name="company_id" string="Société du fonds" groups="base.group_multi_company"/>
+                <field name="state" string="État" widget="badge"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_fond_contribution_form" model="ir.ui.view">
+        <field name="name">microfinance.fond.contribution.form</field>
+        <field name="model">microfinance.fond.contribution</field>
+        <field name="arch" type="xml">
+            <form string="Contribution bailleur">
+                <header>
+                    <button name="action_post" string="Valider" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <field name="state" string="État" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Mouvement">
+                            <field name="fond_id" string="Fonds de crédit"/>
+                            <field name="date" string="Date"/>
+                            <field name="type_mouvement" string="Type de mouvement"/>
+                            <field name="amount" string="Montant"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                        <group string="Paiement">
+                            <field name="mode_paiement" string="Mode de paiement"/>
+                            <field name="journal_id" string="Journal bancaire"
+                                   required="mode_paiement in ('cheque', 'virement')"/>
+                            <field name="description" string="Description / Référence bailleur"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Société" groups="base.group_multi_company">
+                            <field name="saisie_company_id" string="Agence de saisie"/>
+                            <field name="company_id" string="Société du fonds"/>
+                        </group>
+                        <group string="Comptabilisation">
+                            <field name="move_id" string="Écriture comptable"/>
+                        </group>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="view_microfinance_fond_contribution_search" model="ir.ui.view">
+        <field name="name">microfinance.fond.contribution.search</field>
+        <field name="model">microfinance.fond.contribution</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="fond_id" string="Fonds de crédit"/>
+                <field name="date" string="Date"/>
+                <field name="saisie_company_id" string="Agence de saisie"/>
+                <filter name="draft" string="Brouillon" domain="[('state', '=', 'draft')]"/>
+                <filter name="posted" string="Validées" domain="[('state', '=', 'posted')]"/>
+                <filter name="depot" string="Dépôts" domain="[('type_mouvement', '=', 'depot')]"/>
+                <filter name="retrait" string="Retraits" domain="[('type_mouvement', '=', 'retrait')]"/>
+                <filter name="period" string="Date" date="date"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_fond" string="Fonds de crédit" context="{'group_by': 'fond_id'}"/>
+                    <filter name="group_saisie_company" string="Agence de saisie" context="{'group_by': 'saisie_company_id'}"/>
+                    <filter name="group_type" string="Type de mouvement" context="{'group_by': 'type_mouvement'}"/>
+                    <filter name="group_date" string="Date (mois)" context="{'group_by': 'date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="action_microfinance_fond_contribution" model="ir.actions.act_window">
+        <field name="name">Contributions</field>
+        <field name="res_model">microfinance.fond.contribution</field>
+        <field name="view_mode">tree,form,pivot</field>
+    </record>
+</odoo>

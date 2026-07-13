@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- microfinance.bailleur.fonds : référentiel global sans company_id (comme "Professions" ou
+         "Périodicités de remboursement"), volontairement partagé entre toutes les agences, sans
+         règle ir.rule : un même bailleur peut financer plusieurs agences sans dupliquer sa fiche. -->
+
+    <!-- microfinance.fond.credit et microfinance.fond.contribution : PREMIÈRE occurrence dans ce
+         module d'un pattern de "partage optionnel" par société, différent du cloisonnement
+         strict utilisé partout ailleurs (security/microfinance_company_rules.xml, domaine
+         [('company_id', 'in', company_ids)] sans clause OR). Un fonds "single_company"
+         (company_id renseigné) n'est visible que dans son agence, comme d'habitude ; un fonds
+         "multi_company" (company_id vide) est en revanche visible et exploitable depuis TOUTES
+         les agences, par conception (fonds bailleur partagé/consolidé entre plusieurs agences).
+         Ne pas "corriger" ce domaine lors d'un futur audit multi-société : l'absence de
+         cloisonnement strict sur la branche company_id=False est intentionnelle ici. -->
+    <record id="microfinance_fond_credit_company_rule" model="ir.rule">
+        <field name="name">Microfinance fonds de crédit bailleur : partage optionnel par société</field>
+        <field name="model_id" ref="model_microfinance_fond_credit"/>
+        <field name="domain_force">['|', ('company_id', 'in', company_ids), ('company_id', '=', False)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <!-- company_id est un champ related=fond_id.company_id, store=True sur la contribution :
+         on peut donc appliquer directement le même domaine de partage optionnel sans jointure
+         via fond_id. -->
+    <record id="microfinance_fond_contribution_company_rule" model="ir.rule">
+        <field name="name">Microfinance contribution bailleur : partage optionnel par société</field>
+        <field name="model_id" ref="model_microfinance_fond_contribution"/>
+        <field name="domain_force">['|', ('company_id', 'in', company_ids), ('company_id', '=', False)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+</odoo>
