@@ -37,7 +37,7 @@ class TestSavingsProductCodeSequence(SavingsCommon):
             self.env.company.savings_product_code_prefix = 'AUTRE'
 
     def test_prefix_editable_and_lockable_on_fresh_company(self):
-        fresh_company = self.env['res.company'].create({'name': 'Société sans produit épargne (test)'})
+        fresh_company = self.env['res.company'].create({'name': 'Société sans produit épargne (test)', 'agency_code': 'ZB'})
         self.assertFalse(fresh_company.savings_product_code_locked)
         fresh_company.savings_product_code_prefix = 'SAV'
         product = self.env['microfinance.savings.product'].create(self._product_vals(company_id=fresh_company.id))

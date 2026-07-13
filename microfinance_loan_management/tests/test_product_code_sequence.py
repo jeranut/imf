@@ -37,7 +37,7 @@ class TestLoanProductCodeSequence(MicrofinanceCommon):
         # self.env.company a déjà un produit crédit (fixture commune cls.product) : on utilise
         # une société neuve, sans aucun produit, pour tester un changement de préfixe encore
         # autorisé (pas encore verrouillé).
-        fresh_company = self.env['res.company'].create({'name': 'Société sans produit crédit (test)'})
+        fresh_company = self.env['res.company'].create({'name': 'Société sans produit crédit (test)', 'agency_code': 'Z8'})
         self.assertFalse(fresh_company.loan_product_code_locked)
         fresh_company.loan_product_code_prefix = 'PRET'
         product = self.env['microfinance.loan.product'].create(self._product_vals(company_id=fresh_company.id))
@@ -51,7 +51,7 @@ class TestLoanProductCodeSequence(MicrofinanceCommon):
             self.env.company.loan_product_code_prefix = 'AUTRE'
 
     def test_prefix_editable_and_lockable_on_fresh_company(self):
-        fresh_company = self.env['res.company'].create({'name': 'Société sans produit crédit (test 2)'})
+        fresh_company = self.env['res.company'].create({'name': 'Société sans produit crédit (test 2)', 'agency_code': 'Z9'})
         fresh_company.loan_product_code_prefix = 'PRET'  # toujours modifiable, aucun produit
         self.env['microfinance.loan.product'].create(self._product_vals(company_id=fresh_company.id))
         self.assertTrue(fresh_company.loan_product_code_locked)

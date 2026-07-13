@@ -113,6 +113,32 @@ def _create_journals(env, company):
         Journal.create(vals)
 
 
+# Agences CEFOR déjà identifiées au moment de l'introduction du champ agency_code (liste non
+# exhaustive, 25 agences prévues au total — les suivantes sont ajoutées manuellement par
+# l'utilisateur via le formulaire société). Matching par nom exact, jamais par ID statique (ces
+# sociétés existaient déjà en base avant ce module).
+KNOWN_AGENCY_CODES = {
+    'CEFOR Isotry': 'IS',
+    'CEFOR Ambanidia': 'BD',
+    'CEFOR Ampitatafika': 'SY',
+    'CEFOR Andranonahoatra': 'TA',
+    'CEFOR Sabotsy Namehana': 'SB',
+    'CEFOR Mahitsy': 'MA',
+    'CEFOR Tsaramasay': 'TS',
+    'CEFOR Ambohitrimanjaka': 'KA',
+    'CEFOR Andoharanofotsy': 'AD',
+    'CEFOR Ambohimanarina': 'BM',
+    'CEFOR Andravoahangy': 'GY',
+}
+
+
+def _seed_known_agency_codes(env):
+    for name, code in KNOWN_AGENCY_CODES.items():
+        company = env['res.company'].search([('name', '=', name), ('agency_code', '=', False)], limit=1)
+        if company:
+            company.agency_code = code
+
+
 def post_init_hook(env):
     """Sur chaque société utilisant le plan PCEC (plan_compta_pcec, chart_template ==
     'mg_pcec'), crée les sous-comptes dédiés par segment et les 7 journaux standards. Les
@@ -123,3 +149,4 @@ def post_init_hook(env):
             continue
         _create_subaccounts(env, company, LOAN_NEW_SUBACCOUNTS)
         _create_journals(env, company)
+    _seed_known_agency_codes(env)

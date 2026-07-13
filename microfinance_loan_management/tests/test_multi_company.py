@@ -10,7 +10,7 @@ class TestMultiCompanyIsolation(MicrofinanceCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company_b = cls.env['res.company'].create({'name': 'Agence B crédit (test)'})
+        cls.company_b = cls.env['res.company'].create({'name': 'Agence B crédit (test)', 'agency_code': 'Z1'})
         cls.account_company_b = cls.env['account.account'].create({
             'name': 'Prêts clients agence B',
             'code': 'BPRET',

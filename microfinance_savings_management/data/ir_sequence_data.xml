@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="seq_microfinance_savings_account" model="ir.sequence">
-        <field name="name">Compte épargne microfinance</field>
-        <field name="code">microfinance.savings.account</field>
-        <field name="prefix">EP/%(year)s/</field>
-        <field name="padding">5</field>
-        <field name="company_id" eval="False"/>
-    </record>
+    <!-- Numérotation de microfinance.savings.account : plus de séquence globale ici, remplacée
+         par une séquence dédiée par société et par type (I/G/E/T) créée à la demande (voir
+         res.company._get_or_create_numbering_sequence), format AGENCE/TYPE/SÉRIE. -->
     <!-- Préfixe configurable par société (res.company.savings_product_code_prefix), concaténé
          en Python à la création du produit — séquence globale, même logique que ci-dessus. -->
     <record id="seq_microfinance_savings_product" model="ir.sequence">

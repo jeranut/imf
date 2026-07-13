@@ -58,7 +58,7 @@ class TestDashboardOverdueFlux(MicrofinanceCommon):
         first = loan.installment_ids.sorted('sequence')[0]
         first.write({'arrears_onset_date': self._month_start(1) + relativedelta(days=5), 'arrears_cured_date': False})
 
-        other_company = self.env['res.company'].create({'name': 'Société sans impayés (test)'})
+        other_company = self.env['res.company'].create({'name': 'Société sans impayés (test)', 'agency_code': 'Z6'})
         month_keys = [self._month_key(m) for m in (1, 0)]
         flux_other = self.env['microfinance.loan'].get_overdue_monthly_flux(other_company.id, month_keys)
 

@@ -8,7 +8,7 @@ class TestDashboardRecentActivity(MicrofinanceCommon):
 
     def test_get_recent_loans_limits_and_orders_and_scopes_by_company(self):
         loans = [self._activate_loan(term=2) for _ in range(7)]
-        other_company = self.env['res.company'].create({'name': 'Société sans prêts récents (test)'})
+        other_company = self.env['res.company'].create({'name': 'Société sans prêts récents (test)', 'agency_code': 'Z2'})
 
         recent = self.env['microfinance.loan'].get_recent_loans(self.env.company.id, limit=5)
         expected_ids = sorted((loan.id for loan in loans), reverse=True)[:5]
@@ -42,5 +42,5 @@ class TestDashboardRecentActivity(MicrofinanceCommon):
         self.assertNotIn(first, due_today, 'Une échéance déjà soldée ne doit pas apparaître dans les échéances du jour')
         self.assertNotIn(third, due_today)
 
-        other_company = self.env['res.company'].create({'name': 'Société sans échéances du jour (test)'})
+        other_company = self.env['res.company'].create({'name': 'Société sans échéances du jour (test)', 'agency_code': 'Z3'})
         self.assertFalse(self.env['microfinance.loan.installment'].get_due_today(other_company.id))

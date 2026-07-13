@@ -395,7 +395,11 @@ class MicrofinanceLoanApplication(models.Model):
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get('name', 'Nouveau') == 'Nouveau':
-                vals['name'] = self.env['ir.sequence'].next_by_code('microfinance.loan.application') or 'Nouveau'
+                # agency_code est obligatoire sur res.company (NOT NULL) : toute société valide
+                # en possède un, pas besoin de re-vérifier ici.
+                company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
+                number = company._get_or_create_numbering_sequence('microfinance.loan.application.agency')
+                vals['name'] = '%s/%s' % (company.agency_code, number)
             if vals.get('state') and vals['state'] != 'draft':
                 raise UserError(_('Un nouveau dossier d\'instruction doit démarrer à l\'état Brouillon.'))
         return super().create(vals_list)

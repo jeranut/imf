@@ -6,6 +6,7 @@
         <field name="inherit_id" ref="base.view_company_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='name']" position="after">
+                <field name="agency_code" placeholder="ex. IS"/>
                 <field name="loan_product_code_locked" invisible="1"/>
                 <field name="loan_product_code_prefix" readonly="loan_product_code_locked"/>
             </xpath>

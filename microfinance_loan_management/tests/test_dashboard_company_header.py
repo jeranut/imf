@@ -36,10 +36,10 @@ class TestDashboardCompanyHeader(MicrofinanceCommon):
         self.assertNotIn('—', company._get_microfinance_dashboard_subtitle())
 
     def test_uses_default_logo_by_default(self):
-        company = self.env['res.company'].create({'name': 'Agence sans logo (test)'})
+        company = self.env['res.company'].create({'name': 'Agence sans logo (test)', 'agency_code': 'Z4'})
         self.assertTrue(company.uses_default_logo, 'Une société sans logo personnalisé doit rester sur le repli visuel')
 
     def test_custom_logo_disables_default_flag(self):
-        company = self.env['res.company'].create({'name': 'Agence avec logo (test)'})
+        company = self.env['res.company'].create({'name': 'Agence avec logo (test)', 'agency_code': 'Z5'})
         company.logo = ONE_PIXEL_PNG
         self.assertFalse(company.uses_default_logo, "Un logo personnalisé doit désactiver le repli visuel")

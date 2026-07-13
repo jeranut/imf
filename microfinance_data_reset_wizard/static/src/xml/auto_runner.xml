@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <templates xml:space="preserve">
-    <t t-name="data_reset_wizard.AutoRunner">
-        <div class="o_data_reset_auto_runner d-inline-flex align-items-center gap-2">
+    <t t-name="microfinance_data_reset_wizard.AutoRunner">
+        <div class="o_microfinance_data_reset_auto_runner d-inline-flex align-items-center gap-2">
             <button type="button" class="btn btn-secondary"
                     t-on-click="onClickStart"
                     t-att-disabled="state.running">

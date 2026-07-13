@@ -3,6 +3,7 @@ base_accounting_kit/
 base_account_budget/
 hr_advance_salary/
 hr_payroll_community/
+hr_payroll_document/
 
 # Python
 __pycache__/

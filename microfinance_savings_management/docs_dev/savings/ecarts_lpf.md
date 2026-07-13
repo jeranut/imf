@@ -66,6 +66,74 @@ entièrement vierge et synthétique (créée par `createdb` puis installation fr
 via `-i`, sans copie d'aucune base réelle même jetable), détruite après coup — **0 échec, 0
 erreur sur 54 tests**.
 
+## Correctifs appliqués (2026-07-12, session 4)
+
+Correction du point bloquant #6 (numérotation de compte non conforme au format agence+type+série,
+cf. liste priorisée ci-dessous) : introduction de `res.company.agency_code`
+(`microfinance_loan_management/models/res_company.py`) et bascule des séquences globales
+`EP/%(year)s/NNNNN` (épargne) et `CR/%(year)s/NNNNN` (crédit) vers un format `AGENCE/TYPE/SÉRIE`
+(épargne) / `AGENCE/SÉRIE` (crédit), scopé par société via une `ir.sequence` créée à la demande
+par société (+ par type pour l'épargne) plutôt que pré-déclarée en XML — les agences restantes
+(jusqu'à 25 au total) sont ajoutées manuellement au fil de l'eau par formulaire société, une
+liste figée en XML n'aurait pas pu les couvrir à l'avance.
+
+- **`agency_code` rendu obligatoire sans condition** (pas de gate `microfinance_context` comme
+  sur `res.partner`) : vérifié concrètement avant implémentation que la base contenant les
+  modules microfinance (MOWGLI) ne contient que des agences CEFOR (11/11 sociétés au moment de
+  l'audit) — EAT/immobilier tournent sur des bases Postgres entièrement séparées sur cette
+  instance, aucun `res.company` n'y est donc réellement partagé avec un usage non-microfinance.
+  Une contrainte conditionnée au contexte aurait par ailleurs été inopérante en pratique : aucun
+  écran dédié "création d'agence" n'existe côté microfinance, les sociétés se créent via le
+  formulaire standard Réglages > Sociétés, qui ne transporte jamais `microfinance_context`.
+  Implémenté via `required=True` sur le champ (seul mécanisme qui bloque de façon fiable une
+  société jamais mentionnant `agency_code` du tout — un `@api.constrains` ne se déclenche que
+  pour les champs présents dans les `vals` d'écriture, donc jamais pour un champ simplement
+  omis) + un `create()`/`write()` explicites pour un message métier clair avant la contrainte
+  SQL brute.
+- **`microfinance.loan.application` ("dossier d'instruction de crédit") : tentative de
+  numérotation abandonnée, modèle non fonctionnel découvert en cours de session.** Deux
+  problèmes distincts trouvés en creusant l'écart de numérotation de ce modèle :
+  1. Il appelait déjà `ir.sequence.next_by_code('microfinance.loan.application')` sans qu'aucune
+     `ir.sequence` de ce code n'existe dans le module — son `name` restait donc en permanence à
+     `'Nouveau'`.
+  2. Plus grave : le fichier `models/microfinance_loan_application.py` (549 lignes, ajouté par
+     le commit `6546bb2`) n'a **jamais** été importé dans `models/__init__.py` — le modèle n'a
+     donc jamais existé dans le registre Odoo de cette instance. En tentant de l'enregistrer
+     pour pouvoir tester la numérotation, la base MOWGLI a refusé de charger : le modèle
+     référence 6 sous-modèles inexistants (`microfinance.loan.application.dependent`,
+     `.guarantor.line`, `.document.line`, `.income.line`, `.field.visit`, `.social.score`),
+     aucun n'étant défini nulle part dans le code. Remise en état hors périmètre de cette
+     session (numérotation) — l'import a été **annulé** pour ne pas casser la base. Le code de
+     numérotation reste présent dans `create()` de ce fichier (correct et prêt à l'emploi) mais
+     **inerte et non testé** tant que ce modèle n'est pas réellement remis en état (créer les 6
+     sous-modèles ou retirer les champs qui les référencent).
+  Seul `microfinance.loan` (le crédit actif, modèle qui fonctionne) a donc reçu la numérotation
+  `AGENCE/SÉRIE` en pratique.
+- **Code de type de compte épargne (I/G/E/T)** dérivé du type de client
+  (`res.partner.microfinance_client_type` : individuel/groupe/entreprise), sauf pour un produit
+  à terme (`product_type = 'term_deposit'`) qui reçoit toujours le code T quel que soit le
+  titulaire. Les 4 codes sont implémentés pour rester fidèle à la convention LPF, bien que CEFOR
+  n'utilise aujourd'hui que Individuel/Entreprise (Groupe non activé).
+- **Pas de garde-fou séparé au niveau de la numérotation** : `agency_code` étant `required=True`
+  (contrainte `NOT NULL` en base), une société sans code est structurellement impossible —
+  vérifié qu'un `UPDATE` SQL direct pour simuler ce cas échoue lui aussi sur la contrainte NOT
+  NULL. Un `UserError` de repli dans `create()` aurait donc été du code mort.
+- **Aucun conflit avec le préfixe de code produit** (`loan_product_code_prefix`/
+  `savings_product_code_prefix`, `EP00001`/`CR00001`) : mécanisme entièrement disjoint, sur un
+  modèle différent (`microfinance.loan.product`/`microfinance.savings.product`, pas
+  `microfinance.loan`/`microfinance.savings.account`), vérifié avant implémentation.
+
+Tests (session 4) : nouveaux fichiers `test_agency_code.py` (crédit) et `test_agency_numbering.py`
+dans les deux modules ; 12 créations de société existantes dans la suite de tests (hors périmètre
+de cette session) ont dû être mises à jour pour fournir un `agency_code`, la contrainte étant
+désormais inconditionnelle. Suite complète rejouée sur **MOWGLI** (base réelle, seule base avec
+les modules microfinance installés) : **178 tests, 0 erreur**, 3 échecs préexistants et
+**sans lien avec cette session** (`test_fee.test_disburse_nets_fee_in_single_move`,
+`test_provision.test_post_provisions_requires_product_accounts_configured`,
+`test_write_off.test_write_off_requires_product_account_configured`) — confirmés identiques en
+rejouant la suite sur le code d'avant session (via `git stash`) avant de conclure qu'ils étaient
+hors périmètre.
+
 ## Correctifs appliqués (2026-07-11, session 3)
 
 Décision métier actée : remplacement complet du mécanisme `upfront_apport` par le mécanisme
@@ -244,9 +312,13 @@ attendu :
 5. **Aucun produit d'épargne pré-créé** — sans les 2 produits par défaut, le premier testeur ne
    pourra rien saisir tant qu'un produit n'aura pas été configuré manuellement (comptes PCEC,
    journaux, taux). À préparer en amont du test live plutôt qu'à découvrir en live.
-6. **Numérotation de compte non conforme au format agence+type+série** — actuellement une
-   séquence globale `EP/AAAA/NNNNN`, pas ventilée par agence. Impact réglementaire/reporting à
-   évaluer avec Micka avant de généraliser sur plusieurs agences.
+6. ~~**Numérotation de compte non conforme au format agence+type+série**~~ — **Corrigé le
+   2026-07-12 (session 4) pour l'épargne (`microfinance.savings.account`) et le crédit actif
+   (`microfinance.loan`)** : `res.company.agency_code` + format `AGENCE/TYPE/SÉRIE` (épargne) et
+   `AGENCE/SÉRIE` (crédit), scopé par société. **`microfinance.loan.application` (dossier
+   d'instruction) non couvert** : modèle jamais enregistré dans le registre Odoo de cette
+   instance (jamais importé dans `models/__init__.py`) et référençant 6 sous-modèles inexistants
+   — remise en état hors périmètre, voir détail en tête de document.
 7. **Dépôts à terme incomplets** — la pénalité de retrait anticipé est désormais appliquée
    (2026-07-11), mais les bornes min/max (montant, taux, durée) par produit restent absentes ; à
    trancher explicitement "MVP suffisant" vs "hors scope" pour ce qui reste.

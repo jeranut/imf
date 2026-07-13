@@ -10,7 +10,7 @@ class TestSavingsMultiCompanyIsolation(SavingsCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company_b = cls.env['res.company'].create({'name': 'Agence B épargne (test)'})
+        cls.company_b = cls.env['res.company'].create({'name': 'Agence B épargne (test)', 'agency_code': 'ZA'})
         cls.savings_account_company_b = cls.env['account.account'].create({
             'name': 'Épargne agence B',
             'code': 'BSAV',

@@ -5,7 +5,14 @@
       "Bash(grep -n \"__moved\\\\|def update_db_column\\\\|column type\" /opt/odoo17/odoo/fields.py /opt/odoo17/odoo/models.py 2>/dev/null | head -30)",
       "Read(//opt/odoo17/odoo/**)",
       "Bash(sed -n '1000,1060p' /opt/odoo17/odoo/fields.py)",
-      "Read(//opt/odoo17/odoo/tools/**)"
+      "Read(//opt/odoo17/odoo/tools/**)",
+      "Bash(grep -n \"not_null_violation\\\\|Missing required value\\\\|_add_missing_default_values\" /opt/odoo17_2/odoo/odoo/models.py | head -10)",
+      "Read(//opt/odoo17_2/odoo/odoo/**)",
+      "Bash(grep -n \"Missing required value\\\\|required_field\\\\|def _create\\\\b\" /opt/odoo17_2/odoo/odoo/models.py | head -10 *)",
+      "Bash(grep -n \"def flush\\\\b\\\\|required and\\\\|_field_columns\\\\|IntegrityError\\\\|check_field_access_rights\\\\|MissingError\" /opt/odoo17_2/odoo/odoo/models.py | grep -i \"requir\" )",
+      "Bash(/opt/odoo17_2/venv/bin/python3 -m py_compile microfinance_loan_management/models/res_company.py)",
+      "Bash(sudo -u odoo17_2 /opt/odoo17_2/venv/bin/python3 /opt/odoo17_2/odoo/odoo-bin -c /opt/odoo17_2/odoo/odoo.conf -d MOWGLI --http-port=8071 --stop-after-init -u microfinance_loan_management,microfinance_savings_management)",
+      "Read(//opt/odoo17_2/odoo/**)"
     ]
   }
 }

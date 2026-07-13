@@ -92,7 +92,7 @@ class TestAutoDebit(SavingsCommon):
         self.assertFalse(loan_broken.payment_ids.filtered(lambda p: p.payment_origin == 'savings_auto_debit'))
 
     def test_multi_company_savings_account_isolation(self):
-        other_company = self.env['res.company'].create({'name': 'Autre société test'})
+        other_company = self.env['res.company'].create({'name': 'Autre société test', 'agency_code': 'ZC'})
         other_account = self._create_account(company_id=other_company.id)
         loan = self._create_loan()
         with self.assertRaises(ValidationError):

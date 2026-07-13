@@ -1,10 +1,53 @@
 # -*- coding: utf-8 -*-
-from odoo import _, fields, models
-from odoo.exceptions import UserError
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError, ValidationError
 
 
 class ResCompany(models.Model):
     _inherit = 'res.company'
+
+    agency_code = fields.Char(
+        string='Code agence', size=3, required=True,
+        help="Code court identifiant l'agence CEFOR (ex. IS pour Isotry). Sert de préfixe "
+             "automatique pour la numérotation des dossiers de crédit et des comptes "
+             "d'épargne (format AGENCE/TYPE/SÉRIE, ou AGENCE/SÉRIE pour le crédit). "
+             "Obligatoire pour toute société de cette instance.",
+    )
+
+    _sql_constraints = [
+        ('agency_code_unique', 'unique(agency_code)', "Le code agence doit être unique par société."),
+    ]
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        # required=True sur le champ suffit à empêcher l'enregistrement en base (NOT NULL),
+        # mais laisse remonter une erreur SQL brute jusqu'à l'utilisateur ; ce contrôle
+        # explicite intercepte le cas le plus courant (champ jamais renseigné) avec un message
+        # métier clair avant même d'atteindre la contrainte SQL.
+        for vals in vals_list:
+            if not vals.get('agency_code'):
+                raise ValidationError(_('Le code agence est obligatoire pour créer une agence CEFOR.'))
+        return super().create(vals_list)
+
+    def _get_or_create_numbering_sequence(self, code, padding=6):
+        """Renvoie le prochain numéro (chaîne, déjà complétée par des zéros à `padding`
+        chiffres) d'une séquence dédiée à cette société pour `code` — jamais partagée avec une
+        autre société. Créée à la demande plutôt que pré-déclarée par agence en XML : de
+        nouvelles agences sont ajoutées manuellement au fil de l'eau (jusqu'à 25 à terme), donc
+        aucune liste figée de sociétés ne peut être connue à l'avance."""
+        self.ensure_one()
+        Sequence = self.env['ir.sequence'].sudo()
+        sequence = Sequence.search([('code', '=', code), ('company_id', '=', self.id)], limit=1)
+        if not sequence:
+            sequence = Sequence.create({
+                'name': '%s (%s)' % (code, self.name),
+                'code': code,
+                'company_id': self.id,
+                'padding': padding,
+                'number_next': 1,
+                'number_increment': 1,
+            })
+        return sequence.next_by_id()
 
     loan_product_code_prefix = fields.Char(
         string='Préfixe code produit crédit', default='CR',
@@ -35,6 +78,8 @@ class ResCompany(models.Model):
         return '%s — %s' % (self.name, ', '.join(address_parts))
 
     def write(self, vals):
+        if 'agency_code' in vals and not vals['agency_code']:
+            raise ValidationError(_('Le code agence est obligatoire pour créer une agence CEFOR.'))
         if 'loan_product_code_prefix' in vals:
             Product = self.env['microfinance.loan.product']
             locked = self.filtered(lambda c: Product.search_count([('company_id', '=', c.id)]))

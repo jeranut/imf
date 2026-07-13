@@ -17,8 +17,8 @@ const STALL_THRESHOLD_MS = 5000;
 // en arrière-plan par le navigateur qui throttle les timers, erreur avalée,
 // etc.) alors que le serveur indique toujours state == 'running', et la
 // relance automatiquement.
-class DataResetAutoRunner extends Component {
-    static template = "data_reset_wizard.AutoRunner";
+class MicrofinanceDataResetAutoRunner extends Component {
+    static template = "microfinance_data_reset_wizard.AutoRunner";
     static props = { ...standardFieldProps };
 
     setup() {
@@ -77,7 +77,7 @@ class DataResetAutoRunner extends Component {
             while (!this.stopRequested) {
                 this.lastActivity = Date.now();
                 try {
-                    await this.orm.call("data.reset.wizard", "action_process_next_step", [[resId]]);
+                    await this.orm.call("microfinance.data.reset.wizard", "action_process_next_step", [[resId]]);
                 } catch (error) {
                     this.state.running = false;
                     await this.props.record.load();
@@ -98,9 +98,9 @@ class DataResetAutoRunner extends Component {
     }
 }
 
-export const dataResetAutoRunner = {
-    component: DataResetAutoRunner,
+export const microfinanceDataResetAutoRunner = {
+    component: MicrofinanceDataResetAutoRunner,
     supportedTypes: ["integer", "boolean", "char"],
 };
 
-registry.category("fields").add("data_reset_auto_runner", dataResetAutoRunner);
+registry.category("fields").add("microfinance_data_reset_auto_runner", microfinanceDataResetAutoRunner);

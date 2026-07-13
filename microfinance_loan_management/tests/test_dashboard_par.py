@@ -32,6 +32,6 @@ class TestDashboardPar(MicrofinanceCommon):
         self.assertEqual(par_buckets['values'][3], 0.0)
 
     def test_par_buckets_zero_when_no_portfolio(self):
-        empty_company = self.env['res.company'].create({'name': 'Société sans crédit'})
+        empty_company = self.env['res.company'].create({'name': 'Société sans crédit', 'agency_code': 'Z7'})
         par_buckets = self.env['microfinance.loan'].get_par_buckets(empty_company.id)
         self.assertEqual(par_buckets['values'], [0.0, 0.0, 0.0, 0.0])

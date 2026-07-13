@@ -9,3 +9,4 @@ from . import test_guarantee_savings
 from . import test_multi_company
 from . import test_savings_transaction_limits
 from . import test_product_code_sequence
+from . import test_agency_numbering

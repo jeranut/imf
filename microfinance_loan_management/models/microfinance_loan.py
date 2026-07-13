@@ -125,7 +125,11 @@ class MicrofinanceLoan(models.Model):
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get('name', 'Nouveau') == 'Nouveau':
-                vals['name'] = self.env['ir.sequence'].next_by_code('microfinance.loan') or 'Nouveau'
+                # agency_code est obligatoire sur res.company (NOT NULL) : toute société valide
+                # en possède un, pas besoin de re-vérifier ici.
+                company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
+                number = company._get_or_create_numbering_sequence('microfinance.loan.agency')
+                vals['name'] = '%s/%s' % (company.agency_code, number)
         return super().create(vals_list)
 
     @api.constrains('loan_amount', 'term', 'product_id')

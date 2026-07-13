@@ -41,11 +41,30 @@ class MicrofinanceSavingsAccount(models.Model):
     ], string='Motif de clôture')
     closure_reason_note = fields.Text(string='Note de clôture')
 
+    # Code de type de compte (convention LPF AGENCE/TYPE/SÉRIE) : dérivé du type de client
+    # (individuel/groupe/entreprise), sauf pour un produit à terme qui a toujours le code T,
+    # quel que soit le titulaire. CEFOR n'utilise aujourd'hui que Individuel/Entreprise (Groupe
+    # non activé), mais les 4 codes sont implémentés pour rester fidèle à la convention et
+    # couvrir une éventuelle activation future du type Groupe.
+    _CLIENT_TYPE_CODE = {'individual': 'I', 'group': 'G', 'company': 'E'}
+
+    def _get_account_type_code(self, partner, product):
+        if product.product_type == 'term_deposit':
+            return 'T'
+        return self._CLIENT_TYPE_CODE.get(partner.microfinance_client_type, 'I')
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get('name', 'Nouveau') == 'Nouveau':
-                vals['name'] = self.env['ir.sequence'].next_by_code('microfinance.savings.account') or 'Nouveau'
+                # agency_code est obligatoire sur res.company (NOT NULL) : toute société valide
+                # en possède un, pas besoin de re-vérifier ici.
+                company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
+                partner = self.env['res.partner'].browse(vals.get('partner_id'))
+                product = self.env['microfinance.savings.product'].browse(vals.get('product_id'))
+                type_code = self._get_account_type_code(partner, product)
+                number = company._get_or_create_numbering_sequence('microfinance.savings.account.%s' % type_code)
+                vals['name'] = '%s/%s/%s' % (company.agency_code, type_code, number)
         return super().create(vals_list)
 
     @api.depends('transaction_ids.amount', 'transaction_ids.transaction_type', 'transaction_ids.state')

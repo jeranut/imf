@@ -8,6 +8,7 @@ class MicrofinanceCommon(TransactionCase):
     def setUpClass(cls):
         super().setUpClass()
         company = cls.env.company
+        company.agency_code = 'T0'
         cls.loan_account = cls.env['account.account'].create({
             'name': 'Prêts clients test',
             'code': 'TPRET',

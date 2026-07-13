@@ -1,22 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <record id="view_data_reset_wizard_form" model="ir.ui.view">
-        <field name="name">data.reset.wizard.form</field>
-        <field name="model">data.reset.wizard</field>
+    <record id="view_microfinance_data_reset_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.data.reset.wizard.form</field>
+        <field name="model">microfinance.data.reset.wizard</field>
         <field name="arch" type="xml">
-            <form string="RAZ - Remise à zéro des données transactionnelles">
+            <form string="RAZ Microfinance - Remise à zéro par agence">
                 <div class="alert alert-danger" role="alert">
                     <strong>⚠️ Action irréversible.</strong>
-                    Ce module supprime définitivement des données (paiements, factures,
-                    commandes, mouvements de stock) pour les sociétés sélectionnées.
-                    Les produits, unités de mesure et la configuration ne sont pas
-                    touchés. <strong>Faites un backup complet de la base avant toute
+                    Ce module supprime définitivement des données microfinance
+                    (crédits, échéanciers, remboursements, garanties, scoring, visites
+                    de recouvrement, comptes et transactions d'épargne, écritures
+                    comptables liées) pour les agences sélectionnées.
+                    Les clients (res.partner), les produits de crédit/épargne, les
+                    profils de scoring, le plan comptable et la configuration des
+                    sociétés ne sont jamais touchés.
+                    <strong>Faites un backup complet de la base avant toute
                     exécution réelle.</strong>
                     Un verrou empêche toute exécution simultanée : si un message
-                    "opération déjà en cours" apparaît (par exemple en cliquant deux
-                    fois, ou depuis un autre onglet/utilisateur), patientez que
-                    l'opération en cours se termine avant de réessayer.
+                    "opération déjà en cours" apparaît, patientez que l'opération en
+                    cours se termine avant de réessayer.
                 </div>
 
                 <group invisible="state != 'draft'">
@@ -27,27 +30,26 @@
                 <group string="Périmètre à supprimer"
                        invisible="state != 'draft'">
                     <group>
-                        <field name="do_payments"/>
-                        <field name="do_advance_payment"/>
-                        <field name="do_intercompany"/>
-                        <field name="do_invoices"/>
-                        <field name="do_purchase"/>
+                        <field name="do_loans"/>
+                        <field name="do_loan_installments"/>
+                        <field name="do_loan_payments"/>
+                        <field name="do_loan_guarantees"/>
+                        <field name="do_scoring_lines"/>
                     </group>
                     <group>
-                        <field name="do_sale"/>
-                        <field name="do_stock"/>
-                        <field name="do_quants"/>
-                        <field name="do_daily_balance"/>
-                        <field name="do_daily_balance_mobile"/>
-                        <field name="do_hr_expense"/>
+                        <field name="do_reschedule_history"/>
+                        <field name="do_collection_visits"/>
+                        <field name="do_savings_accounts"/>
+                        <field name="do_savings_transactions"/>
+                        <field name="do_accounting_entries"/>
                     </group>
                 </group>
 
                 <group invisible="state != 'draft'">
                     <field name="i_confirm"/>
+                    <field name="confirm_text" invisible="not i_confirm"/>
                 </group>
 
-                <!-- Barre de progression, visible pendant/après le traitement -->
                 <group invisible="state == 'draft'">
                     <field name="is_dry_run" readonly="1"
                            string="Mode simulation (dry-run) ?"/>
@@ -59,8 +61,8 @@
                         <field name="progress" widget="progressbar"
                                options="{'editable': false}"/>
                         <span>
-                            <field name="step_index" readonly="1"/> / 
-                            <field name="total_steps" readonly="1"/> étapes
+                            <field name="step_index" readonly="1"/> /
+                            <field name="total_steps" readonly="1"/> agences
                         </span>
                     </div>
                 </group>
@@ -80,7 +82,6 @@
                 </group>
 
                 <footer>
-                    <!-- État brouillon : configuration -->
                     <button name="action_preview_counts" type="object"
                             string="Aperçu (lecture seule)" class="btn-secondary"
                             invisible="state != 'draft'"/>
@@ -90,20 +91,14 @@
                     <button name="action_start_execute" type="object"
                             string="Démarrer l'exécution réelle" class="btn-danger"
                             invisible="state != 'draft'"
-                            confirm="Cette action va supprimer définitivement les données sélectionnées. Confirmer ?"/>
+                            confirm="Cette action va supprimer définitivement les données microfinance sélectionnées. Confirmer ?"/>
 
-                    <!-- État en cours : avancer -->
                     <button name="action_process_next_step" type="object"
                             string="▶ Étape suivante" class="btn-primary"
                             invisible="state != 'running'"/>
-                    <!-- "Tout traiter" est géré côté client (widget OWL) par des
-                         appels répétés à action_process_next_step, un par un :
-                         chaque requête HTTP reste courte quel que soit le volume
-                         total, ce qui évite de dépasser limit_time_real. -->
                     <field name="id" invisible="state != 'running'" nolabel="1"
-                           widget="data_reset_auto_runner"/>
+                           widget="microfinance_data_reset_auto_runner"/>
 
-                    <!-- État terminé -->
                     <button name="action_reset_wizard" type="object"
                             string="Nouvelle opération" class="btn-secondary"
                             invisible="state != 'done'"/>
@@ -114,23 +109,23 @@
         </field>
     </record>
 
-    <record id="action_data_reset_wizard" model="ir.actions.act_window">
-        <field name="name">RAZ données transactionnelles</field>
-        <field name="res_model">data.reset.wizard</field>
+    <record id="action_microfinance_data_reset_wizard" model="ir.actions.act_window">
+        <field name="name">RAZ Microfinance</field>
+        <field name="res_model">microfinance.data.reset.wizard</field>
         <field name="view_mode">form</field>
         <field name="target">new</field>
     </record>
 
-    <menuitem id="menu_data_reset_wizard_root"
-              name="RAZ Données"
+    <menuitem id="menu_microfinance_data_reset_wizard_root"
+              name="RAZ Microfinance"
               parent="base.menu_administration"
-              sequence="100"
+              sequence="101"
               groups="base.group_system"/>
 
-    <menuitem id="menu_data_reset_wizard"
-              name="Assistant de RAZ"
-              parent="menu_data_reset_wizard_root"
-              action="action_data_reset_wizard"
+    <menuitem id="menu_microfinance_data_reset_wizard"
+              name="Assistant de RAZ microfinance"
+              parent="menu_microfinance_data_reset_wizard_root"
+              action="action_microfinance_data_reset_wizard"
               groups="base.group_system"/>
 
 </odoo>

@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <record id="seq_microfinance_loan" model="ir.sequence">
-        <field name="name">Crédit microfinance</field>
-        <field name="code">microfinance.loan</field>
-        <field name="prefix">CR/%(year)s/</field>
-        <field name="padding">5</field>
-        <field name="company_id" eval="False"/>
-    </record>
+    <!-- Numérotation de microfinance.loan et microfinance.loan.application : plus de séquence
+         globale ici, remplacée par une séquence dédiée par société créée à la demande (voir
+         res.company._get_or_create_numbering_sequence), format AGENCE/SÉRIE. -->
     <record id="seq_microfinance_payment" model="ir.sequence">
         <field name="name">Remboursement microfinance</field>
         <field name="code">microfinance.loan.payment</field>
