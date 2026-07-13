@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="action_report_microfinance_caisse_fiche_journee" model="ir.actions.report">
+        <field name="name">Fiche journalière de caisse</field>
+        <field name="model">microfinance.caisse.fiche.journee</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_microfinance_caisse_fiche_journee_document</field>
+        <field name="report_file">microfinance_loan_management.report_microfinance_caisse_fiche_journee_document</field>
+        <field name="print_report_name">'Fiche journaliere - %s - %s' % (object.journal_id.name, object.date)</field>
+        <field name="binding_model_id" ref="model_microfinance_caisse_fiche_journee"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <template id="report_microfinance_caisse_fiche_journee_document">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <h2>Fiche journalière de caisse</h2>
+                        <p>
+                            <span t-field="o.company_id.name"/> — Journal <span t-field="o.journal_id.name"/> — <span t-field="o.date"/>
+                        </p>
+                        <table class="table table-sm" style="margin-top: 10px;">
+                            <tr>
+                                <td><strong>État</strong></td>
+                                <td><span t-field="o.state"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Solde d'ouverture</strong></td>
+                                <td><span t-field="o.opening_balance" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                            </tr>
+                        </table>
+                        <h4>Mouvements du jour</h4>
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Pièce</th>
+                                    <th>Libellé</th>
+                                    <th>Partenaire</th>
+                                    <th class="text-end">Débit</th>
+                                    <th class="text-end">Crédit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="o._get_movement_lines()" t-as="line">
+                                    <td><span t-field="line.move_id.name"/></td>
+                                    <td><span t-field="line.name"/></td>
+                                    <td><span t-field="line.partner_id.name"/></td>
+                                    <td class="text-end"><span t-field="line.debit" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                    <td class="text-end"><span t-field="line.credit" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="3">Totaux</th>
+                                    <th class="text-end"><span t-field="o.total_debit" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></th>
+                                    <th class="text-end"><span t-field="o.total_credit" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                        <table class="table table-sm" style="margin-top: 10px;">
+                            <tr>
+                                <td><strong>Solde de clôture</strong></td>
+                                <td><span t-field="o.closing_balance" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                            </tr>
+                        </table>
+                        <div style="margin-top: 60px;" class="row">
+                            <div class="col-6">
+                                <p>Signature du caissier</p>
+                                <br/><br/>
+                                <p>____________________________</p>
+                            </div>
+                            <div class="col-6">
+                                <p>Signature du gérant</p>
+                                <br/><br/>
+                                <p>____________________________</p>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

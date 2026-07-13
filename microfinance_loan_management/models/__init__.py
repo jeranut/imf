@@ -19,4 +19,5 @@ from . import microfinance_client_group_member
 from . import microfinance_bailleur_fonds
 from . import microfinance_fond_credit
 from . import microfinance_fond_contribution
+from . import microfinance_caisse_fiche_journee
 from . import res_partner

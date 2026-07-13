@@ -17,7 +17,11 @@ class MicrofinanceLoanPaymentWizard(models.TransientModel):
              "anticipé.",
     )
     payment_date = fields.Date(string='Date de remboursement', default=fields.Date.context_today, required=True)
-    journal_id = fields.Many2one('account.journal', string='Journal', required=True, domain="[('type', 'in', ('bank','cash'))]")
+    company_id = fields.Many2one(related='loan_id.company_id', readonly=True)
+    journal_id = fields.Many2one(
+        'account.journal', string='Journal', required=True,
+        domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
+    )
     currency_id = fields.Many2one(related='loan_id.currency_id', readonly=True)
     note = fields.Text(string='Note')
     post_now = fields.Boolean(string='Comptabiliser maintenant', default=True)

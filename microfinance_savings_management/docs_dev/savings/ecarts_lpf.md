@@ -182,6 +182,29 @@ Tests (session 3) : suite complète rejouée sur **`guarantee_synthetic_test`**,
 entièrement vierge et synthétique (même protocole que session 2 : `createdb` + installation
 fraîche `-i`, détruite après coup) — **0 échec, 0 erreur sur 56 tests**.
 
+## Correctifs appliqués (2026-07-13, session 4 — Lot 5 gestion caisse)
+
+Décision métier actée (suite à `docs_dev/gestion_caisse/AUDIT.md`) : réintroduction du compte
+d'attente chèques LPF avec état de compensation, **scopée aux dépôts épargne uniquement**
+(périmètre validé explicitement — crédit et fonds bailleurs restent hors scope de ce lot).
+
+- **`payment_method`** ([microfinance_savings_transaction.py:28-33](../../models/microfinance_savings_transaction.py#L28-L33)) : ajout de la valeur `'cheque'`, jusque-là absente (cf. §2 ci-dessous).
+- **Nouveau champ produit `account_cheques_attente_id`** ([microfinance_savings_product.py](../../models/microfinance_savings_product.py)) : réutilise le compte réel **511200 "Chèques à encaisser"** (`asset_cash`, classe 51) déjà présent dans le plan PCEC audité (`audit_pcg2005_mapping/plan_comptable_extrait.md`), pas un code technique inventé — contrairement à `467000` (session antérieure), un poste officiel existait bien pour ce besoin.
+- **`_prepare_transaction_move`** : pour un dépôt (`transaction_type='deposit'`) avec `payment_method='cheque'`, la contrepartie devient `account_cheques_attente_id` au lieu de `deposit_journal_id.default_account_id` ; le `journal_id` de l'écriture reste néanmoins le journal de dépôt (traçabilité), seule la ligne de contrepartie change de compte.
+- **Nouveau champ `cheque_state`** (`en_attente`/`compense`/`rejete`) et **`clearing_move_id`** : suivent le cycle de vie du chèque, posés uniquement pour un dépôt par chèque.
+- **`action_clear_cheque()`** : transfère le montant réellement posté sur le compte d'attente (relu depuis la ligne de l'écriture d'origine, pas recalculé — robuste à une éventuelle pénalité) vers `deposit_journal_id.default_account_id`, via une seconde écriture équilibrée.
+- **`action_reject_cheque(reason=None)`** : contre-passation complète de l'écriture d'origine via `move._reverse_moves(..., cancel=True)` (même mécanisme que `microfinance.loan.payment._reverse_posted_payment`, réutilisé à l'identique) ; bloque si la contre-passation ferait descendre le solde du compte sous le solde minimum du produit (le client a pu entretemps retirer une partie de ces fonds — garde-fou ajouté, absent de toute demande explicite mais directement nécessaire à la correction financière de ce mécanisme).
+- **Boutons `action_clear_cheque`/`action_reject_cheque`** restreints à `group_savings_manager` (vue transaction), cohérent avec la sensibilité de l'opération (confirmation qu'un chèque externe est réellement encaissé).
+
+**Limite assumée, à trancher séparément si besoin** (cf. liste priorisée en fin de document) :
+- **Retrait par chèque non implémenté** : aucun compte "chèques émis en attente" (liability) n'existe dans le plan PCEC audité (contrairement à 511200 pour les dépôts) — je n'en ai pas inventé un. `payment_method='cheque'` reste donc purement informationnel pour `transaction_type='withdrawal'`, comme avant ce lot.
+- **Aucun blocage du retrait de fonds provenant d'un chèque encore `en_attente`** : un client peut aujourd'hui retirer un dépôt par chèque avant sa compensation (son solde épargne est crédité dès la comptabilisation du dépôt, indépendamment de `cheque_state`). Seul le *rejet* du chèque est protégé (bloqué si le solde deviendrait insuffisant) — il n'y a pas de blocage préventif du retrait lui-même. Risque opérationnel réel, non traité (hors périmètre demandé pour ce lot).
+
+Tests (session 4) : suite complète des deux modules rejouée sur `imf_scratch_test` (upgrade réel
+depuis une version antérieure, migrations rejouées) — **228 tests, 1 seul échec** préexistant et
+sans rapport (`TestFee.test_disburse_nets_fee_in_single_move`, `microfinance_loan_management`,
+signalé indépendamment de ce lot).
+
 ---
 
 ## Correction préalable sur le périmètre sécurité
@@ -210,7 +233,7 @@ réel du code, pas de l'hypothèse initiale.
 |---|---|---|
 | Ordre chronologique des transactions (pas de saisie antidatée) | **Existant (corrigé le 2026-07-11)** | `_check_transaction_date_order` refuse toute transaction dont la date est strictement antérieure à la date maximale des autres transactions déjà comptabilisées sur le même compte (scopé par `account_id`, une date égale reste acceptée) : [models/microfinance_savings_transaction.py:77-95](../../models/microfinance_savings_transaction.py#L77-L95). |
 | Numérotation de compte (agence + type I/G/B + série) | **Manquant** | Séquence générique unique, non ventilée par agence ni par type de client : `EP/%(year)s/00001`, `company_id` vide (séquence globale, pas par société) — [data/ir_sequence_data.xml:3-9](../../data/ir_sequence_data.xml#L3-L9). Aucun `res.partner`/agence dans le format. |
-| Distinction D / W / I / T et mode cash/chèque/autre | **Partiel** | `transaction_type` couvre `deposit`/`withdrawal`/`interest_credit`/`fee_debit`/`auto_debit`/`transfer` ([microfinance_savings_transaction.py:16-23](../../models/microfinance_savings_transaction.py#L16-L23)) — plus fin que LPF sur D/W/I. `payment_method` couvre cash/virement/mobile money mais **pas de "chèque"** explicite ([microfinance_savings_transaction.py:26-30](../../models/microfinance_savings_transaction.py#L26-L30)), alors que le produit expose un compte dédié aux chèques rejetés (`account_commission_cheques_rejetes_id`, voir ci-dessous). Le type `transfer` existe dans la sélection mais n'a **pas** de champ "compte destinataire" et sa comptabilisation retombe sur la même branche que `withdrawal` ([microfinance_savings_transaction.py:106-119](../../models/microfinance_savings_transaction.py#L106-L119)) : ce n'est donc pas un vrai virement entre deux comptes épargne, seulement un retrait libellé différemment. |
+| Distinction D / W / I / T et mode cash/chèque/autre | **Partiel, chèque existant pour le dépôt uniquement (2026-07-13, session 4)** | `transaction_type` couvre `deposit`/`withdrawal`/`interest_credit`/`fee_debit`/`auto_debit`/`transfer` ([microfinance_savings_transaction.py:16-23](../../models/microfinance_savings_transaction.py#L16-L23)) — plus fin que LPF sur D/W/I. `payment_method` couvre désormais cash/virement/mobile money/**chèque** ([microfinance_savings_transaction.py:28-33](../../models/microfinance_savings_transaction.py#L28-L33)), avec un compte d'attente réel (511200, `account_cheques_attente_id`) et un état de compensation (`cheque_state`) branchés pour les dépôts. Le retrait par chèque reste purement informationnel (pas de compte "chèques émis" identifié dans le plan PCEC — voir session 4 ci-dessus). Le type `transfer` existe dans la sélection mais n'a **pas** de champ "compte destinataire" et sa comptabilisation retombe sur la même branche que `withdrawal` ([microfinance_savings_transaction.py:106-119](../../models/microfinance_savings_transaction.py#L106-L119)) : ce n'est donc pas un vrai virement entre deux comptes épargne, seulement un retrait libellé différemment. |
 | Papeterie/commission/pénalité ventilées sur des comptes distincts du compte épargne | **Partiel / Manquant** | Les comptes `account_papeterie_id`, `account_retenue_taxe_id`, `account_commission_cheques_rejetes_id` sont configurables sur le produit ([microfinance_savings_product.py:161-180](../../models/microfinance_savings_product.py#L161-L180), exposés en vue [views/microfinance_savings_product_views.xml:82-86](../../views/microfinance_savings_product_views.xml#L82-L86)) mais **ne sont référencés nulle part** dans `_prepare_transaction_move` (confirmé par grep sur tout le module) : ce sont des champs de configuration morts, sans effet. Seul `account_commission_id` (frais de tenue de compte, type `fee_debit`) est réellement utilisé ([microfinance_savings_transaction.py:107-110](../../models/microfinance_savings_transaction.py#L107-L110)). |
 | Retrait = papeterie + commission + pénalité + montant déduits ensemble ; dépôt = épargne seule | **Partiel** | Le dépôt est bien une écriture à 2 lignes qui ne mouvemente que le compte épargne ([microfinance_savings_transaction.py:102-105](../../models/microfinance_savings_transaction.py#L102-L105)), conforme à LPF. Côté retrait, il n'existe **pas** de transaction composée : chaque frais/pénalité/retrait est une transaction séparée (`withdrawal` puis `fee_debit` manuel), donc plusieurs écritures indépendantes plutôt qu'une ventilation en une seule opération. |
 | Plafond de retrait (`withdrawal_limit_amount`) | **Existant (corrigé le 2026-07-11, simplifié en session 2)** | `_check_withdrawal_limit` bloque un retrait (type `withdrawal` uniquement) dont le montant dépasse le plafond configuré, transaction par transaction — le cumul mensuel civil envisagé en session 1 a été retiré (non demandé, absent du manuel LPF) et le champ `withdrawal_limit_period` supprimé du produit. Dérogation via son propre champ `bypass_withdrawal_limit`, indépendant de `bypass_min_balance` : [models/microfinance_savings_transaction.py:103-118](../../models/microfinance_savings_transaction.py#L103-L118). |
@@ -322,6 +345,16 @@ attendu :
 7. **Dépôts à terme incomplets** — la pénalité de retrait anticipé est désormais appliquée
    (2026-07-11), mais les bornes min/max (montant, taux, durée) par produit restent absentes ; à
    trancher explicitement "MVP suffisant" vs "hors scope" pour ce qui reste.
+8. **Retrait par chèque non implémenté** (2026-07-13, session 4) — le compte d'attente
+   chèques/état de compensation ne couvre que les dépôts (compte PCEC réel disponible : 511200).
+   Aucun poste PCEC identifié pour un équivalent "chèques émis en attente" côté retrait ; à
+   trancher si le besoin se confirme.
+9. **Aucun blocage du retrait sur un dépôt chèque non encore compensé** (2026-07-13, session 4)
+   — un client peut retirer des fonds provenant d'un chèque `en_attente`, puisque son solde est
+   crédité dès la comptabilisation du dépôt, indépendamment de l'état de compensation. Risque
+   opérationnel réel (chèque finalement rejeté après que les fonds ont été utilisés), non traité
+   (hors périmètre demandé pour ce lot ; le rejet lui-même reste protégé par un contrôle de
+   solde minimum projeté).
 
 ## Points jugés hors scope confirmé (déjà couverts correctement)
 

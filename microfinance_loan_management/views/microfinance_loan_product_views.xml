@@ -69,6 +69,8 @@
                         <page string="Comptabilité">
                             <group string="Journaux et frais">
                                 <field name="disbursement_journal_id"/>
+                                <field name="disbursement_limit_amount"/>
+                                <field name="check_cash_balance_at_disbursement"/>
                                 <field name="payment_journal_id"/>
                                 <field name="fee_type"/>
                                 <field name="fee_amount" invisible="fee_type != 'fixed'"/>

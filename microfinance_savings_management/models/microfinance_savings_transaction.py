@@ -29,12 +29,28 @@ class MicrofinanceSavingsTransaction(models.Model):
         ('cash', 'Espèces'),
         ('bank_transfer', 'Virement'),
         ('mobile_money', 'Mobile money'),
+        ('cheque', 'Chèque'),
     ], string='Moyen de paiement', default='cash')
     state = fields.Selection([
         ('draft', 'Brouillon'),
         ('posted', 'Comptabilisé'),
         ('cancelled', 'Annulé'),
     ], string='État', default='draft', tracking=True)
+    cheque_state = fields.Selection([
+        ('en_attente', 'En attente'),
+        ('compense', 'Compensé'),
+        ('rejete', 'Rejeté'),
+    ], string='État du chèque', copy=False, readonly=True, tracking=True,
+        help="Ne concerne que les dépôts par chèque (payment_method='cheque', "
+             "transaction_type='deposit') : un retrait par chèque n'est pas pris en charge par "
+             "ce mécanisme (voir docs_dev/savings/ecarts_lpf.md).",
+    )
+    clearing_move_id = fields.Many2one(
+        'account.move', string='Écriture de compensation', readonly=True, copy=False,
+        help="Écriture générée par action_clear_cheque(), transférant le montant du compte "
+             "d'attente chèques (account_cheques_attente_id) vers le compte du journal de "
+             "dépôt. Vide tant que le chèque n'est pas compensé.",
+    )
     move_id = fields.Many2one('account.move', string='Écriture comptable', readonly=True, copy=False)
     note = fields.Text(string='Note')
     related_loan_payment_id = fields.Many2one(
@@ -52,6 +68,12 @@ class MicrofinanceSavingsTransaction(models.Model):
         help='Si activé, ce retrait peut dépasser le plafond de retrait par transaction du '
              'produit (ex. clôture de compte). Dérogation distincte de "Déroger au solde '
              'minimum" : les deux règles sont indépendantes.',
+    )
+    bypass_cash_balance = fields.Boolean(
+        string='Déroger au contrôle de solde de caisse', default=False,
+        help="Si activé, la transaction est autorisée même si le solde comptable du journal "
+             "concerné (uniquement vérifié pour un journal de type 'Espèces') deviendrait "
+             "négatif. Dérogation distincte des autres contrôles de retrait.",
     )
     partner_id = fields.Many2one(related='account_id.partner_id', store=True, readonly=True)
     company_id = fields.Many2one(related='account_id.company_id', store=True, readonly=True)
@@ -104,12 +126,20 @@ class MicrofinanceSavingsTransaction(models.Model):
     def _check_withdrawal_limit(self):
         # Blocage simple par transaction individuelle uniquement (pas de cumul sur une période :
         # non demandé, absent du manuel LPF, écarté pour ne pas introduire une règle métier non
-        # validée). Dérogation via son propre flag, distinct de bypass_min_balance.
+        # validée). Dérogation via son propre flag, distinct de bypass_min_balance. Ne s'applique
+        # que si le journal de retrait du produit est de type 'cash' : un retrait viré par
+        # banque n'est pas soumis à ce plafond, la contrainte étant liée à la manipulation
+        # physique d'espèces (même principe que _check_disbursement_limit côté crédit,
+        # microfinance_loan.py).
         for txn in self:
             if txn.transaction_type != 'withdrawal' or txn.bypass_withdrawal_limit:
                 continue
-            limit = txn.account_id.product_id.withdrawal_limit_amount
+            product = txn.account_id.product_id
+            limit = product.withdrawal_limit_amount
             if not limit:
+                continue
+            journal = product.withdrawal_journal_id
+            if not journal or journal.type != 'cash':
                 continue
             if txn.amount > limit + 0.01:
                 raise ValidationError(_(
@@ -143,6 +173,33 @@ class MicrofinanceSavingsTransaction(models.Model):
             return 0.0
         return self.amount * product.early_withdrawal_penalty_rate / 100.0
 
+    def _check_cash_journal_balance(self):
+        """Solde comptable réel du journal concerné (withdrawal_journal_id.default_account_id.
+        current_balance, champ calculé standard Odoo sur account.account) : blocage dur si la
+        transaction ferait passer ce compte sous zéro, sauf dérogation explicite
+        (bypass_cash_balance). Ne s'applique qu'aux transactions qui utilisent réellement ce
+        journal comme contrepartie (withdrawal, auto_debit, transfer — pas fee_debit, qui
+        utilise account_commission_id, cf. _prepare_transaction_move), et seulement si le
+        journal est de type 'cash' et si le produit a explicitement activé
+        check_cash_balance_at_withdrawal (désactivé par défaut : voir le help de ce champ pour
+        la raison) — même principe que _check_disbursement_limit côté crédit
+        (microfinance_loan.py)."""
+        for txn in self:
+            product = txn.account_id.product_id
+            if (txn.bypass_cash_balance or not product.check_cash_balance_at_withdrawal
+                    or txn.transaction_type not in ('withdrawal', 'auto_debit', 'transfer')):
+                continue
+            journal = product.withdrawal_journal_id or product.deposit_journal_id
+            if not journal or journal.type != 'cash' or not journal.default_account_id:
+                continue
+            account = journal.default_account_id
+            projected_balance = account.current_balance - txn.amount
+            if projected_balance < 0:
+                raise UserError(_(
+                    'Transaction refusée : solde insuffisant sur le journal de caisse '
+                    '« %(journal)s » (disponible : %(balance).2f, demandé : %(amount).2f).'
+                ) % {'journal': journal.name, 'balance': account.current_balance, 'amount': txn.amount})
+
     def _prepare_transaction_move(self):
         self.ensure_one()
         account = self.account_id
@@ -165,6 +222,13 @@ class MicrofinanceSavingsTransaction(models.Model):
                 if not interest_account:
                     raise UserError(_("Configurez le compte intérêt payé sur le produit %s.") % product.name)
                 counterpart_account = interest_account
+            elif self.transaction_type == 'deposit' and self.payment_method == 'cheque':
+                # Compte d'attente chèques plutôt que le compte du journal : le montant n'est
+                # transféré vers le compte réel qu'à la compensation (action_clear_cheque), ou
+                # intégralement contre-passé en cas de rejet (action_reject_cheque).
+                if not product.account_cheques_attente_id:
+                    raise UserError(_("Configurez le compte d'attente chèques sur le produit %s.") % product.name)
+                counterpart_account = product.account_cheques_attente_id
             else:
                 journal = product.deposit_journal_id
                 if not journal or not journal.default_account_id:
@@ -227,15 +291,81 @@ class MicrofinanceSavingsTransaction(models.Model):
                 raise UserError(_('Les retraits ne sont autorisés que sur un compte épargne actif.'))
             if txn.transaction_type == 'deposit' and txn.account_id.state not in ('draft', 'active'):
                 raise UserError(_('Dépôt impossible sur un compte clôturé ou dormant.'))
+            txn._check_cash_journal_balance()
             move = self.env['account.move'].with_context(
                 default_loan_id=False, default_loan_line_id=False,
             ).create(txn._prepare_transaction_move())
             move.action_post()
-            txn.write({'move_id': move.id, 'state': 'posted'})
+            vals = {'move_id': move.id, 'state': 'posted'}
+            if txn.transaction_type == 'deposit' and txn.payment_method == 'cheque':
+                vals['cheque_state'] = 'en_attente'
+            txn.write(vals)
             txn.account_id.message_post(body=_('Transaction %(type)s de %(amount).2f comptabilisée. Écriture : %(move)s') % {
                 'type': dict(txn._fields['transaction_type'].selection).get(txn.transaction_type),
                 'amount': txn.amount, 'move': move.name,
             })
+
+    def action_clear_cheque(self):
+        for txn in self:
+            if txn.transaction_type != 'deposit' or txn.payment_method != 'cheque':
+                raise UserError(_('Seul un dépôt par chèque peut être compensé.'))
+            if txn.cheque_state != 'en_attente':
+                raise UserError(_(
+                    "Ce chèque n'est plus en attente (état actuel : %s)."
+                ) % dict(txn._fields['cheque_state'].selection).get(txn.cheque_state))
+            product = txn.account_id.product_id
+            journal = product.deposit_journal_id
+            waiting_account = product.account_cheques_attente_id
+            if not journal or not journal.default_account_id:
+                raise UserError(_('Configurez le journal de dépôt et son compte par défaut sur le produit %s.') % product.name)
+            if not waiting_account:
+                raise UserError(_("Configurez le compte d'attente chèques sur le produit %s.") % product.name)
+            waiting_line = txn.move_id.line_ids.filtered(lambda l: l.account_id == waiting_account)
+            amount = sum(waiting_line.mapped('debit'))
+            move = self.env['account.move'].with_context(
+                default_loan_id=False, default_loan_line_id=False,
+            ).create({
+                'date': fields.Date.context_today(txn),
+                'journal_id': journal.id,
+                'ref': _('Compensation chèque - %s') % txn.account_id.name,
+                'microfinance_savings_account_id': txn.account_id.id,
+                'microfinance_savings_transaction_id': txn.id,
+                'line_ids': [
+                    (0, 0, {'name': _('Compensation chèque'), 'partner_id': txn.partner_id.id, 'account_id': journal.default_account_id.id, 'debit': amount, 'credit': 0.0}),
+                    (0, 0, {'name': _('Compensation chèque'), 'partner_id': txn.partner_id.id, 'account_id': waiting_account.id, 'debit': 0.0, 'credit': amount}),
+                ],
+            })
+            move.action_post()
+            txn.write({'cheque_state': 'compense', 'clearing_move_id': move.id})
+            txn.account_id.message_post(body=_('Chèque compensé. Écriture : %s') % move.name)
+
+    def action_reject_cheque(self, reason=None):
+        for txn in self:
+            if txn.transaction_type != 'deposit' or txn.payment_method != 'cheque':
+                raise UserError(_('Seul un dépôt par chèque peut être rejeté.'))
+            if txn.cheque_state != 'en_attente':
+                raise UserError(_(
+                    "Ce chèque n'est plus en attente (état actuel : %s)."
+                ) % dict(txn._fields['cheque_state'].selection).get(txn.cheque_state))
+            # Le solde du compte a déjà intégré ce dépôt (state='posted' dès la comptabilisation,
+            # indépendamment de cheque_state) : si le client a depuis retiré une partie de ces
+            # fonds, la contre-passation ferait passer le solde sous le minimum du produit.
+            projected_balance = txn.account_id.balance - txn.amount
+            min_balance = txn.account_id.product_id.min_balance
+            if projected_balance < min_balance - 0.01:
+                raise UserError(_(
+                    'Rejet refusé : le solde du compte après contre-passation (%(projected).2f) '
+                    'descendrait sous le solde minimum du produit (%(minimum).2f). Le client a '
+                    'probablement déjà utilisé une partie de ce dépôt.'
+                ) % {'projected': projected_balance, 'minimum': min_balance})
+            move = txn.move_id
+            move._check_fiscalyear_lock_date()
+            move._reverse_moves(default_values_list=[{
+                'date': fields.Date.context_today(txn),
+                'ref': _('Contre-passation chèque rejeté - %s') % (reason or _('Non renseigné')),
+            }], cancel=True)
+            txn.write({'cheque_state': 'rejete', 'state': 'cancelled'})
+            txn.account_id.message_post(body=_('Chèque rejeté : %s') % (reason or _('Non renseigné')))
         return True
 
 

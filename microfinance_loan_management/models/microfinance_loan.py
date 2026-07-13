@@ -25,6 +25,14 @@ class MicrofinanceLoan(models.Model):
              "un fonds « Multi-agences » (scope='multi_company') est toujours proposé, quelle que "
              "soit la société courante.",
     )
+    has_active_fond = fields.Boolean(
+        string='Fonds actif disponible pour cette société', compute='_compute_has_active_fond',
+        help="Vrai si au moins un fonds de crédit rotatif actif est visible pour la société de ce "
+             "crédit (mêmes critères que le domaine de fond_credit_id ci-dessus : single_company de "
+             "cette société, ou multi_company). Sert uniquement à rendre fond_credit_id visuellement "
+             "obligatoire dans le formulaire ; le contrôle bloquant réel est serveur, dans "
+             "_check_fond_disponibilite() ci-dessous, seul appelé depuis action_disburse().",
+    )
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True, tracking=True)
     currency_id = fields.Many2one('res.currency', string='Devise', default=lambda self: self.env.company.currency_id, required=True)
     loan_amount = fields.Monetary(string='Montant crédit', required=True, tracking=True)
@@ -129,6 +137,12 @@ class MicrofinanceLoan(models.Model):
              "sinon égal au montant du crédit diminué des frais de dossier dus, nettés directement "
              "dans l'écriture de décaissement. Le capital dû (loan_amount) reste toujours le montant "
              "plein : les frais ne réduisent jamais le principal remboursable.",
+    )
+    bypass_cash_balance = fields.Boolean(
+        string='Déroger au contrôle de solde de caisse', default=False,
+        help="Si activé, le décaissement est autorisé même si le solde comptable du journal de "
+             "décaissement (uniquement vérifié pour un journal de type 'Espèces') deviendrait "
+             "négatif. Dérogation distincte des autres contrôles de décaissement.",
     )
 
     @api.model_create_multi
@@ -774,6 +788,45 @@ class MicrofinanceLoan(models.Model):
             return sum(self.installment_ids.mapped('principal_amount')) - sum(self.installment_ids.mapped('paid_principal'))
         return self.loan_amount
 
+    @api.depends('company_id')
+    def _compute_has_active_fond(self):
+        """Recalcule, pour chaque société, si au moins un fonds actif lui est visible - mêmes
+        critères que le domaine de fond_credit_id (champ ci-dessus) : un fonds 'single_company'
+        d'une autre société ne compte pas, un fonds 'multi_company' compte toujours. Ne dépend que
+        de company_id (pas de fond_credit_id lui-même) : ce champ sert à décider si fond_credit_id
+        doit être obligatoire, il ne doit donc pas varier quand on le renseigne."""
+        Fond = self.env['microfinance.fond.credit']
+        today = fields.Date.context_today(self)
+        for loan in self:
+            if not loan.company_id:
+                loan.has_active_fond = False
+                continue
+            loan.has_active_fond = bool(Fond.search_count([
+                ('active', '=', True),
+                '|', ('date_cloture', '=', False), ('date_cloture', '>=', today),
+                '|', '&', ('scope', '=', 'single_company'), ('company_id', '=', loan.company_id.id),
+                ('scope', '=', 'multi_company'),
+            ]))
+
+    @api.constrains('fond_credit_id')
+    def _check_fond_credit_id_locked_after_disbursement(self):
+        """Une fois le crédit décaissé (disbursement_date renseigné - couvre 'active' et tout état
+        ultérieur : closed, defaulted, written_off, ce champ n'est jamais effacé après le premier
+        décaissement, cf. action_disburse() ci-dessous), fond_credit_id ne peut plus être modifié.
+
+        Bug corrigé ici (constaté en test manuel) : le solde_disponible du fonds est déjà diminué
+        du principal de ce crédit au moment du décaissement (écriture comptable posée sur ce
+        fonds) ; vider ou changer fond_credit_id après coup restaurait artificiellement le solde
+        affiché côté module SANS toucher à l'écriture comptable, qui reste posée sur l'ancien
+        fonds - incohérence directe entre comptabilité et solde affiché. Contrôle serveur
+        (constrains, pas seulement readonly vue, même raisonnement que le Lot 2bis) : un write()
+        direct via ORM/API/import doit être bloqué exactement comme depuis le formulaire."""
+        for loan in self:
+            if loan.disbursement_date:
+                raise ValidationError(_(
+                    "Le fonds de crédit rotatif d'un crédit déjà décaissé ne peut plus être modifié."
+                ))
+
     def _check_fond_disponibilite(self):
         """Vérifie la disponibilité du fonds de crédit rotatif rattaché (fond_credit_id), selon
         fond_credit_id.verification_disponibilite. Méthode réutilisable, mais avec un seul point
@@ -783,10 +836,22 @@ class MicrofinanceLoan(models.Model):
         AUCUN effet observable tant que microfinance.loan.application (son point d'ancrage prévu,
         la transition vers l'état "submitted") reste hors-périmètre, non câblé au module. Ne pas
         le traiter comme un repli silencieux vers 'at_disbursement' : ce serait un comportement de
-        blocage non documenté et non voulu par la configuration choisie par l'utilisateur."""
+        blocage non documenté et non voulu par la configuration choisie par l'utilisateur.
+
+        Avant tout ça : si le crédit n'a AUCUN fond_credit_id mais qu'un fonds actif existe pour sa
+        société, on bloque par oubli probable - sauf si l'agence ne dispose d'aucun fonds bailleur,
+        auquel cas le décaissement sans rattachement reste le fonctionnement mutualiste normal
+        (non-régression du Lot 2)."""
         for loan in self:
             fond = loan.fond_credit_id
-            if not fond or fond.verification_disponibilite != 'at_disbursement':
+            if not fond:
+                if loan.has_active_fond:
+                    raise UserError(_(
+                        'Un fonds de crédit rotatif actif existe pour cette agence. Veuillez le '
+                        'sélectionner avant de décaisser.'
+                    ))
+                continue
+            if fond.verification_disponibilite != 'at_disbursement':
                 continue
             today = fields.Date.context_today(loan)
             if fond.date_debut > today:
@@ -812,12 +877,57 @@ class MicrofinanceLoan(models.Model):
                     'Solde insuffisant sur le fonds « %(fond)s » (disponible : %(disponible)s, demandé : %(demande)s).'
                 ) % {'fond': fond.name, 'disponible': solde_avant_ce_credit, 'demande': loan.loan_amount})
 
+    def _check_disbursement_limit(self):
+        """Plafond de décaissement en espèces (product_id.disbursement_limit_amount) : blocage
+        simple par décaissement individuel, pas de cumul sur une période — même principe que
+        _check_withdrawal_limit côté épargne (microfinance_savings_transaction.py). Ne s'applique
+        que si le journal de décaissement est de type 'cash' : un décaissement par banque n'est
+        pas soumis à ce plafond, la contrainte étant liée à la manipulation physique d'espèces."""
+        for loan in self:
+            product = loan.product_id
+            limit = product.disbursement_limit_amount
+            if not limit:
+                continue
+            journal = product.disbursement_journal_id
+            if not journal or journal.type != 'cash':
+                continue
+            if loan.net_disbursed_amount > limit + 0.01:
+                raise UserError(_(
+                    'Décaissement refusé : le montant net remis au client (%(amount).2f) '
+                    'dépasse le plafond de décaissement en espèces du produit (%(limit).2f).'
+                ) % {'amount': loan.net_disbursed_amount, 'limit': limit})
+
+    def _check_cash_journal_balance(self):
+        """Solde comptable réel du journal de décaissement (disbursement_journal_id.
+        default_account_id.current_balance, champ calculé standard Odoo sur account.account) :
+        blocage dur si le décaissement ferait passer ce compte sous zéro, sauf dérogation
+        explicite (bypass_cash_balance). Ne s'applique que si le journal est de type 'cash' et
+        si le produit a explicitement activé check_cash_balance_at_disbursement (désactivé par
+        défaut : voir le help de ce champ pour la raison — même principe que
+        _check_disbursement_limit ci-dessus."""
+        for loan in self:
+            product = loan.product_id
+            if loan.bypass_cash_balance or not product.check_cash_balance_at_disbursement:
+                continue
+            journal = product.disbursement_journal_id
+            if not journal or journal.type != 'cash' or not journal.default_account_id:
+                continue
+            account = journal.default_account_id
+            projected_balance = account.current_balance - loan.net_disbursed_amount
+            if projected_balance < 0:
+                raise UserError(_(
+                    'Décaissement refusé : solde insuffisant sur le journal de caisse '
+                    '« %(journal)s » (disponible : %(balance).2f, demandé : %(amount).2f).'
+                ) % {'journal': journal.name, 'balance': account.current_balance, 'amount': loan.net_disbursed_amount})
+
     def action_disburse(self):
         for loan in self:
             if loan.state != 'approved':
                 raise UserError(_('Le crédit doit être approuvé avant décaissement.'))
             if loan.product_id.fee_charged_before_disbursement and not loan.fee_paid and loan.fee_amount_due > 0:
                 raise UserError(_('Les frais de dossier doivent être encaissés avant le décaissement.'))
+            loan._check_disbursement_limit()
+            loan._check_cash_journal_balance()
             loan._check_fond_disponibilite()
             if not loan.installment_ids:
                 loan.action_generate_schedule()

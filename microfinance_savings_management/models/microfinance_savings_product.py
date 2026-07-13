@@ -65,8 +65,20 @@ class MicrofinanceSavingsProduct(models.Model):
         string='Plafond de retrait par transaction', default=0.0,
         help="Si renseigné, bloque tout retrait (type 'Retrait' uniquement) dont le montant "
              "dépasse ce plafond, transaction par transaction (pas de cumul sur une période). "
-             "Un retrait avec la dérogation 'Déroger au plafond de retrait' (ex. clôture de "
-             "compte) n'est pas soumis à ce plafond.",
+             "Ne s'applique que si le journal de retrait (withdrawal_journal_id) est de type "
+             "'Espèces' (aucun plafond sur un retrait viré par banque). Un retrait avec la "
+             "dérogation 'Déroger au plafond de retrait' (ex. clôture de compte) n'est pas "
+             "soumis à ce plafond.",
+    )
+    check_cash_balance_at_withdrawal = fields.Boolean(
+        string='Vérifier le solde de caisse au retrait', default=False,
+        help="Si activé, bloque tout retrait qui ferait passer le solde comptable du journal "
+             "de retrait (uniquement pour un journal de type 'Espèces') sous zéro. Désactivé "
+             "par défaut : tant qu'aucune écriture d'ouverture de caisse n'a été comptabilisée "
+             "pour ce journal, le solde comptable réel ne reflète pas la caisse physique et ce "
+             "contrôle bloquerait tout retrait à tort. À activer une fois l'approvisionnement "
+             "initial du journal effectué dans Odoo — même principe que "
+             "check_cash_balance_at_disbursement côté crédit.",
     )
     maintenance_fee_amount = fields.Monetary(
         string='Frais de tenue de compte', default=0.0, readonly=True,
@@ -185,12 +197,25 @@ class MicrofinanceSavingsProduct(models.Model):
         default=_pcec_default('717004'),
         help="Compte de comptabilisation des frais de tenue de compte. Requis uniquement si des frais sont prélevés pour ce produit.",
     )
+    account_cheques_attente_id = fields.Many2one(
+        'account.account', string="Compte d'attente chèques",
+        domain="[('account_type', 'in', ('asset_cash', 'asset_current')), ('company_id', '=', company_id)]",
+        default=_pcec_default('511200'),
+        help="Compte de contrepartie pour un dépôt par chèque (payment_method='cheque') tant "
+             "que le chèque n'est pas compensé (cheque_state='en_attente'). À la compensation "
+             "(action_clear_cheque), le montant est transféré vers le compte du journal de "
+             "dépôt ; en cas de rejet (action_reject_cheque), l'écriture d'origine est "
+             "intégralement contre-passée. Ne concerne que les dépôts : un retrait par chèque "
+             "n'est pas prévu par ce mécanisme (voir docs_dev/savings/ecarts_lpf.md).",
+    )
     account_commission_cheques_rejetes_id = fields.Many2one(
         'account.account', string='Commission sur chèques rejetés',
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
         default=_pcec_default('719000'), readonly=True,
-        help='Non implémenté — sans effet actuellement. Aucun mode de paiement "chèque" ni '
-             'transaction "chèque rejeté" ne existe encore sur ce modèle.',
+        help='Non implémenté — sans effet actuellement. Un mode de paiement "chèque" et un état '
+             "de compensation (cheque_state) existent désormais sur les dépôts, mais un rejet "
+             "de chèque (action_reject_cheque) contre-passe intégralement l'écriture d'origine "
+             "plutôt que de facturer des frais sur ce compte.",
     )
     account_retenue_taxe_id = fields.Many2one(
         'account.account', string='Retenue de taxe',
@@ -209,11 +234,13 @@ class MicrofinanceSavingsProduct(models.Model):
     )
 
     deposit_journal_id = fields.Many2one(
-        'account.journal', string='Journal dépôt', domain="[('type', 'in', ('bank','cash'))]",
+        'account.journal', string='Journal dépôt',
+        domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
         default=_journal_default('EPG'),
     )
     withdrawal_journal_id = fields.Many2one(
-        'account.journal', string='Journal retrait', domain="[('type', 'in', ('bank','cash'))]",
+        'account.journal', string='Journal retrait',
+        domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
         default=_journal_default('EPG'),
     )
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True)

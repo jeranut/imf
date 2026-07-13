@@ -75,4 +75,11 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[]"/>
     </record>
+
+    <record id="microfinance_caisse_fiche_journee_company_rule" model="ir.rule">
+        <field name="name">Microfinance fiche journalière de caisse : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_caisse_fiche_journee"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
 </odoo>

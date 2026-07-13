@@ -217,3 +217,45 @@ navigateur à cette largeur précise (fait par ajustement CSS raisonné, pas tes
    à la documenter) ?
 7. **Câblage de `microfinance.loan.application`** : chantier séparé, identifié à deux reprises —
    à prioriser ou non.
+
+## Lot 8 — Fonds obligatoire si actif + verrouillage anti-contournement post-décaissement
+
+**Bug réel signalé (test manuel), corrigé en priorité** : un crédit décaissé avec `fond_credit_id`
+renseigné pouvait ensuite se voir vider ce champ via `write()`. Le `solde_disponible` du fonds,
+étant un champ calculé à partir des crédits qui le référencent encore, remontait alors
+artificiellement comme si le crédit n'avait jamais consommé le fonds — **sans que l'écriture
+comptable de décaissement, elle, ne soit annulée** : elle restait posée sur le compte GL de
+l'ancien fonds. Incohérence directe entre comptabilité et solde affiché, qui aurait permis de
+contourner silencieusement `_check_fond_disponibilite()` (Lot 2) en déchargeant un crédit d'un
+fonds a posteriori pour en libérer artificiellement le solde au profit d'un autre décaissement.
+
+**Correctif** : `_check_fond_credit_id_locked_after_disbursement()`, `@api.constrains('fond_credit_id')`
+sur `microfinance.loan` — dès que `disbursement_date` est renseigné (couvre `active` et tout état
+ultérieur : `closed`, `defaulted`, `written_off`, ce champ n'étant jamais réinitialisé après le
+premier décaissement), toute modification de `fond_credit_id` (vidage ou réattribution vers un
+autre fonds) lève une `ValidationError`. Contrôle serveur, pas seulement vue — un `write()` direct
+via ORM/API/import est bloqué exactement comme depuis le formulaire (même raisonnement que pour
+les contrôles déjà en place sur `scope`/`company_id` de `microfinance.fond.credit`, cf.
+`TestFondScopeReadonly`). Complété côté vue par `readonly="disbursement_date != False"` sur le
+champ (confort UX uniquement, pas la vraie protection).
+
+**Correction complémentaire (oubli, pas sécurité) : `fond_credit_id` obligatoire si un fonds actif
+existe.** Avant ce lot, rien n'empêchait de décaisser un crédit sans le rattacher à un fonds
+bailleur alors même que l'agence en a un actif — probablement un oubli plutôt qu'un choix, dans une
+agence qui n'est pas purement mutualiste. Nouveau champ non stocké `has_active_fond` (calculé sur
+`company_id`, mêmes critères que le domaine de `fond_credit_id` : fonds actif non clôturé,
+`single_company` de cette société ou `multi_company`) : si vrai et `fond_credit_id` vide,
+`_check_fond_disponibilite()` lève une `UserError` avant même de regarder
+`verification_disponibilite`. Une agence sans aucun fonds actif (cas mutualiste pur, déjà validé au
+Lot 2) continue de décaisser sans rattachement — non-régression volontaire, `has_active_fond` sert
+aussi côté vue à rendre `fond_credit_id` visuellement obligatoire (`required="has_active_fond"`)
+avant même d'atteindre le blocage serveur.
+
+**Tests** (`tests/test_fond_bailleur.py`, classes `TestFondCreditIdMandatoryIfActiveFond` et
+`TestFondCreditIdLockedAfterDisbursement`) : reproduction exacte du bug signalé (décaissement avec
+fonds rattaché → `solde_disponible` diminue → tentative d'effacer le fonds après décaissement →
+désormais bloquée, `solde_disponible` reste diminué), blocage du vidage et de la réattribution à un
+autre fonds après décaissement, non-régression de la modification libre avant décaissement, et les
+deux cas société avec/sans fonds actif pour le caractère obligatoire. Suite complète rejouée (186
+tests) : seul échec `TestFee.test_disburse_nets_fee_in_single_move`, déjà documenté ci-dessus comme
+pré-existant et sans rapport.

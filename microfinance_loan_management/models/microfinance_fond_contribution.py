@@ -29,8 +29,10 @@ class MicrofinanceFondContribution(models.Model):
     ], string='Mode de paiement', required=True, tracking=True)
     journal_id = fields.Many2one(
         'account.journal', string='Journal bancaire',
-        domain="[('type', 'in', ('bank', 'cash'))]",
-        help="Requis si le mode de paiement est chèque ou virement.",
+        domain="[('type', 'in', ('bank', 'cash')), ('company_id', '=', saisie_company_id)]",
+        help="Requis si le mode de paiement est chèque ou virement. Filtré sur l'agence de "
+             "saisie (saisie_company_id), pas sur company_id : pour un fonds « Multi-agences », "
+             "company_id est vide alors que saisie_company_id est toujours renseigné.",
     )
     description = fields.Char(string='Description / Référence bailleur')
     move_id = fields.Many2one(

@@ -53,13 +53,22 @@ LOAN_DIRECT_REUSE_CODES = {
 
 # Journaux créés pour chaque société utilisant le plan PCEC (chart_template == 'mg_pcec').
 # (code, name, type, compte par défaut ou None)
+# CRE et EPG doivent rester de type 'cash' (jamais 'general') : ce sont les journaux retournés
+# par _journal_default('CRE')/_journal_default('EPG') (microfinance_loan_product.py,
+# microfinance_savings_product.py), utilisés comme valeur par défaut de champs dont le domaine
+# de vue exige ('type', 'in', ('bank', 'cash')) — disbursement_journal_id, payment_journal_id,
+# fee_journal_id côté crédit, deposit_journal_id, withdrawal_journal_id côté épargne. Un journal
+# 'general' ne satisfait pas ce domaine (cf. docs_dev/gestion_caisse/AUDIT.md §1.3). OD reste
+# 'general' : jamais utilisé comme défaut de ces champs, réservé aux écritures diverses
+# (radiation, provision — cf. _prepare_writeoff_move/_prepare_provision_move dans
+# microfinance_loan.py, qui recherchent dynamiquement le journal 'general' de la société).
 JOURNALS = [
     ('BQOP', 'Banque - Opérations', 'bank', '131001'),
     ('BQEP', 'Banque - Épargne', 'bank', '131002'),
     ('BQCR', 'Banque - Crédits', 'bank', '131003'),
     ('CAI', 'Caisse', 'cash', '101000'),
-    ('CRE', 'Crédits', 'general', None),
-    ('EPG', 'Épargne', 'general', None),
+    ('CRE', 'Crédits', 'cash', None),
+    ('EPG', 'Épargne', 'cash', None),
     ('OD', 'Opérations diverses', 'general', None),
 ]
 

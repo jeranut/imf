@@ -17,6 +17,12 @@ class TestMultiCompanyIsolation(MicrofinanceCommon):
             'account_type': 'asset_current',
             'company_id': cls.company_b.id,
         })
+        cls.journal_company_b = cls.env['account.journal'].create({
+            'name': 'Caisse agence B (test)',
+            'code': 'BCAI',
+            'type': 'cash',
+            'company_id': cls.company_b.id,
+        })
         cls.user_b = cls.env['res.users'].create({
             'name': 'Agent Agence B (test)',
             'login': 'agent_agence_b_credit_test',
@@ -43,6 +49,54 @@ class TestMultiCompanyIsolation(MicrofinanceCommon):
                     "'company_id'", field.domain or '',
                     "Le domaine de %s ne filtre pas par company_id" % field_name,
                 )
+
+    # --- Point 1bis : les domaines account.journal des champs journal filtrent par société ---
+    def test_disbursement_journal_domain_excludes_other_company(self):
+        field = self.env['microfinance.loan.product']._fields['disbursement_journal_id']
+        domain = safe_eval(field.domain, {'company_id': self.env.company.id})
+        journals = self.env['account.journal'].search(domain)
+        self.assertNotIn(self.journal_company_b, journals)
+
+    def test_loan_product_journal_domains_all_filter_by_company(self):
+        Product = self.env['microfinance.loan.product']
+        for field_name, field in Product._fields.items():
+            if field.type == 'many2one' and field.comodel_name == 'account.journal':
+                self.assertIn(
+                    "'company_id'", field.domain or '',
+                    "Le domaine de %s ne filtre pas par company_id" % field_name,
+                )
+
+    def test_loan_payment_journal_domain_filters_by_company(self):
+        field = self.env['microfinance.loan.payment']._fields['journal_id']
+        self.assertIn("'company_id'", field.domain or '')
+
+    def test_loan_payment_wizard_journal_domain_filters_by_company(self):
+        field = self.env['microfinance.loan.payment.wizard']._fields['journal_id']
+        self.assertIn("'company_id'", field.domain or '')
+
+    def test_fond_contribution_journal_domain_filters_by_saisie_company(self):
+        # company_id est vide pour un fonds « Multi-agences » (scope='multi_company') : le
+        # domaine doit filtrer sur saisie_company_id, toujours renseigné, pas company_id.
+        # saisie_company_id apparaît non quoté (référence de valeur), 'company_id' quoté (champ
+        # comparé) — cf. domaine réel : "[('type', 'in', (...)), ('company_id', '=', saisie_company_id)]".
+        field = self.env['microfinance.fond.contribution']._fields['journal_id']
+        self.assertIn("saisie_company_id", field.domain or '')
+        self.assertNotIn("'saisie_company_id'", field.domain or '')
+
+    # --- Point 1ter : le journal d'une autre agence reste invisible sans ir.rule dédiée
+    # (Odoo core fournit déjà journal_comp_rule sur account.journal, domain_force =
+    # [('company_id', 'parent_of', company_ids)] — équivalent à une isolation stricte tant
+    # qu'aucune hiérarchie de sociétés (parent_id) n'est utilisée dans ce projet) ---
+    def test_journal_not_visible_to_other_company_user(self):
+        # Aucun des 9 groupes microfinance ne donne accès à account.journal (ACL réservée à
+        # account.group_account_readonly/_manager/_invoice, cf.
+        # addons/account/security/ir.model.access.csv) : ajout minimal ici pour isoler la
+        # vérification de la règle de cloisonnement, indépendamment de cette absence d'ACL
+        # (finding distinct, signalé séparément — cf. section 6 de l'audit caisse).
+        self.user_b.write({'groups_id': [(4, self.env.ref('account.group_account_invoice').id)]})
+        journals_for_user_b = self.env['account.journal'].with_user(self.user_b).search(
+            [('id', '=', self.disbursement_journal.id)])
+        self.assertFalse(journals_for_user_b)
 
     # --- Point 2 : ir.rule cloisonne les enregistrements par société ---
     def test_loan_not_visible_to_other_company_user(self):

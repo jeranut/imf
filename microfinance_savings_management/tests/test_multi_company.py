@@ -17,6 +17,12 @@ class TestSavingsMultiCompanyIsolation(SavingsCommon):
             'account_type': 'liability_current',
             'company_id': cls.company_b.id,
         })
+        cls.journal_company_b = cls.env['account.journal'].create({
+            'name': 'Caisse épargne agence B (test)',
+            'code': 'BCAIE',
+            'type': 'cash',
+            'company_id': cls.company_b.id,
+        })
         cls.user_b = cls.env['res.users'].create({
             'name': 'Agent Épargne Agence B (test)',
             'login': 'agent_agence_b_epargne_test',
@@ -41,6 +47,32 @@ class TestSavingsMultiCompanyIsolation(SavingsCommon):
                     "'company_id'", field.domain or '',
                     "Le domaine de %s ne filtre pas par company_id" % field_name,
                 )
+
+    # --- Point 1bis : les domaines account.journal du produit d'épargne filtrent par société ---
+    def test_deposit_journal_domain_excludes_other_company(self):
+        field = self.env['microfinance.savings.product']._fields['deposit_journal_id']
+        domain = safe_eval(field.domain, {'company_id': self.env.company.id})
+        journals = self.env['account.journal'].search(domain)
+        self.assertNotIn(self.journal_company_b, journals)
+
+    def test_savings_product_journal_domains_all_filter_by_company(self):
+        Product = self.env['microfinance.savings.product']
+        for field_name, field in Product._fields.items():
+            if field.type == 'many2one' and field.comodel_name == 'account.journal':
+                self.assertIn(
+                    "'company_id'", field.domain or '',
+                    "Le domaine de %s ne filtre pas par company_id" % field_name,
+                )
+
+    # --- Point 1ter : le journal d'une autre agence reste invisible (Odoo core journal_comp_rule) ---
+    def test_journal_not_visible_to_other_company_user(self):
+        # group_savings_agent ne donne aucun accès à account.journal (ACL réservée à
+        # account.group_account_readonly/_manager/_invoice) : ajout minimal ici pour isoler la
+        # vérification de la règle de cloisonnement (finding distinct, signalé séparément).
+        self.user_b.write({'groups_id': [(4, self.env.ref('account.group_account_invoice').id)]})
+        journals_for_user_b = self.env['account.journal'].with_user(self.user_b).search(
+            [('id', '=', self.savings_deposit_journal.id)])
+        self.assertFalse(journals_for_user_b)
 
     # --- Point 2 : ir.rule cloisonne les comptes/produits épargne par société ---
     def test_savings_account_not_visible_to_other_company_user(self):

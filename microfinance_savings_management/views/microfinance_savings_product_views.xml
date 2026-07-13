@@ -61,6 +61,7 @@
                             <group string="Journaux">
                                 <field name="deposit_journal_id"/>
                                 <field name="withdrawal_journal_id"/>
+                                <field name="check_cash_balance_at_withdrawal"/>
                             </group>
                             <group string="Épargne">
                                 <field name="account_epargne_individuel_id"/>
@@ -81,6 +82,7 @@
                             <group string="Pénalités et commissions">
                                 <field name="account_penalites_id"/>
                                 <field name="account_commission_id"/>
+                                <field name="account_cheques_attente_id"/>
                                 <field name="account_commission_cheques_rejetes_id"/>
                             </group>
                             <group string="Comptes partagés">

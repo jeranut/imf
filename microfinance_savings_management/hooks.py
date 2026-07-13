@@ -34,6 +34,10 @@ SAVINGS_NEW_SUBACCOUNTS = {
 # Champs dont la famille PCEC n'est utilisée que par ce seul champ : réutilisation directe.
 SAVINGS_DIRECT_REUSE_CODES = {
     'account_commission_cheques_rejetes_id': '719000',
+    # 511200 "Chèques à encaisser" (asset_cash, classe 51 Banques) : compte réel du plan PCEC
+    # (cf. audit_pcg2005_mapping/plan_comptable_extrait.md), pas un code technique inventé —
+    # utilisé comme compte d'attente pour les dépôts par chèque (account_cheques_attente_id).
+    'account_cheques_attente_id': '511200',
 }
 
 

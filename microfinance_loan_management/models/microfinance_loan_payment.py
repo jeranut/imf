@@ -34,7 +34,10 @@ class MicrofinanceLoanPayment(models.Model):
     partner_id = fields.Many2one(related='loan_id.partner_id', store=True, readonly=True)
     payment_date = fields.Date(string='Date de remboursement', default=fields.Date.context_today, required=True)
     amount = fields.Monetary(string='Montant', required=True)
-    journal_id = fields.Many2one('account.journal', string='Journal', required=True, domain="[('type', 'in', ('bank','cash'))]")
+    journal_id = fields.Many2one(
+        'account.journal', string='Journal', required=True,
+        domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
+    )
     currency_id = fields.Many2one(related='loan_id.currency_id', store=True, readonly=True)
     company_id = fields.Many2one(related='loan_id.company_id', store=True, readonly=True)
     allocated_penalty = fields.Monetary(string='Pénalité allouée', readonly=True)

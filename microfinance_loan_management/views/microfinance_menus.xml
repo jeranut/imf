@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <menuitem id="menu_microfinance_root" name="Microfinance" sequence="20" groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent"/>
+    <menuitem id="menu_microfinance_root" name="Microfinance" sequence="20" groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent,microfinance_loan_management.group_microfinance_cashier"/>
     <menuitem id="menu_clients_root" name="Clients" parent="menu_microfinance_root" action="action_microfinance_client" sequence="2"
         groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent"/>
     <menuitem id="menu_epargne_root" name="Épargne" parent="menu_microfinance_root" sequence="3"
         groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent"/>
     <menuitem id="menu_credits_root" name="Crédits" parent="menu_microfinance_root" sequence="4"
         groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent"/>
+    <menuitem id="menu_caisse_root" name="Caisse" parent="menu_microfinance_root" sequence="5"
+        groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager"/>
+    <menuitem id="menu_microfinance_caisse_fiche_journee" name="Fiches journalières" parent="menu_caisse_root"
+        action="action_microfinance_caisse_fiche_journee" sequence="1"/>
     <menuitem id="menu_microfinance_dashboard" name="Tableau de bord" parent="menu_microfinance_root" action="action_microfinance_dashboard_client" sequence="1"/>
     <menuitem id="menu_microfinance_loans" name="Demande de crédit" parent="menu_credits_root" action="action_microfinance_loan" sequence="1"/>
     <menuitem id="menu_microfinance_installments" name="Échéances" parent="menu_credits_root" action="action_microfinance_installment" sequence="2"/>
@@ -19,6 +23,8 @@
     <menuitem id="menu_microfinance_analysis_installments" name="Analyse échéances" parent="menu_microfinance_analysis" action="action_microfinance_installment" sequence="1"/>
     <menuitem id="menu_microfinance_analysis_payments" name="Analyse paiements" parent="menu_microfinance_analysis" action="action_microfinance_payment" sequence="2"/>
     <menuitem id="menu_microfinance_analysis_fond_usage" name="Utilisation des fonds" parent="menu_microfinance_analysis" action="action_microfinance_fond_usage_report" sequence="3"/>
+    <menuitem id="menu_microfinance_analysis_cash_book" name="Flux de caisse" parent="menu_microfinance_analysis" action="base_accounting_kit.action_account_cash_book_view" sequence="4"
+        groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor"/>
     <menuitem id="menu_microfinance_config" name="Configuration" parent="menu_microfinance_root" sequence="90" groups="microfinance_loan_management.group_microfinance_manager"/>
     <menuitem id="menu_microfinance_products" name="Produits de crédit" parent="menu_microfinance_config" action="action_microfinance_loan_product" sequence="1"/>
     <menuitem id="menu_microfinance_repayment_frequency" name="Périodicités de remboursement" parent="menu_microfinance_config" action="action_microfinance_repayment_frequency" sequence="2"/>

@@ -186,6 +186,66 @@ class TestFondScopeReadonly(TestFondBailleurCommon):
             self._create_fond(scope='single_company', company_id=False)
 
 
+class TestFondCreditIdMandatoryIfActiveFond(TestFondBailleurCommon):
+    """fond_credit_id devient obligatoire au décaissement dès qu'un fonds actif existe pour la
+    société du crédit, mais reste facultatif pour une agence purement mutualiste (non-régression
+    du Lot 2 : pas de fonds actif -> pas de blocage)."""
+
+    def test_disbursement_without_fond_blocked_when_active_fond_exists(self):
+        self._create_fond()
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        self.assertFalse(loan.fond_credit_id)
+        with self.assertRaises(UserError):
+            loan.action_disburse()
+
+    def test_disbursement_without_fond_still_allowed_when_no_active_fond(self):
+        # Aucun fonds créé dans ce test : société purement mutualiste, non-régression du Lot 2.
+        loan = self._activate_loan(loan_amount=1000.0, term=3)
+        self.assertEqual(loan.state, 'active')
+        self.assertFalse(loan.fond_credit_id)
+
+
+class TestFondCreditIdLockedAfterDisbursement(TestFondBailleurCommon):
+    """Correction prioritaire : un crédit décaissé ne peut plus voir son fond_credit_id modifié -
+    sinon le solde_disponible du fonds est restauré à tort sans annuler l'écriture comptable
+    posée sur ce fonds (bug constaté en test manuel)."""
+
+    def _disbursed_loan_with_fond(self):
+        fond = self._create_fond(verification_disponibilite='at_disbursement')
+        self._create_contribution(fond, amount=5000.0).action_post()
+        loan = self._approve_loan(loan_amount=1000.0, term=3, fond_credit_id=fond.id)
+        loan.action_disburse()
+        return fond, loan
+
+    def test_clearing_fond_after_disbursement_blocked(self):
+        fond, loan = self._disbursed_loan_with_fond()
+        with self.assertRaises(ValidationError):
+            loan.write({'fond_credit_id': False})
+
+    def test_reassigning_fond_after_disbursement_blocked(self):
+        fond, loan = self._disbursed_loan_with_fond()
+        other_fond = self._create_fond(name='Autre fonds (lock test)')
+        with self.assertRaises(ValidationError):
+            loan.write({'fond_credit_id': other_fond.id})
+
+    def test_clearing_fond_after_disbursement_does_not_restore_solde(self):
+        fond, loan = self._disbursed_loan_with_fond()
+        self.assertEqual(fond.solde_disponible, 4000.0)
+        with self.assertRaises(ValidationError):
+            loan.write({'fond_credit_id': False})
+        # Le solde reste diminué : l'écriture comptable, elle, n'a jamais été annulée.
+        self.assertEqual(fond.solde_disponible, 4000.0)
+        self.assertEqual(loan.fond_credit_id, fond)
+
+    def test_fond_still_editable_before_disbursement(self):
+        fond = self._create_fond()
+        other_fond = self._create_fond(name='Autre fonds (avant décaissement)')
+        loan = self._approve_loan(loan_amount=1000.0, term=3, fond_credit_id=fond.id)
+        self.assertEqual(loan.state, 'approved')
+        loan.write({'fond_credit_id': other_fond.id})
+        self.assertEqual(loan.fond_credit_id, other_fond)
+
+
 class TestFondMultiCompany(TestFondBailleurCommon):
     """Cas 7 et 9 : isolation single_company vs consolidation multi_company entre agences."""
 

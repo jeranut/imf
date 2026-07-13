@@ -11,6 +11,7 @@
                 <field name="transaction_type"/>
                 <field name="amount"/>
                 <field name="payment_method"/>
+                <field name="cheque_state" widget="badge" optional="show"/>
                 <field name="state" widget="badge"/>
             </tree>
         </field>
@@ -22,6 +23,12 @@
             <form string="Transaction épargne">
                 <header>
                     <button name="action_post" string="Comptabiliser" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_clear_cheque" string="Compenser le chèque" type="object" class="btn-primary"
+                            groups="microfinance_savings_management.group_savings_manager"
+                            invisible="cheque_state != 'en_attente'"/>
+                    <button name="action_reject_cheque" string="Rejeter le chèque" type="object"
+                            groups="microfinance_savings_management.group_savings_manager"
+                            invisible="cheque_state != 'en_attente'"/>
                     <button name="%(action_report_microfinance_savings_receipt)d" string="Imprimer le reçu" type="action" invisible="state != 'posted'"/>
                     <field name="state" widget="statusbar" statusbar_visible="draft,posted"/>
                 </header>
@@ -34,12 +41,15 @@
                             <field name="amount"/>
                             <field name="date"/>
                             <field name="payment_method"/>
+                            <field name="cheque_state" invisible="payment_method != 'cheque' or transaction_type != 'deposit'"/>
                         </group>
                         <group>
                             <field name="bypass_min_balance" invisible="transaction_type not in ('withdrawal','auto_debit')"/>
                             <field name="bypass_withdrawal_limit" invisible="transaction_type != 'withdrawal'"/>
+                            <field name="bypass_cash_balance" invisible="transaction_type not in ('withdrawal','auto_debit','transfer')"/>
                             <field name="related_loan_payment_id" readonly="1"/>
                             <field name="move_id" readonly="1"/>
+                            <field name="clearing_move_id" readonly="1" invisible="not clearing_move_id"/>
                             <field name="note"/>
                         </group>
                     </group>
@@ -56,6 +66,7 @@
                 <field name="account_id"/>
                 <field name="partner_id"/>
                 <filter name="posted" string="Comptabilisées" domain="[('state','=','posted')]"/>
+                <filter name="cheque_en_attente" string="Chèques en attente" domain="[('cheque_state','=','en_attente')]"/>
                 <group expand="0" string="Regrouper par">
                     <filter name="group_type" string="Type" context="{'group_by':'transaction_type'}"/>
                     <filter name="group_account" string="Compte" context="{'group_by':'account_id'}"/>

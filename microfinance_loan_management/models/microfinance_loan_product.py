@@ -84,12 +84,33 @@ class MicrofinanceLoanProduct(models.Model):
     penalty_amount = fields.Monetary(string='Pénalité fixe', default=0.0)
     penalty_rate = fields.Float(string='Taux pénalité (%)', default=0.0)
     disbursement_journal_id = fields.Many2one(
-        'account.journal', string='Journal décaissement', domain="[('type', 'in', ('bank','cash'))]",
+        'account.journal', string='Journal décaissement',
+        domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
         default=_journal_default('CRE'),
     )
     payment_journal_id = fields.Many2one(
-        'account.journal', string='Journal remboursement', domain="[('type', 'in', ('bank','cash'))]",
+        'account.journal', string='Journal remboursement',
+        domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
         default=_journal_default('CRE'),
+    )
+    disbursement_limit_amount = fields.Monetary(
+        string='Plafond de décaissement en espèces', default=0.0,
+        help="Si renseigné, bloque tout décaissement dont le montant net remis au client "
+             "dépasse ce plafond — uniquement lorsque le journal de décaissement du produit "
+             "(disbursement_journal_id) est de type 'Espèces' (aucun plafond sur un "
+             "décaissement par banque). Contrôle par décaissement individuel, pas de cumul "
+             "sur une période — même principe que withdrawal_limit_amount côté épargne.",
+    )
+    check_cash_balance_at_disbursement = fields.Boolean(
+        string='Vérifier le solde de caisse au décaissement', default=False,
+        help="Si activé, bloque tout décaissement qui ferait passer le solde comptable du "
+             "journal de décaissement (uniquement pour un journal de type 'Espèces') sous "
+             "zéro. Désactivé par défaut : tant qu'aucune écriture d'ouverture de caisse n'a "
+             "été comptabilisée pour ce journal, le solde comptable réel ne reflète pas la "
+             "caisse physique et ce contrôle bloquerait tout décaissement à tort. À activer "
+             "une fois l'approvisionnement initial du journal effectué dans Odoo — même "
+             "principe que verification_disponibilite='never' par défaut sur les fonds "
+             "bailleurs (microfinance.fond.credit).",
     )
 
     # --- Comptabilité : Principal ---
@@ -281,7 +302,8 @@ class MicrofinanceLoanProduct(models.Model):
     fee_amount = fields.Monetary(string='Frais fixes', default=0.0)
     fee_rate = fields.Float(string='Taux de frais (%)', default=0.0)
     fee_journal_id = fields.Many2one(
-        'account.journal', string='Journal encaissement frais', domain="[('type', 'in', ('bank','cash'))]",
+        'account.journal', string='Journal encaissement frais',
+        domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
         default=_journal_default('CRE'),
         help='Journal utilisé pour encaisser les frais de dossier, distinct des journaux de '
              'décaissement/remboursement si l\'institution le souhaite (peut être identique à l\'un des deux).',

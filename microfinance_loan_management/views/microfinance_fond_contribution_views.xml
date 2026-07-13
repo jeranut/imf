@@ -36,6 +36,10 @@
                         </group>
                         <group string="Paiement">
                             <field name="mode_paiement" string="Mode de paiement"/>
+                            <!-- Copie non restreinte par groups="base.group_multi_company" (cf. le
+                                 groupe "Société" plus bas) : requise par le domaine de journal_id,
+                                 qui doit rester évaluable même hors multi-société. -->
+                            <field name="saisie_company_id" invisible="1"/>
                             <field name="journal_id" string="Journal bancaire"
                                    required="mode_paiement in ('cheque', 'virement')"/>
                             <field name="description" string="Description / Référence bailleur"/>

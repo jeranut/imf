@@ -21,10 +21,15 @@ from . import test_partner_microfinance_fields
 from . import test_dashboard_overdue_flux
 from . import test_dashboard_recent_activity
 from . import test_dashboard_company_header
-<<<<<<< HEAD
 from . import test_agency_code
 from . import test_agency_numbering
-=======
 from . import test_fond_bailleur
 from . import test_fond_bailleur_dashboard
->>>>>>> origin/main
+from . import test_journal_hooks
+from . import test_disbursement_limit
+from . import test_cash_balance_check
+from . import test_caisse_fiche_journee
+from . import test_caisse_cloture
+from . import test_caisse_security
+from . import test_caisse_fiche_journee_report
+from . import test_cashier_access

@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_caisse_fiche_journee_tree" model="ir.ui.view">
+        <field name="name">microfinance.caisse.fiche.journee.tree</field>
+        <field name="model">microfinance.caisse.fiche.journee</field>
+        <field name="arch" type="xml">
+            <tree decoration-success="state == 'closed'" decoration-warning="state == 'open' and is_stale" decoration-muted="state == 'open' and not is_stale">
+                <field name="date"/>
+                <field name="journal_id"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="opening_balance"/>
+                <field name="total_debit"/>
+                <field name="total_credit"/>
+                <field name="closing_balance"/>
+                <field name="is_stale" string="À rafraîchir" optional="show"/>
+                <field name="state" widget="badge"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_caisse_fiche_journee_form" model="ir.ui.view">
+        <field name="name">microfinance.caisse.fiche.journee.form</field>
+        <field name="model">microfinance.caisse.fiche.journee</field>
+        <field name="arch" type="xml">
+            <form string="Fiche journalière de caisse">
+                <header>
+                    <button name="action_refresh" string="Actualiser" type="object" invisible="state != 'open'"/>
+                    <button name="action_close_day" string="Clôturer la journée" type="object" class="btn-primary" invisible="state != 'open'"/>
+                    <button name="action_reopen_day" string="Rouvrir la journée" type="object"
+                            groups="microfinance_loan_management.group_microfinance_manager"
+                            invisible="state != 'closed'"/>
+                    <button name="%(action_report_microfinance_caisse_fiche_journee)d" string="Imprimer la fiche" type="action"/>
+                    <field name="state" widget="statusbar"/>
+                </header>
+                <sheet>
+                    <div class="alert alert-warning" role="alert" invisible="not is_stale">
+                        Le solde affiché ne reflète peut-être plus les dernières écritures : cliquez sur « Actualiser » avant de clôturer.
+                    </div>
+                    <div class="oe_title">
+                        <h1>
+                            <!-- Copie non restreinte par groups="base.group_multi_company" (cf. le
+                                 company_id affiché plus bas) : requise par le domaine de
+                                 journal_id, qui doit rester évaluable même hors multi-société. -->
+                            <field name="company_id" invisible="1"/>
+                            <field name="journal_id" readonly="state != 'open' or total_debit != 0 or total_credit != 0"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="date" readonly="state != 'open' or total_debit != 0 or total_credit != 0"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="is_stale" invisible="state != 'open'"/>
+                        </group>
+                        <group>
+                            <field name="opening_balance"/>
+                            <field name="total_debit"/>
+                            <field name="total_credit"/>
+                            <field name="closing_balance"/>
+                        </group>
+                    </group>
+                    <group string="Réouverture" invisible="state != 'closed'">
+                        <field name="reopen_reason" placeholder="Motif requis avant de cliquer sur « Rouvrir la journée »..."/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+    <record id="view_microfinance_caisse_fiche_journee_search" model="ir.ui.view">
+        <field name="name">microfinance.caisse.fiche.journee.search</field>
+        <field name="model">microfinance.caisse.fiche.journee</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="journal_id"/>
+                <field name="company_id"/>
+                <field name="date"/>
+                <filter name="today" string="Aujourd'hui" domain="[('date', '=', context_today())]"/>
+                <filter name="open" string="Ouvertes" domain="[('state', '=', 'open')]"/>
+                <filter name="closed" string="Clôturées" domain="[('state', '=', 'closed')]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_journal" string="Journal" context="{'group_by': 'journal_id'}"/>
+                    <filter name="group_company" string="Agence" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_date" string="Date" context="{'group_by': 'date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="action_microfinance_caisse_fiche_journee" model="ir.actions.act_window">
+        <field name="name">Fiches journalières de caisse</field>
+        <field name="res_model">microfinance.caisse.fiche.journee</field>
+        <field name="view_mode">tree,form</field>
+        <field name="context">{'search_default_open': 1}</field>
+    </record>
+    <record id="action_microfinance_caisse_quick_close_today" model="ir.actions.server">
+        <field name="name">Clôturer aujourd'hui</field>
+        <field name="model_id" ref="model_microfinance_caisse_fiche_journee"/>
+        <field name="binding_model_id" ref="model_microfinance_caisse_fiche_journee"/>
+        <field name="binding_view_types">list</field>
+        <field name="state">code</field>
+        <field name="code">model.action_quick_close_today()</field>
+    </record>
+</odoo>

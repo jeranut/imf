@@ -81,6 +81,94 @@ class TestSavingsWithdrawalLimit(SavingsCommon):
                 'bypass_min_balance': True,
             })
 
+    def test_withdrawal_limit_not_applied_when_journal_is_bank(self):
+        bank_journal = self.env['account.journal'].create({
+            'name': 'Banque retrait épargne test', 'code': 'TBQW', 'type': 'bank',
+            'company_id': self.env.company.id, 'default_account_id': self.bank_account.id,
+        })
+        self.savings_product.write({
+            'withdrawal_limit_amount': 30.0,
+            'withdrawal_journal_id': bank_journal.id,
+        })
+        account = self._create_active_account(opening_amount=200.0)
+        txn = account._create_transaction('withdrawal', 40.0)
+        self.assertEqual(txn.state, 'posted')
+
+
+class TestSavingsCashBalanceCheck(SavingsCommon):
+    """Contrôle de solde de caisse réel au retrait : opt-in par produit
+    (check_cash_balance_at_withdrawal, désactivé par défaut), sinon tout retrait serait bloqué
+    dès l'installation faute d'écriture d'ouverture de caisse (cf. docs_dev/gestion_caisse).
+    Utilise un journal/compte de retrait dédié, distinct de savings_withdrawal_journal, pour ne
+    pas dépendre du solde déjà accumulé par le dépôt d'ouverture des autres tests de ce fichier
+    (deposit_journal_id/withdrawal_journal_id de savings_product partagent bank_account)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.dedicated_withdrawal_account = cls.env['account.account'].create({
+            'name': 'Caisse retrait dédiée test', 'code': 'TDEDW', 'account_type': 'asset_cash', 'company_id': cls.env.company.id,
+        })
+        cls.dedicated_withdrawal_journal = cls.env['account.journal'].create({
+            'name': 'Caisse retrait dédiée test', 'code': 'TDEDWJ', 'type': 'cash', 'company_id': cls.env.company.id,
+            'default_account_id': cls.dedicated_withdrawal_account.id,
+        })
+        cls.savings_product.write({'withdrawal_journal_id': cls.dedicated_withdrawal_journal.id})
+
+    def _fund_cash_account(self, account, amount):
+        journal = self.env['account.journal'].create({
+            'name': 'Ouverture caisse épargne test', 'code': 'TOUVE', 'type': 'general', 'company_id': self.env.company.id,
+        })
+        counterpart = self.env['account.account'].create({
+            'name': 'Capital caisse épargne test', 'code': 'TCAPE', 'account_type': 'equity', 'company_id': self.env.company.id,
+        })
+        move = self.env['account.move'].create({
+            'journal_id': journal.id,
+            'line_ids': [
+                (0, 0, {'account_id': account.id, 'debit': amount, 'credit': 0.0}),
+                (0, 0, {'account_id': counterpart.id, 'debit': 0.0, 'credit': amount}),
+            ],
+        })
+        move.action_post()
+
+    def test_check_disabled_by_default_allows_withdrawal_with_empty_journal(self):
+        self.assertFalse(self.savings_product.check_cash_balance_at_withdrawal)
+        account = self._create_active_account(opening_amount=200.0)
+        txn = account._create_transaction('withdrawal', 40.0)
+        self.assertEqual(txn.state, 'posted')
+
+    def test_check_enabled_blocks_withdrawal_when_balance_insufficient(self):
+        self.savings_product.write({'check_cash_balance_at_withdrawal': True})
+        account = self._create_active_account(opening_amount=200.0)
+        with self.assertRaises(UserError):
+            account._create_transaction('withdrawal', 40.0)
+
+    def test_check_enabled_allows_withdrawal_when_balance_sufficient(self):
+        self.savings_product.write({'check_cash_balance_at_withdrawal': True})
+        self._fund_cash_account(self.dedicated_withdrawal_account, 1000.0)
+        account = self._create_active_account(opening_amount=200.0)
+        txn = account._create_transaction('withdrawal', 40.0)
+        self.assertEqual(txn.state, 'posted')
+
+    def test_check_enabled_bypass_allows_withdrawal(self):
+        self.savings_product.write({'check_cash_balance_at_withdrawal': True})
+        account = self._create_active_account(opening_amount=200.0)
+        txn = account._create_transaction('withdrawal', 40.0, bypass_cash_balance=True)
+        self.assertEqual(txn.state, 'posted')
+
+    def test_check_enabled_not_applied_when_journal_is_bank(self):
+        bank_journal = self.env['account.journal'].create({
+            'name': 'Banque retrait dédiée test', 'code': 'TDEDB', 'type': 'bank',
+            'company_id': self.env.company.id, 'default_account_id': self.dedicated_withdrawal_account.id,
+        })
+        self.savings_product.write({
+            'check_cash_balance_at_withdrawal': True,
+            'withdrawal_journal_id': bank_journal.id,
+        })
+        account = self._create_active_account(opening_amount=200.0)
+        txn = account._create_transaction('withdrawal', 40.0)
+        self.assertEqual(txn.state, 'posted')
+
 
 class TestSavingsEarlyWithdrawalPenalty(SavingsCommon):
 

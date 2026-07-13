@@ -12,7 +12,31 @@
       "Bash(grep -n \"def flush\\\\b\\\\|required and\\\\|_field_columns\\\\|IntegrityError\\\\|check_field_access_rights\\\\|MissingError\" /opt/odoo17_2/odoo/odoo/models.py | grep -i \"requir\" )",
       "Bash(/opt/odoo17_2/venv/bin/python3 -m py_compile microfinance_loan_management/models/res_company.py)",
       "Bash(sudo -u odoo17_2 /opt/odoo17_2/venv/bin/python3 /opt/odoo17_2/odoo/odoo-bin -c /opt/odoo17_2/odoo/odoo.conf -d MOWGLI --http-port=8071 --stop-after-init -u microfinance_loan_management,microfinance_savings_management)",
-      "Read(//opt/odoo17_2/odoo/**)"
+      "Read(//opt/odoo17_2/odoo/**)",
+      "Read(//opt/odoo17/**)",
+      "Bash(cat /opt/odoo17/odoo.conf)",
+      "Bash(PGPASSWORD=rotas@135 psql -h 127.0.0.1 -U odoo -l)",
+      "Bash(PGPASSWORD=rotas@135 psql -h 127.0.0.1 -U odoo -d imf_test_dev -c \"SELECT name, state, latest_version FROM ir_module_module WHERE name IN \\('microfinance_loan_management','microfinance_savings_management'\\);\")",
+      "Bash(timeout 580 ./odoo-bin -c odoo.conf -d imf_scratch_test -u microfinance_loan_management,microfinance_savings_management --test-enable --stop-after-init --log-level=test)",
+      "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/lot1_test_run.log)",
+      "Bash(find / -maxdepth 4 -iname \"activate\")",
+      "Bash(systemctl list-units *)",
+      "Read(//etc/systemd/system/**)",
+      "Bash(timeout 580 ./venv/bin/python3 odoo-bin -c odoo.conf -d imf_scratch_test -u microfinance_loan_management,microfinance_savings_management --test-enable --stop-after-init --no-http --log-level=test)",
+      "Bash(git status *)",
+      "Bash(sed -n '120,160p' /opt/odoo17/addons/account/security/account_security.xml)",
+      "Read(//opt/odoo17/addons/account/security/**)",
+      "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/lot2_test_run.log)",
+      "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/lot2_test_run2.log)",
+      "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/lot3_test_run.log)",
+      "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/lot5_final.log)",
+      "Bash(find /opt/odoo17/eat_git/base_accounting_kit -iname \"*cash_book*\")",
+      "Read(//opt/odoo17/eat_git/base_accounting_kit/**)",
+      "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/menu_caisse_lot3.log)",
+      "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/menu_caisse_lot3b.log)",
+      "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/menu_caisse_lot3c.log)",
+      "Bash(PGPASSWORD=rotas@135 psql -h 127.0.0.1 -U odoo -d imf_scratch_test -c ' *)",
+      "Bash(PGPASSWORD=rotas@135 psql -h 127.0.0.1 -U odoo -d imf_scratch_test -c \"SELECT id, name FROM ir_ui_menu WHERE name::text ILIKE '%Caisse%' OR name::text ILIKE '%Fiches journ%';\")"
     ]
   }
 }

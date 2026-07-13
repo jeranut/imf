@@ -105,7 +105,8 @@ class MicrofinanceSavingsAccount(models.Model):
             account.transaction_count = len(account.transaction_ids)
 
     def _create_transaction(self, transaction_type, amount, note=None, bypass_min_balance=False,
-                             bypass_withdrawal_limit=False, related_loan_payment_id=False, date=None):
+                             bypass_withdrawal_limit=False, bypass_cash_balance=False,
+                             related_loan_payment_id=False, date=None, payment_method='cash'):
         self.ensure_one()
         transaction = self.env['microfinance.savings.transaction'].create({
             'account_id': self.id,
@@ -115,7 +116,9 @@ class MicrofinanceSavingsAccount(models.Model):
             'note': note,
             'bypass_min_balance': bypass_min_balance,
             'bypass_withdrawal_limit': bypass_withdrawal_limit,
+            'bypass_cash_balance': bypass_cash_balance,
             'related_loan_payment_id': related_loan_payment_id,
+            'payment_method': payment_method,
         })
         transaction.action_post()
         return transaction
