@@ -67,6 +67,15 @@ class MicrofinanceLoanProduct(models.Model):
         help='Utilisé si le mode est "Choix du client/agent" : liste des périodicités que le '
              "client/agent peut choisir à la création du crédit. Au moins une requise.",
     )
+    installment_rounding_unit = fields.Monetary(
+        string="Unité d'arrondi de l'échéance", default=1000.0,
+        help="Politique interest-first (génération d'échéancier, méthode de calcul "
+             "d'intérêts \"Taux fixe\") : le montant total cible par tranche est arrondi au plus "
+             "proche multiple de cette unité avant répartition intérêt/principal - la dernière "
+             "tranche absorbe le reliquat d'arrondi exact. Aucune règle spéciale pour les petits "
+             "crédits : l'arrondi s'applique systématiquement, y compris si la cible arrondie "
+             "tombe à 0. Mettre à 0 pour désactiver l'arrondi (cible utilisée telle quelle).",
+    )
     grace_period_days = fields.Integer(string='Délai de grâce (jours)', default=0)
     min_membership_days = fields.Integer(string='Ancienneté minimum client (jours)', default=0)
     allow_second_loan = fields.Boolean(string='Autoriser un 2e crédit actif', default=True)

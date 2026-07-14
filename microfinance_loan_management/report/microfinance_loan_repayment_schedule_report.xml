@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Pas de binding_model_id/binding_type : ce rapport n'apparaît volontairement pas dans le
+         menu Imprimer standard. Il n'est déclenché que via microfinance.loan.action_print_repayment_schedule()
+         (bouton dédié du formulaire crédit), qui poste le PDF en pièce jointe dans le chatter au
+         lieu de le télécharger/ouvrir directement dans le navigateur. -->
+    <record id="action_report_microfinance_loan_repayment_schedule" model="ir.actions.report">
+        <field name="name">Calendrier de remboursement</field>
+        <field name="model">microfinance.loan</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_microfinance_loan_repayment_schedule_document</field>
+        <field name="report_file">microfinance_loan_management.report_microfinance_loan_repayment_schedule_document</field>
+        <field name="print_report_name">'Calendrier de remboursement - %s' % (object.name)</field>
+    </record>
+
+    <template id="report_microfinance_loan_repayment_schedule_document">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <t t-call="web.external_layout">
+                    <div class="page">
+                        <h2>Calendrier de Remboursement du Crédit</h2>
+                        <p>
+                            Imprimé le <span t-esc="datetime.date.today().strftime('%d/%m/%Y')"/>
+                            par <span t-esc="user_id.name"/>
+                        </p>
+
+                        <h4>Emprunteur</h4>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>Nom</strong></td>
+                                <td><span t-field="o.partner_id.display_name"/></td>
+                                <td><strong>Téléphone</strong></td>
+                                <td><span t-field="o.partner_id.phone"/></td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <strong>
+                                        <span t-field="o.partner_id.microfinance_id_type"/>
+                                    </strong>
+                                </td>
+                                <td><span t-field="o.partner_id.microfinance_id_number_display"/></td>
+                                <td><strong>Adresse</strong></td>
+                                <td>
+                                    <span t-field="o.partner_id"
+                                          t-options="{'widget': 'contact', 'fields': ['address'], 'no_marker': True}"/>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <t t-set="guarantors" t-value="o.guarantee_ids.filtered(lambda g: g.guarantor_partner_id)"/>
+                        <t t-if="guarantors">
+                            <h4>Garant(s)</h4>
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Nom</th>
+                                        <th>Adresse</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="guarantors" t-as="guarantor">
+                                        <td><span t-field="guarantor.guarantor_partner_id.display_name"/></td>
+                                        <td>
+                                            <span t-field="guarantor.guarantor_partner_id"
+                                                  t-options="{'widget': 'contact', 'fields': ['address'], 'no_marker': True}"/>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </t>
+
+                        <t t-if="o.guarantee_ids">
+                            <h4>Garantie(s)</h4>
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Type</th>
+                                        <th>Description</th>
+                                        <th>Valeur estimée</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-foreach="o.guarantee_ids" t-as="guarantee">
+                                        <td><span t-field="guarantee.guarantee_type"/></td>
+                                        <td><span t-field="guarantee.description"/></td>
+                                        <td>
+                                            <span t-field="guarantee.estimated_value"
+                                                  t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </t>
+
+                        <h4>Crédit</h4>
+                        <table class="table table-sm">
+                            <tr>
+                                <td><strong>N° de crédit</strong></td>
+                                <td><span t-field="o.name"/></td>
+                                <td><strong>Date de demande</strong></td>
+                                <td><span t-field="o.application_date"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Montant du crédit</strong></td>
+                                <td><span t-field="o.loan_amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                <td><strong>Date de décaissement</strong></td>
+                                <td><span t-field="o.disbursement_date"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Période de crédit</strong></td>
+                                <td>
+                                    <span t-field="o.term"/> tranches
+                                    - <span t-field="o.repayment_frequency_id.name"/>
+                                </td>
+                                <td><strong>Taux d'intérêt annuel</strong></td>
+                                <td><span t-field="o.interest_rate"/> % (<span t-field="o.interest_method"/>)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Produit</strong></td>
+                                <td><span t-field="o.product_id.name"/></td>
+                                <td><strong>Agent de crédit</strong></td>
+                                <td><span t-field="o.officer_id.name"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Fonds de crédit</strong></td>
+                                <td><span t-field="o.fond_credit_id.name"/></td>
+                                <td><strong>Différé de paiement</strong></td>
+                                <td><span t-field="o.product_id.grace_period_days"/> jour(s)</td>
+                            </tr>
+                        </table>
+
+                        <h4>Échéancier</h4>
+                        <table class="table table-sm table-bordered" style="font-size: 11px;">
+                            <thead>
+                                <tr>
+                                    <th>Séq.</th>
+                                    <th>Date d'échéance</th>
+                                    <th>Principal</th>
+                                    <th>Intérêt</th>
+                                    <th>Total</th>
+                                    <th>Résiduel</th>
+                                    <th>Montant payé</th>
+                                    <th>Solde restant dû</th>
+                                    <th>Date de paiement</th>
+                                    <th>Signature</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="o.installment_ids.sorted('sequence')" t-as="installment">
+                                    <td><span t-field="installment.sequence"/></td>
+                                    <td><span t-field="installment.due_date"/></td>
+                                    <td><span t-field="installment.principal_amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                    <td><span t-field="installment.interest_amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                    <td><span t-field="installment.total_amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                    <td><span t-field="installment.residual_amount" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                </tr>
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td><strong>Total</strong></td>
+                                    <td></td>
+                                    <td><strong><span t-field="o.principal_total" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></strong></td>
+                                    <td><strong><span t-field="o.interest_total" t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/></strong></td>
+                                    <td><strong><span t-esc="'%.2f' % (o.principal_total + o.interest_total + o.penalty_total)"/> <span t-field="o.currency_id.symbol"/></strong></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </t>
+            </t>
+        </t>
+    </template>
+</odoo>

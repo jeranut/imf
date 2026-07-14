@@ -9,6 +9,12 @@
                 <field name="agency_code" placeholder="ex. IS"/>
                 <field name="loan_product_code_locked" invisible="1"/>
                 <field name="loan_product_code_prefix" readonly="loan_product_code_locked"/>
+                <!-- groups ici uniquement (pas de groups= au niveau champ Python) : réservé à
+                     group_microfinance_manager, cohérent avec le menu Configuration déjà réservé
+                     à ce groupe, sans bloquer la lecture par l'onchange de pré-remplissage côté
+                     microfinance.loan pour un simple agent créant un crédit. -->
+                <field name="microfinance_fond_credit_default_id"
+                       groups="microfinance_loan_management.group_microfinance_manager"/>
             </xpath>
         </field>
     </record>

@@ -22,6 +22,7 @@
         'data/provision_server_action.xml',
         'data/scoring_rules_data.xml',
         'report/microfinance_loan_disbursement_receipt.xml',
+        'report/microfinance_loan_repayment_schedule_report.xml',
         'report/microfinance_caisse_fiche_journee_report.xml',
         'views/microfinance_res_company_views.xml',
         'views/microfinance_loan_product_views.xml',

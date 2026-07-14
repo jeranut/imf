@@ -69,6 +69,14 @@ class MicrofinanceCommon(TransactionCase):
             'max_term': 36,
             'interest_rate': 12.0,
             'interest_method': 'flat',
+            # Arrondi de la cible par tranche (installment_rounding_unit, défaut modèle = 1000 Ar)
+            # désactivé sur ce produit de test générique : les montants de crédit utilisés dans la
+            # majorité des tests de la suite (souvent quelques centaines/milliers d'Ar) sont sans
+            # rapport avec la granularité réelle CEFOR, et l'arrondi par défaut y créerait des
+            # distorsions massives (cible qui tombe à 0, échéances à 0 rejetées par les
+            # remboursements, etc.) sans rapport avec ce que ces tests vérifient réellement. Les
+            # tests dédiés à l'arrondi (test_interest_first_schedule.py) l'activent explicitement.
+            'installment_rounding_unit': 0,
             'repayment_frequency_mode': 'fixed',
             'repayment_frequency_id': cls.env.ref('microfinance_loan_management.repayment_frequency_monthly').id,
             'disbursement_journal_id': cls.disbursement_journal.id,

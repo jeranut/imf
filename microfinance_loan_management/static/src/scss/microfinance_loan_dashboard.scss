@@ -487,6 +487,63 @@
     }
 }
 
+.o_microfinance_dashboard__hint {
+    margin: -4px 0 12px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+// Matrice "Fonds par agence" : jusqu'à 25 agences en colonnes à terme, largement plus que
+// l'écran ne peut en afficher. Défilement horizontal contenu à ce panneau (pas de débordement de
+// la page), colonne "Fonds" fixe via position:sticky pour garder le repère de ligne pendant le
+// scroll, en-tête également fixe verticalement si le tableau devient long. Fond opaque identique
+// partout (blanc, comme .o_microfinance_panel) sur les cellules fixes : sans ça, le contenu qui
+// défile derrière transparaîtrait au travers.
+.o_microfinance_fond_matrix_scroll {
+    overflow-x: auto;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.o_microfinance_fond_matrix {
+    th, td {
+        white-space: nowrap;
+    }
+
+    thead th {
+        position: sticky;
+        top: 0;
+        background: #ffffff;
+        z-index: 1;
+    }
+
+    &__pinned {
+        position: sticky;
+        left: 0;
+        background: #ffffff;
+        z-index: 2;
+        text-align: left;
+        font-weight: 600;
+    }
+
+    thead th.o_microfinance_fond_matrix__pinned {
+        // Intersection en-tête fixe / colonne fixe : au-dessus des deux pour ne jamais être
+        // recouverte par l'un ou l'autre pendant le scroll.
+        z-index: 3;
+    }
+}
+
+// !important nécessaire : Bootstrap pose déjà un box-shadow (inset ... transparent, l'astuce
+// utilisée par .table-hover pour l'effet survol) de spécificité plus élevée sur ces mêmes <td>
+// (.table-hover > tbody > tr:hover > *) - sans !important, notre encadré violet était neutralisé,
+// bug réel constaté à la vérification navigateur (classe bien posée en DOM, box-shadow calculé
+// = celui de Bootstrap, jamais le nôtre).
+.o_microfinance_fond_matrix__cell--default {
+    box-shadow: inset 0 0 0 2px #534AB7 !important;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
 @media (max-width: 1200px) {
     .o_microfinance_dashboard__grid,
     .o_microfinance_activity_grid {

@@ -88,6 +88,11 @@ class MicrofinanceDashboardController(http.Controller):
         fond_kpi = FondCredit.get_dashboard_kpi(company.id)
         fond_multi_chart = FondCredit.get_multi_company_usage_chart()
         fond_single_chart = FondCredit.get_single_company_chart(company.id)
+        # Portée volontairement plus large que les trois méthodes ci-dessus (toutes scopées à la
+        # société active) : la matrice fonds x agences couvre TOUTES les sociétés auxquelles
+        # l'utilisateur courant a accès, pas seulement celle actuellement sélectionnée - voir la
+        # docstring de get_fond_matrix() pour la justification détaillée.
+        fond_matrix = FondCredit.get_fond_matrix(env.user.company_ids.ids)
 
         # Badge/libellé "En cours" (vert) / "En attente" (orange) pour les états simplifiés
         # demandés par le panneau "Derniers prêts" ; les autres états réutilisent leur libellé
@@ -171,6 +176,7 @@ class MicrofinanceDashboardController(http.Controller):
             'loans_by_state': loans_by_state,
             'fond_multi_chart': fond_multi_chart,
             'fond_single_chart': fond_single_chart,
+            'fond_matrix': fond_matrix,
             'monthly': {
                 'labels': month_labels,
                 'disbursement': [monthly_disbursement[key] for key in month_keys],

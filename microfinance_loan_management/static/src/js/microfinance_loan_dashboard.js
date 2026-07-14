@@ -5,10 +5,23 @@ import { useService } from "@web/core/utils/hooks";
 import { Component, onMounted, onPatched, onWillUnmount, useRef, useState } from "@odoo/owl";
 
 export class MicrofinanceLoanDashboard extends Component {
+    // Config generique du panneau d'onglets (Lot 7, deplacement Lot 9bis) : source unique pour la
+    // nav (boucle t-foreach dans le template, plus de bouton duplique par onglet) ET pour
+    // setActiveTopic() ci-dessous (plus de chaine 'analyses' codee en dur pour decider qui a des
+    // graphiques ApexCharts a detruire/remonter - hasCharts le porte explicitement, "fonds" en a
+    // besoin depuis qu'il recoit les graphiques fonds bailleurs deplaces hors de "analyses").
+    static TOPICS = [
+        { id: "apercu", label: "Vue d'ensemble", icon: "fa-tachometer" },
+        { id: "analyses", label: "Analyses", icon: "fa-bar-chart", hasCharts: true },
+        { id: "fonds", label: "Fonds bailleurs", icon: "fa-university", hasCharts: true },
+        { id: "activite", label: "Activite recente", icon: "fa-history" },
+    ];
+
     setup() {
         this.rpc = useService("rpc");
         this.orm = useService("orm");
         this.actionService = useService("action");
+        this.topics = MicrofinanceLoanDashboard.TOPICS;
         // activeTopic : vrai systeme d'onglets (un seul topic rendu a la fois via t-if dans le
         // template, pas juste une ancre/scroll) - "apercu" (Vue d'ensemble) est le topic par
         // defaut au chargement.
@@ -52,29 +65,32 @@ export class MicrofinanceLoanDashboard extends Component {
     }
 
     /**
-     * Bascule vers un autre onglet (topic). Seul l'onglet "analyses" contient des graphiques
-     * ApexCharts (aucun sur "apercu"/"activite") : c'est le seul cas ou l'ordre de rendu compte.
+     * Bascule vers un autre onglet (topic). Seuls les onglets marques hasCharts (config TOPICS
+     * ci-dessus : "analyses" et "fonds") contiennent des graphiques ApexCharts (aucun sur
+     * "apercu"/"activite") : c'est le seul cas ou l'ordre de rendu compte.
      *
      * Strategie retenue : lazy render, pas resize(). ApexCharts rend du SVG dans le <div>
-     * reference (t-ref) au moment de chart.render() ; tant que "analyses" n'est pas le topic
-     * actif, son contenu est retire du DOM par le t-if du template (pas seulement masque en CSS),
-     * donc les refs des graphiques sont "null" et mountChart() (qui verifie deja "if (!ref.el)
-     * return") les ignore silencieusement - aucun graphique n'est jamais monte dans un conteneur
-     * a largeur nulle. On force simplement un nouveau passage de renderCharts() a chaque fois que
-     * "analyses" redevient actif (via shouldRenderCharts + onPatched, meme mecanisme que le
-     * chargement initial), pour re-creer les graphiques avec la taille reelle du conteneur
-     * desormais visible. Les instances existantes sont detruites en quittant "analyses" (elles
-     * pointeraient sinon vers des noeuds DOM deja retires par le t-if).
+     * reference (t-ref) au moment de chart.render() ; tant qu'un onglet hasCharts n'est pas le
+     * topic actif, son contenu est retire du DOM par le t-if du template (pas seulement masque en
+     * CSS), donc les refs des graphiques sont "null" et mountChart() (qui verifie deja "if
+     * (!ref.el) return") les ignore silencieusement - aucun graphique n'est jamais monte dans un
+     * conteneur a largeur nulle. On force simplement un nouveau passage de renderCharts() a chaque
+     * fois qu'un onglet hasCharts redevient actif (via shouldRenderCharts + onPatched, meme
+     * mecanisme que le chargement initial), pour re-creer les graphiques avec la taille reelle du
+     * conteneur desormais visible. Les instances existantes sont detruites en quittant un onglet
+     * hasCharts (elles pointeraient sinon vers des noeuds DOM deja retires par le t-if).
      */
     setActiveTopic(topic) {
         if (this.state.activeTopic === topic) {
             return;
         }
-        if (this.state.activeTopic === "analyses") {
+        const previousTopic = this.topics.find((t) => t.id === this.state.activeTopic);
+        if (previousTopic?.hasCharts) {
             this.destroyCharts();
         }
         this.state.activeTopic = topic;
-        if (topic === "analyses") {
+        const nextTopic = this.topics.find((t) => t.id === topic);
+        if (nextTopic?.hasCharts) {
             this.shouldRenderCharts = true;
         }
     }
@@ -109,6 +125,24 @@ export class MicrofinanceLoanDashboard extends Component {
 
     get fondSingleChart() {
         return this.state.data?.fond_single_chart || { labels: [], values: [] };
+    }
+
+    get fondMatrix() {
+        return this.state.data?.fond_matrix || { companies: [], funds: [] };
+    }
+
+    /**
+     * Montant décaissé sur ce fonds par cette agence, ou null si aucun décaissement (rendu par
+     * le template comme un tiret plutôt qu'un "0" trompeur - une cellule à 0 littéral serait
+     * indiscernable d'une agence qui n'utilise simplement pas ce fonds).
+     */
+    fondMatrixAmount(fund, companyId) {
+        const amount = fund.amounts[companyId];
+        return amount ? amount : null;
+    }
+
+    fondMatrixIsDefault(fund, companyId) {
+        return fund.is_default_for.includes(companyId);
     }
 
     formatNumber(value) {

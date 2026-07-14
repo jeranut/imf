@@ -133,3 +133,114 @@ class TestFondDashboardSingleCompanyChart(TestFondBailleurCommon):
         result_b = self.env['microfinance.fond.credit'].get_single_company_chart(self.company_b.id)
         self.assertEqual(result_b['labels'], [])
         self.assertEqual(result_b['values'], [])
+
+
+class TestFondMatrix(TestFondBailleurCommon):
+    """Matrice "Fonds par agence" (get_fond_matrix) : portée volontairement plus large que les
+    trois méthodes ci-dessus (toutes scopées à la société active) - couvre toutes les sociétés
+    autorisées de l'utilisateur, pas seulement celle(s) actuellement cochée(s) dans le sélecteur.
+    Individualise chaque fonds (y compris multi_company, contrairement à
+    get_multi_company_usage_chart) et distingue "fonds configuré par défaut" (res.company) de
+    "fonds réellement utilisé" (fond_credit_id du crédit décaissé)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.company_b = cls.env['res.company'].create({'name': 'Agence B matrice (test)'})
+        cls.principal_account_b = cls.env['account.account'].create({
+            'name': 'Prets clients agence B (matrice)', 'code': 'MFPRET', 'account_type': 'asset_current',
+            'company_id': cls.company_b.id,
+        })
+        cls.interest_account_b = cls.env['account.account'].create({
+            'name': 'Interets agence B (matrice)', 'code': 'MFINT', 'account_type': 'income',
+            'company_id': cls.company_b.id,
+        })
+        cls.cash_account_b = cls.env['account.account'].create({
+            'name': 'Caisse agence B (matrice)', 'code': 'MFCASH', 'account_type': 'asset_cash',
+            'company_id': cls.company_b.id,
+        })
+        cls.journal_b = cls.env['account.journal'].create({
+            'name': 'Caisse decaissement agence B (matrice)', 'code': 'MFDEC', 'type': 'cash',
+            'company_id': cls.company_b.id, 'default_account_id': cls.cash_account_b.id,
+        })
+        cls.product_b = cls.env['microfinance.loan.product'].create({
+            'name': 'Produit agence B (matrice)', 'code': 'PMATB', 'company_id': cls.company_b.id,
+            'min_amount': 100.0, 'max_amount': 100000.0, 'min_term': 1, 'max_term': 36,
+            'interest_rate': 12.0, 'interest_method': 'flat', 'repayment_frequency_mode': 'fixed',
+            'repayment_frequency_id': cls.env.ref('microfinance_loan_management.repayment_frequency_monthly').id,
+            'disbursement_journal_id': cls.journal_b.id, 'payment_journal_id': cls.journal_b.id,
+            'account_principal_individuel_id': cls.principal_account_b.id,
+            'account_principal_groupe_id': cls.principal_account_b.id,
+            'account_interets_recus_individuel_id': cls.interest_account_b.id,
+            'account_interets_recus_groupe_id': cls.interest_account_b.id,
+        })
+        cls.partner_b = cls.env['res.partner'].create({'name': 'Client Test Matrice Agence B'})
+
+    def _disburse_loan_b(self, fond, amount=1000.0):
+        loan_b = self.env['microfinance.loan'].create({
+            'partner_id': self.partner_b.id,
+            'product_id': self.product_b.id,
+            'company_id': self.company_b.id,
+            'loan_amount': amount,
+            'term': 3,
+            'fond_credit_id': fond.id,
+        })
+        loan_b.action_generate_schedule()
+        loan_b.write({'state': 'approved'})
+        loan_b.action_disburse()
+        return loan_b
+
+    def test_matrix_includes_authorized_company_not_active_in_selector(self):
+        fond_shared = self._create_fond(scope='multi_company', company_id=False, passer_gl=False,
+                                         verification_disponibilite='never')
+        self._disburse_loan_b(fond_shared, amount=1000.0)
+
+        multi_user = self.env['res.users'].create({
+            'name': 'Utilisateur multi-agences (matrice test)',
+            'login': 'multi_agence_matrice_test',
+            'company_id': self.env.company.id,
+            'company_ids': [(6, 0, [self.env.company.id, self.company_b.id])],
+            'groups_id': [(6, 0, [self.env.ref('microfinance_loan_management.group_microfinance_user').id])],
+        })
+        # Sélecteur limité à la seule agence A (allowed_company_ids) alors que l'utilisateur est
+        # autorisé sur A et B : la matrice doit malgré tout couvrir les deux (self.env.user.company_ids,
+        # pas allowed_company_ids) - c'est tout l'objet du sudo() dans get_fond_matrix().
+        FondCredit = self.env['microfinance.fond.credit'].with_user(multi_user).with_context(
+            allowed_company_ids=[self.env.company.id],
+        )
+        result = FondCredit.get_fond_matrix(multi_user.company_ids.ids)
+        company_names = {c['name'] for c in result['companies']}
+        self.assertEqual(company_names, {self.env.company.name, self.company_b.name})
+
+    def test_matrix_limited_to_single_authorized_company(self):
+        fond_a = self._create_fond(name='Fonds unique A (matrice)')
+        result = self.env['microfinance.fond.credit'].get_fond_matrix(self.env.company.ids)
+        self.assertEqual([c['name'] for c in result['companies']], [self.env.company.name])
+        fund_names = {f['name'] for f in result['funds']}
+        self.assertIn(fond_a.name, fund_names)
+
+    def test_single_company_fund_of_unauthorized_company_never_appears(self):
+        self._create_fond(name='Fonds isole agence B (matrice)', scope='single_company', company_id=self.company_b.id)
+        result = self.env['microfinance.fond.credit'].get_fond_matrix(self.env.company.ids)
+        fund_names = {f['name'] for f in result['funds']}
+        self.assertNotIn('Fonds isole agence B (matrice)', fund_names)
+
+    def test_matrix_reflects_actual_disbursed_fund_not_configured_default(self):
+        default_fond = self._create_fond(name='Fonds configure par defaut (matrice)',
+                                          scope='multi_company', company_id=False, passer_gl=False)
+        used_fond = self._create_fond(name='Fonds reellement utilise (matrice)',
+                                       scope='multi_company', company_id=False, passer_gl=False,
+                                       verification_disponibilite='never')
+        self.company_b.microfinance_fond_credit_default_id = default_fond.id
+        self._disburse_loan_b(used_fond, amount=1500.0)
+
+        result = self.env['microfinance.fond.credit'].get_fond_matrix([self.env.company.id, self.company_b.id])
+        funds_by_name = {f['name']: f for f in result['funds']}
+
+        used_row = funds_by_name['Fonds reellement utilise (matrice)']
+        self.assertEqual(used_row['amounts'][self.company_b.id], 1500.0)
+        self.assertNotIn(self.company_b.id, used_row['is_default_for'])
+
+        default_row = funds_by_name['Fonds configure par defaut (matrice)']
+        self.assertEqual(default_row['amounts'][self.company_b.id], 0.0)
+        self.assertIn(self.company_b.id, default_row['is_default_for'])

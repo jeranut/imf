@@ -36,7 +36,14 @@
       "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/menu_caisse_lot3b.log)",
       "Bash(tee /tmp/claude-1000/-opt-odoo17-imf-git/c13107e2-3bc4-4f84-a65e-61f39791a2e5/scratchpad/menu_caisse_lot3c.log)",
       "Bash(PGPASSWORD=rotas@135 psql -h 127.0.0.1 -U odoo -d imf_scratch_test -c ' *)",
-      "Bash(PGPASSWORD=rotas@135 psql -h 127.0.0.1 -U odoo -d imf_scratch_test -c \"SELECT id, name FROM ir_ui_menu WHERE name::text ILIKE '%Caisse%' OR name::text ILIKE '%Fiches journ%';\")"
+      "Bash(PGPASSWORD=rotas@135 psql -h 127.0.0.1 -U odoo -d imf_scratch_test -c \"SELECT id, name FROM ir_ui_menu WHERE name::text ILIKE '%Caisse%' OR name::text ILIKE '%Fiches journ%';\")",
+      "Bash(grep -n \"check_field_access_rights\" /opt/odoo17/odoo/models.py)",
+      "Bash(python3 /tmp/claude-1000/-opt-odoo17-imf-git/6cd03a0e-093b-4757-844e-fd2b50442b8e/scratchpad/check_matrix.py)",
+      "Bash(export PGPASSWORD='rotas@135')",
+      "Bash(psql -h 127.0.0.1 -U odoo -d imf_scratch_test -c ' *)",
+      "Bash(curl -s \"http://127.0.0.1:8071/web/assets/debug/web.assets_backend.min.css\")",
+      "Bash(curl -s \"http://127.0.0.1:8071/web/content/3c9c988-9c9c988/web.assets_backend.min.css\")",
+      "Bash(curl -s \"http://127.0.0.1:8071/web/assets/e7310a0/web.assets_web.min.css\" -o /tmp/claude-1000/-opt-odoo17-imf-git/6cd03a0e-093b-4757-844e-fd2b50442b8e/scratchpad/bundle.css)"
     ]
   }
 }

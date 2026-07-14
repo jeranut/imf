@@ -294,6 +294,70 @@ class MicrofinanceFondCredit(models.Model):
         return result
 
     @api.model
+    def get_fond_matrix(self, company_ids):
+        """Matrice fonds x agences (visuel dédié du dashboard, distinct de get_dashboard_kpi/
+        get_multi_company_usage_chart/get_single_company_chart ci-dessus) : une ligne par fonds
+        visible depuis au moins une des sociétés de company_ids (fonds 'single_company' de ces
+        sociétés + tous les fonds 'multi_company'), une colonne par société, le montant décaissé
+        sur ce fonds par cette société en cellule. Individualise chaque fonds 'multi_company'
+        (contrairement à get_multi_company_usage_chart, qui les agrège tous ensemble - limitation
+        déjà signalée dans ecarts_lpf.md, résolue ici en même temps).
+
+        Portée volontairement plus large que les autres méthodes ci-dessus : company_ids est
+        censé être TOUTES les sociétés auxquelles l'utilisateur courant a accès
+        (self.env.user.company_ids), pas seulement celles actuellement cochées dans le sélecteur
+        de société (self.env.companies/allowed_company_ids) - hypothèse confirmée avant
+        implémentation. Nécessite donc sudo() jusque sur la recherche des fonds elle-même : le
+        domain_force de microfinance_fond_credit_company_rule utilise la variable 'company_ids'
+        fournie par le moteur ir.rule, qui reflète allowed_company_ids (le sélecteur), pas
+        user.company_ids - sans sudo() ici, un fonds d'une société autorisée mais non cochée dans
+        le sélecteur serait filtré à tort par la règle, malgré le domaine explicite ci-dessous.
+        Même sudo() que get_multi_company_usage_chart sur microfinance.loan, pour la même raison
+        (ir.rule stricte sans clause de partage propre aux fonds) plus la nécessité de consolider
+        au-delà de la société active."""
+        companies = self.env['res.company'].sudo().browse(company_ids).exists()
+        if not companies:
+            return {'companies': [], 'funds': []}
+
+        funds = self.sudo().search([
+            ('active', '=', True),
+            '|', ('company_id', 'in', companies.ids), ('scope', '=', 'multi_company'),
+        ])
+        if not funds:
+            return {'companies': [{'id': c.id, 'name': c.name} for c in companies.sorted('name')], 'funds': []}
+
+        disbursed_states = ('active', 'closed', 'defaulted', 'written_off')
+        loans = self.env['microfinance.loan'].sudo().search([
+            ('fond_credit_id', 'in', funds.ids),
+            ('company_id', 'in', companies.ids),
+            ('state', 'in', disbursed_states),
+        ])
+        amount_by_fund_company = defaultdict(float)
+        for loan in loans:
+            amount_by_fund_company[(loan.fond_credit_id.id, loan.company_id.id)] += loan.loan_amount
+
+        default_fond_by_company = {
+            company.id: company.microfinance_fond_credit_default_id.id
+            for company in companies
+        }
+        sorted_companies = companies.sorted('name')
+        return {
+            'companies': [{'id': company.id, 'name': company.name} for company in sorted_companies],
+            'funds': [{
+                'id': fund.id,
+                'name': fund.name,
+                'amounts': {
+                    company.id: amount_by_fund_company.get((fund.id, company.id), 0.0)
+                    for company in sorted_companies
+                },
+                'is_default_for': [
+                    company.id for company in sorted_companies
+                    if default_fond_by_company.get(company.id) == fund.id
+                ],
+            } for fund in funds.sorted('name')],
+        }
+
+    @api.model
     def get_single_company_chart(self, company_id):
         """Solde disponible de chaque fonds 'single_company' de la société company_id : une
         agence peut avoir plusieurs fonds propres, ce graphique liste donc chaque fonds

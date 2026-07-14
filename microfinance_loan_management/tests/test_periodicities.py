@@ -12,6 +12,10 @@ class TestPeriodicities(MicrofinanceCommon):
         self.product.repayment_frequency_id = self.env.ref(
             'microfinance_loan_management.repayment_frequency_%s' % frequency
         ).id
+        # Arrondi de la cible (installment_rounding_unit) désactivé : ces tests portent sur les
+        # dates/l'interest-first par périodicité, pas sur l'arrondi (couvert séparément par
+        # test_interest_first_schedule.py), pour ne pas coupler les deux comportements.
+        self.product.installment_rounding_unit = 0
         loan = self._create_loan(**kwargs)
         loan.action_generate_schedule()
         return loan.installment_ids.sorted('sequence')
@@ -45,29 +49,42 @@ class TestPeriodicities(MicrofinanceCommon):
         start = installments[0].loan_id.application_date
         for idx, inst in enumerate(installments, start=1):
             self.assertEqual(inst.due_date, start + relativedelta(months=3 * idx))
-        # Flat method: annual rate (12%) prorated to a quarter (3/12) on the full loan amount.
-        expected_interest = 1200.0 * 0.12 * (3 / 12.0)
-        for inst in installments:
-            self.assertAlmostEqual(inst.interest_amount, expected_interest, places=2)
+        # Interest-first (politique CEFOR) : intérêt total (taux uniforme, prorata trimestriel)
+        # consommé en priorité - ici il tient entièrement dans la 1ère tranche (144 < cible 336),
+        # les tranches suivantes n'ont donc plus d'intérêt du tout (à l'opposé de l'ancien partage
+        # linéaire identique sur les 4 tranches).
+        total_interest = 1200.0 * 0.12 * (3 / 12.0) * 4
+        installment_target = (1200.0 + total_interest) / 4
+        self.assertAlmostEqual(installments[0].interest_amount, total_interest, places=2)
+        self.assertAlmostEqual(installments[0].principal_amount, installment_target - total_interest, places=2)
+        for inst in installments[1:]:
+            self.assertAlmostEqual(inst.interest_amount, 0.0, places=2)
 
     def test_semiannual_schedule_dates_and_interest(self):
         installments = self._schedule_for('semiannual', term=2, loan_amount=1200.0)
         start = installments[0].loan_id.application_date
         for idx, inst in enumerate(installments, start=1):
             self.assertEqual(inst.due_date, start + relativedelta(months=6 * idx))
-        expected_interest = 1200.0 * 0.12 * (6 / 12.0)
-        for inst in installments:
-            self.assertAlmostEqual(inst.interest_amount, expected_interest, places=2)
+        # Idem : l'intérêt total (144) tient dans la cible de la 1ère tranche (672), donc
+        # entièrement absorbé dès la 1ère échéance.
+        total_interest = 1200.0 * 0.12 * (6 / 12.0) * 2
+        installment_target = (1200.0 + total_interest) / 2
+        self.assertAlmostEqual(installments[0].interest_amount, total_interest, places=2)
+        self.assertAlmostEqual(installments[0].principal_amount, installment_target - total_interest, places=2)
+        self.assertAlmostEqual(installments[1].interest_amount, 0.0, places=2)
 
     def test_annual_schedule_dates_and_interest(self):
         installments = self._schedule_for('annual', term=2, loan_amount=1000.0)
         start = installments[0].loan_id.application_date
         for idx, inst in enumerate(installments, start=1):
             self.assertEqual(inst.due_date, start + relativedelta(years=idx))
-        # A full year at the 12% annual rate: no proration needed.
-        expected_interest = 1000.0 * 0.12
-        for inst in installments:
-            self.assertAlmostEqual(inst.interest_amount, expected_interest, places=2)
+        # A full year at the 12% annual rate: no proration needed. Intérêt total (240) absorbé
+        # entièrement par la 1ère tranche (cible 620) - interest-first, pas de partage linéaire.
+        total_interest = 1000.0 * 0.12 * 2
+        installment_target = (1000.0 + total_interest) / 2
+        self.assertAlmostEqual(installments[0].interest_amount, total_interest, places=2)
+        self.assertAlmostEqual(installments[0].principal_amount, installment_target - total_interest, places=2)
+        self.assertAlmostEqual(installments[1].interest_amount, 0.0, places=2)
 
     def test_reducing_balance_quarterly_declines(self):
         self.product.interest_method = 'reducing'

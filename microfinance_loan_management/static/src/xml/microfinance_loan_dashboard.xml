@@ -33,26 +33,12 @@
             <t t-else="">
             <div class="o_microfinance_dashboard__body">
                 <nav class="o_microfinance_dashboard__nav">
-                    <button type="button"
-                            t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === 'apercu' ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
-                            title="Vue d'ensemble"
-                            t-on-click="() => this.setActiveTopic('apercu')">
-                        <i class="fa fa-tachometer" role="img" aria-label="Vue d'ensemble"/>
-                        <span class="o_microfinance_dashboard__nav_label">Vue d'ensemble</span>
-                    </button>
-                    <button type="button"
-                            t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === 'analyses' ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
-                            title="Analyses"
-                            t-on-click="() => this.setActiveTopic('analyses')">
-                        <i class="fa fa-bar-chart" role="img" aria-label="Analyses"/>
-                        <span class="o_microfinance_dashboard__nav_label">Analyses</span>
-                    </button>
-                    <button type="button"
-                            t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === 'activite' ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
-                            title="Activite recente"
-                            t-on-click="() => this.setActiveTopic('activite')">
-                        <i class="fa fa-history" role="img" aria-label="Activite recente"/>
-                        <span class="o_microfinance_dashboard__nav_label">Activite recente</span>
+                    <button t-foreach="topics" t-as="topic" t-key="topic.id" type="button"
+                            t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === topic.id ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
+                            t-att-title="topic.label"
+                            t-on-click="() => this.setActiveTopic(topic.id)">
+                        <i t-attf-class="fa {{topic.icon}}" role="img" t-att-aria-label="topic.label"/>
+                        <span class="o_microfinance_dashboard__nav_label" t-esc="topic.label"/>
                     </button>
                 </nav>
                 <div class="o_microfinance_dashboard__content">
@@ -165,26 +151,6 @@
                     </section>
                 </div>
 
-                <t t-call="microfinance_loan_management.DashboardSectionHeader">
-                    <t t-set="label">Fonds bailleurs</t>
-                </t>
-                <div class="o_microfinance_dashboard__grid">
-                    <section t-if="fondMultiChart.visible" class="o_microfinance_panel">
-                        <div class="o_microfinance_panel__title">
-                            <h2>Utilisation des fonds partages par agence</h2>
-                        </div>
-                        <div class="o_microfinance_chart" t-ref="fondMultiChart"/>
-                    </section>
-
-                    <section class="o_microfinance_panel">
-                        <div class="o_microfinance_panel__title">
-                            <h2>Fonds propres a l'agence</h2>
-                        </div>
-                        <div t-if="fondSingleChart.labels.length" class="o_microfinance_chart" t-ref="fondSingleChart"/>
-                        <div t-else="" class="o_microfinance_dashboard__empty">Aucun fonds propre a cette agence.</div>
-                    </section>
-                </div>
-
                 <section class="o_microfinance_panel o_microfinance_panel--table">
                     <div class="o_microfinance_panel__title">
                         <h2>Credits les plus en retard</h2>
@@ -212,6 +178,59 @@
                             </tbody>
                         </table>
                     </div>
+                </section>
+                </t>
+
+                <t t-if="state.activeTopic === 'fonds'">
+                <t t-call="microfinance_loan_management.DashboardSectionHeader">
+                    <t t-set="label">Fonds bailleurs</t>
+                </t>
+                <div class="o_microfinance_dashboard__grid">
+                    <section t-if="fondMultiChart.visible" class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Utilisation des fonds partages par agence</h2>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="fondMultiChart"/>
+                    </section>
+
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Fonds propres a l'agence</h2>
+                        </div>
+                        <div t-if="fondSingleChart.labels.length" class="o_microfinance_chart" t-ref="fondSingleChart"/>
+                        <div t-else="" class="o_microfinance_dashboard__empty">Aucun fonds propre a cette agence.</div>
+                    </section>
+                </div>
+
+                <section class="o_microfinance_panel o_microfinance_panel--table">
+                    <div class="o_microfinance_panel__title">
+                        <h2>Fonds par agence</h2>
+                    </div>
+                    <p class="o_microfinance_dashboard__hint">
+                        Toutes les agences auxquelles vous avez acces (pas seulement l'agence active) ;
+                        la cellule encadree indique le fonds par defaut configure pour cette agence.
+                    </p>
+                    <div t-if="fondMatrix.funds.length" class="o_microfinance_fond_matrix_scroll">
+                        <table class="table table-hover align-middle o_microfinance_table o_microfinance_fond_matrix">
+                            <thead>
+                                <tr>
+                                    <th class="o_microfinance_fond_matrix__pinned">Fonds</th>
+                                    <th t-foreach="fondMatrix.companies" t-as="company" t-key="company.id" class="text-end" t-esc="company.name"/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="fondMatrix.funds" t-as="fund" t-key="fund.id">
+                                    <td class="o_microfinance_fond_matrix__pinned" t-esc="fund.name"/>
+                                    <td t-foreach="fondMatrix.companies" t-as="company" t-key="company.id"
+                                        t-attf-class="text-end {{ fondMatrixIsDefault(fund, company.id) ? 'o_microfinance_fond_matrix__cell--default' : '' }}"
+                                        t-att-title="fondMatrixIsDefault(fund, company.id) ? 'Fonds par defaut configure pour ' + company.name : ''">
+                                        <t t-esc="fondMatrixAmount(fund, company.id) !== null ? formatMoney(fondMatrixAmount(fund, company.id)) : '—'"/>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div t-else="" class="o_microfinance_dashboard__empty">Aucun fonds visible pour vos agences.</div>
                 </section>
                 </t>
 

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import base64
 from collections import defaultdict
 
 from dateutil.relativedelta import relativedelta
@@ -155,6 +156,17 @@ class MicrofinanceLoan(models.Model):
                 number = company._get_or_create_numbering_sequence('microfinance.loan.agency')
                 vals['name'] = '%s/%s' % (company.agency_code, number)
         return super().create(vals_list)
+
+    @api.onchange('company_id')
+    def _onchange_company_id_default_fond(self):
+        """Pré-remplit fond_credit_id avec le fonds par défaut configuré pour cette société
+        (res.company.microfinance_fond_credit_default_id) - uniquement si le champ n'est pas déjà
+        renseigné : simple aide à la saisie, jamais un écrasement d'un choix déjà fait par
+        l'utilisateur. Reste librement modifiable ensuite (aucun rapport avec le verrouillage de
+        fond_credit_id après décaissement, cf. _check_fond_credit_id_locked_after_disbursement
+        ci-dessous, qui s'applique uniquement une fois le crédit décaissé)."""
+        if not self.fond_credit_id and self.company_id.microfinance_fond_credit_default_id:
+            self.fond_credit_id = self.company_id.microfinance_fond_credit_default_id
 
     @api.constrains('loan_amount', 'term', 'product_id')
     def _check_product_limits(self):
@@ -567,7 +579,6 @@ class MicrofinanceLoan(models.Model):
                     "choisissez-en une avant de générer l'échéancier."
                 ))
             loan.installment_ids.unlink()
-            principal = loan.loan_amount / loan.term
             remaining = loan.loan_amount
             start = loan.approval_date or loan.application_date or fields.Date.context_today(loan)
             delta = loan._period_delta()
@@ -588,19 +599,70 @@ class MicrofinanceLoan(models.Model):
                         'interest_amount': grace_interest,
                     }))
                     sequence_offset = 1
-            for idx in range(1, loan.term + 1):
-                if loan.interest_method == 'flat':
-                    interest = loan.loan_amount * (loan.interest_rate / 100.0) * interest_factor
-                else:
+            if loan.interest_method == 'flat':
+                # Politique CEFOR "intérêt d'abord" (interest-first, toutes agences/produits en
+                # taux uniforme confondus - pas une option par produit) : chaque tranche cible un
+                # montant total identique (total_dû / nb_tranches) ; l'intérêt total du crédit
+                # (taux uniforme, formule déjà en place : montant x taux annuel x période x nombre
+                # de tranches) est consommé en priorité sur les premières tranches jusqu'à
+                # épuisement, le principal ne comble que le reste de la cible. La dernière tranche
+                # absorbe exactement le reliquat (principal restant, intérêt restant) plutôt que
+                # de recalculer sa propre cible, pour que les totaux somment exactement au capital
+                # et à l'intérêt total - aucun euro/ariary ne se perd à l'arrondi flottant.
+                #
+                # Le délai de grâce ci-dessus reste un mécanisme distinct et déjà pris en compte :
+                # sa tranche dédiée (le cas échéant) est déjà ajoutée à `vals` avant cette boucle,
+                # avec son propre intérêt calculé séparément ; cette boucle ne porte que sur les
+                # `loan.term` tranches "normales" restantes.
+                total_interest = loan.loan_amount * (loan.interest_rate / 100.0) * interest_factor * loan.term
+                total_due = loan.loan_amount + total_interest
+                installment_target = total_due / loan.term
+                # Arrondi de la cible au plus proche multiple de installment_rounding_unit (champ
+                # de configuration du produit, pas une valeur codée en dur ici) : arrondi nearest
+                # (ni ceiling ni floor), sans seuil minimal - s'applique même si la cible arrondie
+                # tombe à 0 sur un petit crédit. Le reliquat réel (différence entre la cible
+                # arrondie et le total dû exact) est de toute façon absorbé par la dernière
+                # tranche ci-dessous, que l'arrondi soit actif ou non.
+                rounding_unit = loan.product_id.installment_rounding_unit
+                if rounding_unit:
+                    installment_target = round(installment_target / rounding_unit) * rounding_unit
+                interest_remaining = total_interest
+                principal_allocated = 0.0
+                for idx in range(1, loan.term + 1):
+                    due_date = schedule_start + (delta * idx)
+                    if idx == loan.term:
+                        principal_amount = loan.loan_amount - principal_allocated
+                        interest_amount = interest_remaining
+                    else:
+                        interest_amount = min(interest_remaining, installment_target)
+                        principal_amount = installment_target - interest_amount
+                        interest_remaining -= interest_amount
+                        principal_allocated += principal_amount
+                    vals.append((0, 0, {
+                        'sequence': idx + sequence_offset,
+                        'due_date': due_date,
+                        'principal_amount': principal_amount,
+                        'interest_amount': interest_amount,
+                    }))
+            else:
+                # Méthode dégressive (solde restant dû) : hors périmètre de la Décision 1, qui ne
+                # porte que sur le taux uniforme ("flat") - dans ce mode l'intérêt total n'est pas
+                # connu à l'avance indépendamment de l'échéancier (il dépend du solde restant à
+                # chaque période, lui-même fonction du rythme d'amortissement du principal), donc
+                # la notion de "pool d'intérêt total à consommer en premier" de l'algorithme
+                # interest-first ne s'y applique pas telle quelle. Logique dégressive existante
+                # conservée à l'identique.
+                principal = loan.loan_amount / loan.term
+                for idx in range(1, loan.term + 1):
                     interest = remaining * (loan.interest_rate / 100.0) * interest_factor
-                due_date = schedule_start + (delta * idx)
-                vals.append((0, 0, {
-                    'sequence': idx + sequence_offset,
-                    'due_date': due_date,
-                    'principal_amount': principal,
-                    'interest_amount': interest,
-                }))
-                remaining -= principal
+                    due_date = schedule_start + (delta * idx)
+                    vals.append((0, 0, {
+                        'sequence': idx + sequence_offset,
+                        'due_date': due_date,
+                        'principal_amount': principal,
+                        'interest_amount': interest,
+                    }))
+                    remaining -= principal
             loan.write({'installment_ids': vals})
         return True
 
@@ -1068,6 +1130,41 @@ class MicrofinanceLoan(models.Model):
         return {
             'type': 'ir.actions.act_window', 'name': _('Enregistrer remboursement'), 'res_model': 'microfinance.loan.payment.wizard',
             'view_mode': 'form', 'target': 'new', 'context': {'default_loan_id': self.id, 'default_journal_id': self.product_id.payment_journal_id.id}
+        }
+
+    def action_print_repayment_schedule(self):
+        """Génère le calendrier de remboursement en PDF (rapport QWeb dédié, pas le reçu de
+        décaissement) et le poste comme pièce jointe dans le chatter du crédit, sans jamais
+        déclencher de téléchargement/ouverture côté navigateur - contrairement au bouton
+        "Imprimer le reçu" (action_report_microfinance_loan_disbursement_receipt), qui reste un
+        print action standard. Le PDF et son attachment restent rattachés à self.company_id (la
+        société du crédit), jamais à self.env.company, pour ne pas fuiter un document entre
+        agences si l'utilisateur courant a plusieurs sociétés sélectionnées."""
+        self.ensure_one()
+        report = self.env.ref('microfinance_loan_management.action_report_microfinance_loan_repayment_schedule')
+        pdf_content, _report_format = report._render_qweb_pdf(report.report_name, self.ids)
+        attachment = self.env['ir.attachment'].create({
+            'name': _('Calendrier de remboursement - %s.pdf') % self.name,
+            'type': 'binary',
+            'datas': base64.b64encode(pdf_content),
+            'res_model': self._name,
+            'res_id': self.id,
+            'company_id': self.company_id.id,
+            'mimetype': 'application/pdf',
+        })
+        self.message_post(
+            body=_('Calendrier de remboursement généré.'),
+            attachment_ids=[attachment.id],
+        )
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('Calendrier de remboursement'),
+                'message': _('Le document a été ajouté au fil de communication de ce crédit.'),
+                'type': 'success',
+                'sticky': False,
+            },
         }
 
     def action_view_installments(self):

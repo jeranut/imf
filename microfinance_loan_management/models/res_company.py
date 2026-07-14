@@ -61,6 +61,23 @@ class ResCompany(models.Model):
         string='Préfixe crédit verrouillé', compute='_compute_loan_product_code_locked',
         help="Vrai dès qu'au moins un produit de crédit existe pour cette société.",
     )
+    microfinance_fond_credit_default_id = fields.Many2one(
+        'microfinance.fond.credit', string='Fonds de crédit par défaut',
+        domain="[('active', '=', True), "
+               "'|', ('date_cloture', '=', False), ('date_cloture', '>=', context_today().strftime('%Y-%m-%d')), "
+               "'|', '&', ('scope', '=', 'single_company'), ('company_id', '=', id), ('scope', '=', 'multi_company')]",
+        help="Fonds bailleur rotatif proposé par défaut à la création d'un nouveau crédit dans "
+             "cette société (pré-remplissage de microfinance.loan.fond_credit_id, simple aide à "
+             "la saisie - reste librement modifiable par l'utilisateur avant décaissement, sans "
+             "rapport avec le verrouillage de fond_credit_id après décaissement). Modifiable à "
+             "tout moment sans restriction ni effet rétroactif : seuls les crédits créés après un "
+             "changement de ce champ se voient proposer le nouveau fonds, les crédits déjà créés "
+             "gardent leur fond_credit_id tel quel. Pas de groups= au niveau champ (bloquerait la "
+             "lecture depuis l'onchange de microfinance.loan pour tout utilisateur non manager, "
+             "cassant le pré-remplissage pour un simple agent) : la restriction à "
+             "group_microfinance_manager est portée uniquement par la vue "
+             "(microfinance_res_company_views.xml).",
+    )
 
     def _compute_loan_product_code_locked(self):
         Product = self.env['microfinance.loan.product']

@@ -25,6 +25,10 @@ from . import test_agency_code
 from . import test_agency_numbering
 from . import test_fond_bailleur
 from . import test_fond_bailleur_dashboard
+from . import test_fond_default_company
+from . import test_interest_first_schedule
+from . import test_repayment_allocation
+from . import test_repayment_accounting
 from . import test_journal_hooks
 from . import test_disbursement_limit
 from . import test_cash_balance_check
@@ -33,3 +37,4 @@ from . import test_caisse_cloture
 from . import test_caisse_security
 from . import test_caisse_fiche_journee_report
 from . import test_cashier_access
+from . import test_repayment_schedule_report

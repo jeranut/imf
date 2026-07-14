@@ -259,3 +259,97 @@ autre fonds après décaissement, non-régression de la modification libre avant
 deux cas société avec/sans fonds actif pour le caractère obligatoire. Suite complète rejouée (186
 tests) : seul échec `TestFee.test_disburse_nets_fee_in_single_move`, déjà documenté ci-dessus comme
 pré-existant et sans rapport.
+
+## Lot 9 — Matrice "Fonds par agence" + fonds de crédit par défaut par agence
+
+**Portée volontairement élargie, exception assumée au pattern habituel.** Tous les visuels fonds
+bailleurs précédents (tuile KPI du Lot 6, les deux graphiques par agence, le graphique par
+bailleur) restent scopés à `env.company` (la société active) + fonds `multi_company`. La nouvelle
+matrice "Fonds par agence" (onglet "Fonds bailleurs" du panneau Lot 7, après les deux graphiques
+existants) déroge délibérément à cette règle : elle couvre **toutes les sociétés auxquelles
+l'utilisateur courant a accès** (`self.env.user.company_ids`), pas seulement celle(s) actuellement
+cochée(s) dans le sélecteur de société (`allowed_company_ids`) — hypothèse posée dans la demande,
+confirmée avant implémentation plutôt que tranchée silencieusement. Ne pas généraliser cette
+portée élargie aux autres visuels du dashboard : ceux-là restent scopés à la société active,
+comme déjà validé et testé.
+
+**Piège technique rencontré (à retenir pour tout futur visuel "toutes agences autorisées") :** la
+variable `company_ids` fournie par le moteur `ir.rule` pour évaluer `domain_force` reflète
+`self.env.companies` (donc `allowed_company_ids`, le sélecteur), **pas**
+`self.env.user.company_ids`. La règle de partage optionnel des fonds
+(`microfinance_fond_credit_company_rule`, Lot 1) applique donc, sans `sudo()`, un filtre plus
+restrictif que prévu : un fonds d'une société autorisée mais non cochée dans le sélecteur serait
+silencieusement exclu malgré un domaine explicite correct. `get_fond_matrix()` (nouvelle méthode
+`@api.model` sur `microfinance.fond.credit`) doit donc passer par `sudo()` jusque sur la recherche
+des fonds elle-même (pas seulement sur `microfinance.loan`, déjà en `sudo()` dans
+`get_multi_company_usage_chart` pour une autre raison) — vérifié par un test dédié qui cooke
+volontairement `allowed_company_ids` sur une seule agence pour un utilisateur autorisé sur deux
+(`test_matrix_includes_authorized_company_not_active_in_selector`).
+
+**Contenu de la matrice** : une ligne par fonds visible depuis au moins une des sociétés
+autorisées (fonds `single_company` de ces sociétés + tous les fonds `multi_company` — individualisés
+un par un, pas agrégés comme dans `get_multi_company_usage_chart` ; résout au passage la
+limitation déjà signalée au Lot 6 : "plusieurs fonds partagés confondus dans un seul total"), une
+colonne par société, le montant décaissé sur ce fonds par cette société en cellule (tiret si
+aucun décaissement). La cellule du fonds configuré par défaut (voir ci-dessous) pour une société
+est visuellement distinguée (encadré violet), y compris quand son montant décaissé est nul — le
+but explicite étant de pouvoir constater visuellement qu'un agent a décaissé sur un fonds
+différent du défaut configuré (`is_default_for` et le montant réel sont deux informations
+indépendantes dans la réponse de `get_fond_matrix()`).
+
+**Bug réel trouvé à la vérification navigateur (pas seulement lu/relu) :** l'encadré violet de la
+cellule "fonds par défaut" restait invisible dans Chrome malgré la classe CSS bien posée dans le
+DOM (vérifié via `getComputedStyle` : le `box-shadow` calculé était celui de Bootstrap
+`.table-hover > tbody > tr:hover > *` — une astuce de survol posant un `box-shadow: inset ...
+transparent` de spécificité plus élevée que notre simple sélecteur de classe — jamais le nôtre).
+Corrigé par un `!important` ciblé sur cette seule règle
+(`static/src/scss/microfinance_loan_dashboard.scss`, `.o_microfinance_fond_matrix__cell--default`),
+avec commentaire expliquant pourquoi (pour ne pas être "nettoyé" à tort lors d'un futur passage de
+simplification). Reproduit et confirmé corrigé via Playwright/Chromium headless sur une base
+jetable dédiée, avec données réelles (2 puis 10 sociétés, un fonds `single_company`, deux fonds
+`multi_company` dont un décaissé sur un fonds différent du défaut configuré) : la matrice affiche
+les bons montants dans les bonnes cellules, l'encadré du fonds par défaut est net et visible.
+
+**Défilement horizontal + colonne "Fonds" fixe**, vérifié en navigateur avec 10 sociétés
+(largement plus que l'écran n'en affiche) : le conteneur `.o_microfinance_fond_matrix_scroll`
+défile horizontalement sans faire déborder la page, la première colonne reste lisible et non
+recouverte à tout moment du scroll (`position: sticky; left: 0` + fond opaque + `z-index`
+supérieur à celui de l'en-tête à l'intersection). L'en-tête (noms des agences) est également fixe
+verticalement (`position: sticky; top: 0`), au cas où le nombre de fonds ferait déborder
+verticalement (`max-height: 420px` sur le conteneur).
+
+**Configuration "fonds de crédit par défaut" par agence** (`res.company.microfinance_fond_credit_default_id`,
+`models/res_company.py` + `views/microfinance_res_company_views.xml`) : simple aide à la saisie,
+pré-remplissage de `microfinance.loan.fond_credit_id` via `@api.onchange('company_id')` sur
+`microfinance.loan` si le champ n'est pas déjà renseigné — reste librement modifiable ensuite, sans
+aucun rapport avec le verrouillage de `fond_credit_id` après décaissement (Lot 8) : aucune
+contrainte, aucun effet rétroactif sur les crédits déjà créés, modifiable par un manager autant de
+fois qu'il le souhaite.
+
+**Choix délibéré : pas de `groups=` au niveau champ Python sur `microfinance_fond_credit_default_id`,
+seulement au niveau vue.** Un `groups=` au niveau champ aurait bloqué la *lecture* du champ pour
+tout utilisateur hors `group_microfinance_manager` — y compris l'onchange de pré-remplissage
+déclenché pour un simple agent créant un crédit (`_fetch_field` lève une `AccessError` sur un champ
+`groups`-restreint, y compris en accès Python interne, pas seulement via `read()`/RPC), ce qui
+aurait cassé la création de crédit pour tout non-manager. La restriction à
+`group_microfinance_manager` est donc portée uniquement par `groups=` sur le `<field>` dans
+`microfinance_res_company_views.xml` (cohérent avec le menu Configuration déjà réservé à ce
+groupe) ; l'écriture sur `res.company` reste de toute façon hors de portée d'un agent via les ACL
+standard Odoo (`res.company` : lecture pour tout utilisateur interne, écriture réservée à
+`group_erp_manager`), donc pas de régression de sécurité réelle sur la modification.
+
+**Tests** (`tests/test_fond_default_company.py` + classe `TestFondMatrix` dans
+`tests/test_fond_bailleur_dashboard.py`) : pré-remplissage via `Form()` (même pattern que
+`test_payment_prefill.py`), non-écrasement d'un choix manuel, absence de fonds par défaut laissant
+le champ vide, changements répétés du défaut jamais bloqués, absence d'effet rétroactif sur un
+crédit déjà créé, restriction de visibilité du champ sur la fiche société testée via `get_view()`
+avec un utilisateur manager vs agent, et pour la matrice : portée élargie aux sociétés autorisées
+non actives dans le sélecteur, société unique, exclusion d'un fonds `single_company` d'une société
+non autorisée, et divergence fonds configuré/fonds réellement utilisé. Suite complète rejouée (196
+tests) : seul échec pré-existant `TestFee.test_disburse_nets_fee_in_single_move`, sans rapport.
+
+**Extension non traitée, signalée pour confirmation plus tard :** restreindre pour une agence la
+liste des fonds *sélectionnables* (pas seulement suggérer un défaut) — ex. "cette agence ne doit
+jamais utiliser que ces deux fonds partagés parmi les cinq disponibles". Non demandé explicitement
+dans ce lot, pas implémenté ; nécessiterait probablement un champ Many2many de fonds autorisés sur
+`res.company` et un domaine dynamique sur `fond_credit_id` combinant ce champ.
