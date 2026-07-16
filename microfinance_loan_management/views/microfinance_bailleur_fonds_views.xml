@@ -6,6 +6,7 @@
         <field name="arch" type="xml">
             <tree>
                 <field name="name" string="Nom du bailleur"/>
+                <field name="partner_id" string="Contact" optional="hide"/>
                 <field name="code" string="Code"/>
                 <field name="active" string="Actif"/>
             </tree>
@@ -19,6 +20,7 @@
                 <sheet>
                     <div class="oe_title"><h1><field name="name" string="Nom du bailleur" placeholder="Nom du bailleur"/></h1></div>
                     <group>
+                        <field name="partner_id" string="Contact"/>
                         <field name="code" string="Code"/>
                         <field name="active" string="Actif"/>
                     </group>

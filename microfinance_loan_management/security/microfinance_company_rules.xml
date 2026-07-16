@@ -82,4 +82,12 @@
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[]"/>
     </record>
+
+    <!-- Sans company_id propre : cloisonnement via la société du client (partner_id.company_id). -->
+    <record id="microfinance_client_blacklist_company_rule" model="ir.rule">
+        <field name="name">Microfinance liste noire : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_client_blacklist"/>
+        <field name="domain_force">[('partner_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
 </odoo>

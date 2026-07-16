@@ -27,7 +27,9 @@ class ResCompany(models.Model):
         for vals in vals_list:
             if not vals.get('agency_code'):
                 raise ValidationError(_('Le code agence est obligatoire pour créer une agence CEFOR.'))
-        return super().create(vals_list)
+        companies = super().create(vals_list)
+        companies.mapped('partner_id').write({'microfinance_partner_type': 'agence'})
+        return companies
 
     def _get_or_create_numbering_sequence(self, code, padding=6):
         """Renvoie le prochain numéro (chaîne, déjà complétée par des zéros à `padding`
@@ -105,4 +107,7 @@ class ResCompany(models.Model):
                     "Le préfixe de code produit crédit ne peut plus être modifié : des produits "
                     "de crédit existent déjà pour %s (numérotation déjà initiée)."
                 ) % ', '.join(locked.mapped('name')))
-        return super().write(vals)
+        res = super().write(vals)
+        if 'partner_id' in vals:
+            self.mapped('partner_id').write({'microfinance_partner_type': 'agence'})
+        return res

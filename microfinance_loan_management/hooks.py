@@ -148,6 +148,53 @@ def _seed_known_agency_codes(env):
             company.agency_code = code
 
 
+def _seed_agency_partner_type(env):
+    """Backfill microfinance_partner_type='agence' sur les partners des sociétés déjà en base
+    (create()/write() ne couvrent que les sociétés créées/modifiées après ce chantier). Non
+    destructif : ne touche que les sociétés ayant déjà un agency_code, écrit uniquement si la
+    valeur diffère."""
+    companies = env['res.company'].search([('agency_code', '!=', False)])
+    companies.mapped('partner_id').filtered(
+        lambda p: p.microfinance_partner_type != 'agence'
+    ).write({'microfinance_partner_type': 'agence'})
+
+
+def _backfill_existing_client_partner_type(env):
+    """Backfill microfinance_partner_type='client' pour les partners déjà créés via l'ancien
+    menu Clients (sans domaine) avant l'introduction de ce champ : sinon le menu Clients tombe à
+    zéro résultat juste après la migration.
+
+    Candidat = partner avec company_id renseigné sur une agence CEFOR (agency_code non vide) ET
+    pas encore typé. La seule condition "company_id sur une agence" ne suffit pas : les partners
+    techniques (OdooBot, l'utilisateur admin, tout compte res.users) portent eux aussi un
+    company_id d'agence par défaut sans être des clients — on les exclut explicitement en
+    vérifiant qu'aucun res.users ne pointe vers ce partner."""
+    Partner = env['res.partner']
+    agency_ids = env['res.company'].search([('agency_code', '!=', False)]).ids
+    user_partner_ids = env['res.users'].search([]).mapped('partner_id').ids
+    candidates = Partner.search([
+        ('company_id', 'in', agency_ids),
+        ('microfinance_partner_type', '=', False),
+        ('id', 'not in', user_partner_ids),
+    ])
+    candidates.write({'microfinance_partner_type': 'client'})
+
+
+def _backfill_bailleur_partner_ids(env):
+    """Rattache un res.partner (créé à la volée) à tout microfinance.bailleur.fonds existant
+    sans partner_id — nécessaire dès qu'au moins un enregistrement a été créé avant l'ajout de ce
+    champ required, sinon la fiche reste bloquée en écriture (champ requis vide)."""
+    Bailleur = env['microfinance.bailleur.fonds'].with_context(active_test=False)
+    orphans = Bailleur.search([('partner_id', '=', False)])
+    for bailleur in orphans:
+        partner = env['res.partner'].create({
+            'name': bailleur.name,
+            'microfinance_partner_type': 'bailleur',
+            'company_id': False,
+        })
+        bailleur.partner_id = partner.id
+
+
 def post_init_hook(env):
     """Sur chaque société utilisant le plan PCEC (plan_compta_pcec, chart_template ==
     'mg_pcec'), crée les sous-comptes dédiés par segment et les 7 journaux standards. Les
@@ -159,3 +206,6 @@ def post_init_hook(env):
         _create_subaccounts(env, company, LOAN_NEW_SUBACCOUNTS)
         _create_journals(env, company)
     _seed_known_agency_codes(env)
+    _seed_agency_partner_type(env)
+    _backfill_existing_client_partner_type(env)
+    _backfill_bailleur_partner_ids(env)

@@ -8,10 +8,23 @@ from odoo.exceptions import ValidationError
 class ResPartner(models.Model):
     _inherit = 'res.partner'
 
+    microfinance_partner_type = fields.Selection([
+        ('bailleur', 'Bailleur de fonds'),
+        ('agence', 'Agence'),
+        ('client', 'Client'),
+    ], string='Type de partenaire',
+        help="Catégorie du partenaire au sens microfinance, distincte de « Type de client » "
+             "(particulier/société) qui décrit la nature juridique. Détermine la visibilité "
+             "dans le menu Clients (filtré sur 'client') et dans la sélection des bailleurs sur "
+             "microfinance.bailleur.fonds (filtrée sur 'bailleur'). Toujours renseigné par le code "
+             "(jamais saisi à la main) : 'agence' synchronisé depuis res.company, 'bailleur' fixé à la "
+             "création depuis microfinance.bailleur.fonds, 'client' par défaut de contexte sur le menu "
+             "Clients. Volontairement non 'required=True' au niveau champ : ce partner est partagé "
+             "avec les autres usages de l'instance (EAT, immobilier), qui n'ont pas cette notion.")
+
     microfinance_client_type = fields.Selection([
         ('individual', 'Particulier'),
         ('company', 'Société'),
-        ('group', 'Groupe'),
     ], string='Type de client', default='individual')
 
     # Champ natif res.partner.company_id (déjà filtré par la règle multi-société standard
@@ -31,7 +44,7 @@ class ResPartner(models.Model):
     @api.onchange('microfinance_client_type')
     def _onchange_microfinance_client_type(self):
         for partner in self:
-            partner.is_company = partner.microfinance_client_type in ('company', 'group')
+            partner.is_company = partner.microfinance_client_type == 'company'
 
     @api.constrains('company_id', 'microfinance_client_type')
     def _check_microfinance_company_required(self):

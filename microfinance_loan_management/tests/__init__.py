@@ -18,6 +18,7 @@ from . import test_multi_company
 from . import test_product_code_sequence
 from . import test_payment_prefill
 from . import test_partner_microfinance_fields
+from . import test_client_blacklist
 from . import test_dashboard_overdue_flux
 from . import test_dashboard_recent_activity
 from . import test_dashboard_company_header

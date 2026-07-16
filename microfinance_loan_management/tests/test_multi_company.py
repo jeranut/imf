@@ -133,3 +133,26 @@ class TestMultiCompanyIsolation(MicrofinanceCommon):
             'microfinance_client_type': 'individual',
         })
         self.assertEqual(partner.company_id, self.env.company)
+
+    # --- Point 4 : la liste noire, sans company_id propre, se cloisonne via partner_id.company_id ---
+    def test_blacklist_entry_not_visible_to_other_company_user(self):
+        self.partner.company_id = self.env.company
+        entry = self.env['microfinance.client.blacklist'].create({
+            'partner_id': self.partner.id,
+            'reason': 'Impayés répétés',
+        })
+        entries_for_user_b = self.env['microfinance.client.blacklist'].with_user(self.user_b).search(
+            [('id', '=', entry.id)])
+        self.assertFalse(entries_for_user_b)
+        with self.assertRaises(AccessError):
+            entry.with_user(self.user_b).read(['reason'])
+
+    def test_blacklist_entry_visible_to_same_company_user(self):
+        self.partner.company_id = self.company_b
+        entry = self.env['microfinance.client.blacklist'].create({
+            'partner_id': self.partner.id,
+            'reason': 'Impayés répétés',
+        })
+        entries_for_user_b = self.env['microfinance.client.blacklist'].with_user(self.user_b).search(
+            [('id', '=', entry.id)])
+        self.assertIn(entry, entries_for_user_b)

@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <menuitem id="menu_microfinance_root" name="Microfinance" sequence="20" groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent,microfinance_loan_management.group_microfinance_cashier"/>
-    <menuitem id="menu_clients_root" name="Clients" parent="menu_microfinance_root" action="action_microfinance_client" sequence="2"
+    <menuitem id="menu_clients_root" name="Clients" parent="menu_microfinance_root" sequence="2"
         groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent"/>
+    <!-- menu_clients_root portait auparavant action="action_microfinance_client" ; le tag
+         <menuitem> n'écrit le champ action que si l'attribut est présent, donc le retrait de
+         cet attribut seul ne suffit pas à l'effacer sur une instance où le module était déjà
+         installé (le champ resterait à son ancienne valeur en base). Effacement explicite ici. -->
+    <record id="menu_clients_root" model="ir.ui.menu">
+        <field name="action" eval="False"/>
+    </record>
+    <menuitem id="menu_microfinance_client_list" name="Clients" parent="menu_clients_root" action="action_microfinance_client" sequence="1"/>
+    <menuitem id="menu_microfinance_client_blacklist" name="Liste noire" parent="menu_clients_root" action="action_microfinance_client_blacklist" sequence="2"/>
     <menuitem id="menu_epargne_root" name="Épargne" parent="menu_microfinance_root" sequence="3"
         groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent"/>
     <menuitem id="menu_credits_root" name="Crédits" parent="menu_microfinance_root" sequence="4"

@@ -339,3 +339,41 @@ class TestFondMultiCompany(TestFondBailleurCommon):
         self.assertEqual(fond_as_b.solde_disponible, expected_solde)
         self.assertEqual(fond_as_a.total_contributions, fond_as_b.total_contributions)
         self.assertEqual(fond_as_a.total_decaisse, fond_as_b.total_decaisse)
+
+
+class TestBailleurPartnerLink(TestFondBailleurCommon):
+    """partner_id devenu required=True sur microfinance.bailleur.fonds : auto-création d'un
+    res.partner de type 'bailleur' quand aucun n'est fourni, sync bidirectionnelle du nom."""
+
+    def test_create_without_partner_id_auto_creates_partner(self):
+        bailleur = self.env['microfinance.bailleur.fonds'].create({'name': 'Bailleur Auto'})
+        self.assertTrue(bailleur.partner_id)
+        self.assertEqual(bailleur.partner_id.name, 'Bailleur Auto')
+        self.assertEqual(bailleur.partner_id.microfinance_partner_type, 'bailleur')
+        self.assertFalse(bailleur.partner_id.company_id)
+
+    def test_create_with_explicit_partner_id_does_not_create_a_second_partner(self):
+        partner = self.env['res.partner'].create({
+            'name': 'Contact Bailleur Existant', 'microfinance_partner_type': 'bailleur',
+        })
+        bailleur = self.env['microfinance.bailleur.fonds'].create({
+            'name': 'Bailleur Avec Contact', 'partner_id': partner.id,
+        })
+        self.assertEqual(bailleur.partner_id, partner)
+
+    def test_name_is_related_to_partner_name_bidirectional(self):
+        bailleur = self.env['microfinance.bailleur.fonds'].create({'name': 'Nom Initial'})
+        partner = bailleur.partner_id
+
+        bailleur.name = 'Nom Modifié Depuis Bailleur'
+        self.assertEqual(partner.name, 'Nom Modifié Depuis Bailleur')
+
+        partner.name = 'Nom Modifié Depuis Partner'
+        self.assertEqual(bailleur.name, 'Nom Modifié Depuis Partner')
+
+    def test_setup_class_bailleur_without_explicit_partner_id_still_works(self):
+        # Non-régression : TestFondBailleurCommon.setUpClass crée cls.bailleur sans partner_id
+        # explicite (create({'name': 'Bailleur Test'})) — doit continuer à fonctionner grâce à
+        # l'auto-création, sans backfill manuel nécessaire dans les tests existants.
+        self.assertTrue(self.bailleur.partner_id)
+        self.assertEqual(self.bailleur.partner_id.name, 'Bailleur Test')
