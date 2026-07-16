@@ -42,6 +42,35 @@
             <xpath expr="//div[hasclass('o_address_format')]//field[@name='country_id']" position="attributes">
                 <attribute name="invisible">context.get('microfinance_context')</attribute>
             </xpath>
+            <xpath expr="//div[hasclass('o_address_format')]//field[@name='city']" position="attributes">
+                <attribute name="placeholder">Ville</attribute>
+            </xpath>
+            <xpath expr="//div[hasclass('o_address_format')]//field[@name='zip']" position="attributes">
+                <attribute name="placeholder">Code postal</attribute>
+            </xpath>
+            <!-- Commune (BCM) juste avant Ville, puisqu'elle la pilote automatiquement (cf.
+                 onchange côté modèle : city/zip/district_id/region_id dérivés de la commune
+                 choisie, pas de double saisie). Visible pour tout type de client (Particulier
+                 et Société), uniquement en contexte microfinance (EAT/immobilier non
+                 concernés, ce champ reste vide hors de ce contexte). -->
+            <xpath expr="//div[hasclass('o_address_format')]//field[@name='city']" position="before">
+                <field name="microfinance_commune_id" placeholder="Rechercher une commune..."
+                       invisible="not context.get('microfinance_context')"/>
+            </xpath>
+            <!-- Fokontany/Région/District juste après le bloc adresse : Fokontany reste une
+                 sélection manuelle (affine la commune, prioritaire sur Code postal si plus
+                 précis) ; Région/District sont dérivés de la commune et donc readonly, jamais
+                 saisis à la main. Restent vides si la commune n'est pas encore rattachée à un
+                 district (721 communes sur 1645, cf. docs/unmatched_ambiguous_report.csv). -->
+            <xpath expr="//div[hasclass('o_address_format')]" position="after">
+                <field name="microfinance_fokontany_id" placeholder="Rechercher un fokontany..."
+                       domain="[('commune_id', '=', microfinance_commune_id)]"
+                       invisible="not context.get('microfinance_context')"/>
+                <field name="microfinance_region_id" readonly="1" placeholder="Région (auto)"
+                       invisible="not context.get('microfinance_context')"/>
+                <field name="microfinance_district_id" readonly="1" placeholder="District (auto)"
+                       invisible="not context.get('microfinance_context')"/>
+            </xpath>
             <xpath expr="//field[@name='vat']" position="attributes">
                 <attribute name="invisible">context.get('microfinance_context')</attribute>
             </xpath>
@@ -67,7 +96,8 @@
                     <group string="Identification">
                         <field name="microfinance_registration_number" placeholder="Numéro d'inscription interne"/>
                         <field name="microfinance_id_type"/>
-                        <field name="microfinance_id_number_display" string="N° CIN" placeholder="123 456 789 012" invisible="microfinance_id_type != 'cin'"/>
+                        <field name="microfinance_id_number_display" string="N° CIN" placeholder="123 456 789 012"
+                            widget="microfinance_grouped_digits" invisible="microfinance_id_type != 'cin'"/>
                         <field name="microfinance_id_number" string="N° pièce d'identité" placeholder="Numéro de la pièce d'identité" invisible="microfinance_id_type == 'cin'"/>
                         <field name="microfinance_id_issue_date" invisible="microfinance_id_type != 'cin'"/>
                         <field name="microfinance_id_issue_place" placeholder="Ex: Antananarivo" invisible="microfinance_id_type != 'cin'"/>
@@ -78,14 +108,41 @@
                         <field name="microfinance_education_level"/>
                     </group>
                     <group string="Famille et compte">
-                        <field name="microfinance_spouse_name" placeholder="Nom complet du conjoint"
-                            required="microfinance_marital_status == 'married'"/>
+                        <!-- "Créer et modifier" ouvre le formulaire res.partner complet (pas de
+                             view_id forcé), avec l'adresse du client courant préremplie via
+                             default_* — évalué dynamiquement à chaque ouverture depuis les
+                             valeurs actuelles du formulaire, pas des valeurs figées.
+                             microfinance_context est propagé pour que ce formulaire affiche
+                             aussi nos sections (dont Commune/Fokontany/Région/District, pour
+                             que le préremplissage soit visible, pas seulement enregistré). -->
+                        <!-- Visible pour toute situation matrimoniale sauf Célibataire (permet de
+                             renseigner un ex-conjoint ou conjoint décédé à titre informatif pour
+                             Divorcé(e)/Veuf(ve), sans le rendre obligatoire pour eux — seul
+                             "Marié(e)" l'exige, cf. _check_spouse_required_if_married). -->
+                        <field name="microfinance_spouse_id" placeholder="Rechercher ou créer le conjoint..."
+                            invisible="microfinance_marital_status == 'single'"
+                            required="microfinance_marital_status == 'married'"
+                            context="{
+                                'default_street': street, 'default_street2': street2,
+                                'default_city': city, 'default_zip': zip,
+                                'default_microfinance_commune_id': microfinance_commune_id,
+                                'default_microfinance_fokontany_id': microfinance_fokontany_id,
+                                'default_microfinance_region_id': microfinance_region_id,
+                                'default_microfinance_district_id': microfinance_district_id,
+                                'microfinance_context': True,
+                            }"/>
                         <field name="microfinance_spouse_phone" placeholder="Ex: 034 12 345 67"
+                            invisible="microfinance_marital_status == 'single'"
                             required="microfinance_marital_status == 'married'"/>
-                        <field name="microfinance_spouse_profession" placeholder="Ex: Commerçant, Agriculteur..."/>
+                        <field name="microfinance_spouse_profession" placeholder="Rechercher ou créer une profession..."
+                            invisible="microfinance_marital_status == 'single'"/>
                         <field name="microfinance_next_of_kin_name" placeholder="Nom de la personne à contacter en cas d'urgence"/>
                         <field name="microfinance_next_of_kin_address" placeholder="Adresse de cette personne"/>
                         <field name="microfinance_co_holder_name" placeholder="Nom du co-titulaire du compte, le cas échéant"/>
+                        <!-- Pas de context de préremplissage ici : le garant a typiquement une
+                             adresse différente du client, formulaire de création vierge
+                             (comportement Many2one standard). -->
+                        <field name="microfinance_guarantor_id" placeholder="Rechercher ou créer le garant..."/>
                         <field name="microfinance_required_signatures"/>
                     </group>
                 </group>
@@ -115,9 +172,6 @@
                         <field name="microfinance_district" placeholder="District"/>
                         <field name="microfinance_commune" placeholder="Commune"/>
                         <field name="microfinance_locality" placeholder="Fokontany / localité"/>
-                        <field name="microfinance_commune_id"/>
-                        <field name="microfinance_fokontany_id"
-                               domain="[('commune_id', '=', microfinance_commune_id)]"/>
                     </group>
                     <group string="Fermeture">
                         <field name="microfinance_closure_date"/>

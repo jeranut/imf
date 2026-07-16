@@ -134,6 +134,104 @@
         <field name="context">{'search_default_group_commune': 1}</field>
     </record>
 
+    <!-- ==================== RÉGION ==================== -->
+    <record id="view_microfinance_geo_region_tree" model="ir.ui.view">
+        <field name="name">microfinance.geo.region.tree</field>
+        <field name="model">microfinance.geo.region</field>
+        <field name="arch" type="xml">
+            <tree string="Régions">
+                <field name="name"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_geo_region_form" model="ir.ui.view">
+        <field name="name">microfinance.geo.region.form</field>
+        <field name="model">microfinance.geo.region</field>
+        <field name="arch" type="xml">
+            <form string="Région">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="Nom de la région"/></h1>
+                    </div>
+                    <field name="active" invisible="1"/>
+                    <field name="district_ids">
+                        <tree>
+                            <field name="name"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_geo_region" model="ir.actions.act_window">
+        <field name="name">Régions</field>
+        <field name="res_model">microfinance.geo.region</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <!-- ==================== DISTRICT ==================== -->
+    <record id="view_microfinance_geo_district_tree" model="ir.ui.view">
+        <field name="name">microfinance.geo.district.tree</field>
+        <field name="model">microfinance.geo.district</field>
+        <field name="arch" type="xml">
+            <tree string="Districts">
+                <field name="name"/>
+                <field name="region_id"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_geo_district_form" model="ir.ui.view">
+        <field name="name">microfinance.geo.district.form</field>
+        <field name="model">microfinance.geo.district</field>
+        <field name="arch" type="xml">
+            <form string="District">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="Nom du district"/></h1>
+                    </div>
+                    <group>
+                        <field name="region_id"/>
+                        <field name="active"/>
+                    </group>
+                    <field name="commune_ids">
+                        <tree>
+                            <field name="code"/>
+                            <field name="name"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_geo_district_search" model="ir.ui.view">
+        <field name="name">microfinance.geo.district.search</field>
+        <field name="model">microfinance.geo.district</field>
+        <field name="arch" type="xml">
+            <search string="Districts">
+                <field name="name"/>
+                <field name="region_id"/>
+                <group expand="0" string="Grouper par">
+                    <filter string="Région" name="group_region"
+                            context="{'group_by': 'region_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_geo_district" model="ir.actions.act_window">
+        <field name="name">Districts</field>
+        <field name="res_model">microfinance.geo.district</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_microfinance_geo_district_search"/>
+        <field name="context">{'search_default_group_region': 1}</field>
+    </record>
+
     <!-- ==================== MENUS ==================== -->
     <menuitem id="menu_microfinance_geo_commune"
               name="Communes"
@@ -148,5 +246,19 @@
               action="action_microfinance_geo_fokontany"
               groups="microfinance_loan_management.group_microfinance_manager"
               sequence="9"/>
+
+    <menuitem id="menu_microfinance_geo_region"
+              name="Régions"
+              parent="menu_microfinance_config"
+              action="action_microfinance_geo_region"
+              groups="microfinance_loan_management.group_microfinance_manager"
+              sequence="10"/>
+
+    <menuitem id="menu_microfinance_geo_district"
+              name="Districts"
+              parent="menu_microfinance_config"
+              action="action_microfinance_geo_district"
+              groups="microfinance_loan_management.group_microfinance_manager"
+              sequence="11"/>
 
 </odoo>

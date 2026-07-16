@@ -302,9 +302,120 @@ def _load_geo_fokontany(env):
         len(data_list), skipped)
 
 
+def _load_geo_commune_postal_codes(env):
+    """Charge data/microfinance_geo_commune_postal_code.csv (colonnes commune_xmlid,postal_code
+    — format volontairement non standard Odoo, destiné uniquement à ce hook, jamais à la clé
+    'data' du manifeste). write() conditionnel : ne renseigne postal_code que s'il est encore
+    vide sur la commune, pour ne jamais écraser une correction manuelle faite en base."""
+    rows = _read_geo_csv('microfinance_geo_commune_postal_code.csv')
+    updated = 0
+    kept = 0
+    missing = 0
+    for row in rows:
+        commune = env.ref(f'{GEO_MODULE}.{row["commune_xmlid"]}', raise_if_not_found=False)
+        if not commune:
+            missing += 1
+            _logger.warning(
+                "Référentiel géo : commune %s introuvable, code postal ignoré.",
+                row['commune_xmlid'])
+            continue
+        if commune.postal_code:
+            kept += 1
+            continue
+        commune.write({'postal_code': row['postal_code']})
+        updated += 1
+
+    _logger.info(
+        "Référentiel géo : %d codes postaux de commune appliqués (%d déjà renseignés "
+        "conservés, %d communes introuvables).",
+        updated, kept, missing)
+
+
+def _load_geo_regions(env):
+    """Charge data/microfinance.geo.region.csv (référentiel administratif Loi n°2018-011,
+    21 régions sur les 23 que compte Madagascar — les 2 manquantes n'apparaissent pas dans le
+    fichier source fourni)."""
+    Region = env['microfinance.geo.region']
+    rows = _read_geo_csv('microfinance.geo.region.csv')
+    data_list = [{
+        'xml_id': f'{GEO_MODULE}.{row["id"]}',
+        'values': {'name': row['name']},
+        'noupdate': True,
+    } for row in rows]
+    Region._load_records(data_list, update=True)
+    _force_geo_noupdate(env, [row['id'] for row in rows])
+    _logger.info("Référentiel géo : %d régions synchronisées.", len(rows))
+
+
+def _load_geo_districts(env):
+    """Charge data/microfinance.geo.district.csv (112 districts), en résolvant region_id par
+    xml_id (la région doit avoir été chargée par _load_geo_regions avant cet appel)."""
+    District = env['microfinance.geo.district']
+    rows = _read_geo_csv('microfinance.geo.district.csv')
+    data_list = []
+    skipped = 0
+    for row in rows:
+        region_xml_id = row.get('region_id/id')
+        region = env.ref(f'{GEO_MODULE}.{region_xml_id}', raise_if_not_found=False) \
+            if region_xml_id else False
+        if not region:
+            skipped += 1
+            _logger.warning(
+                "Référentiel géo : district %s ignoré, région %s introuvable.",
+                row['id'], region_xml_id)
+            continue
+        data_list.append({
+            'xml_id': f'{GEO_MODULE}.{row["id"]}',
+            'values': {'name': row['name'], 'region_id': region.id},
+            'noupdate': True,
+        })
+    District._load_records(data_list, update=True)
+    _force_geo_noupdate(env, [data['xml_id'].split('.', 1)[1] for data in data_list])
+    _logger.info(
+        "Référentiel géo : %d districts synchronisés (%d ignorés).",
+        len(data_list), skipped)
+
+
+def _link_geo_commune_districts(env):
+    """Charge data/microfinance_geo_commune_district_link.csv (colonnes
+    commune_xmlid,district_xmlid — format volontairement non standard Odoo, destiné uniquement
+    à ce hook, jamais à la clé 'data' du manifeste). write() conditionnel : ne renseigne
+    district_id que s'il est encore vide sur la commune, pour ne jamais écraser une correction
+    manuelle. Les communes non couvertes par ce fichier (noms ambigus ou introuvables lors du
+    rapprochement automatique, cf. docs/unmatched_ambiguous_report.csv) restent à None, à traiter
+    manuellement dans un lot séparé."""
+    rows = _read_geo_csv('microfinance_geo_commune_district_link.csv')
+    updated = 0
+    kept = 0
+    missing = 0
+    for row in rows:
+        commune = env.ref(f'{GEO_MODULE}.{row["commune_xmlid"]}', raise_if_not_found=False)
+        district = env.ref(f'{GEO_MODULE}.{row["district_xmlid"]}', raise_if_not_found=False)
+        if not commune or not district:
+            missing += 1
+            _logger.warning(
+                "Référentiel géo : lien commune %s -> district %s ignoré (introuvable).",
+                row['commune_xmlid'], row['district_xmlid'])
+            continue
+        if commune.district_id:
+            kept += 1
+            continue
+        commune.write({'district_id': district.id})
+        updated += 1
+
+    _logger.info(
+        "Référentiel géo : %d communes liées à un district (%d déjà liées conservées, "
+        "%d liens introuvables).",
+        updated, kept, missing)
+
+
 def _load_geo_reference_data(env):
     _load_geo_communes(env)
     _load_geo_fokontany(env)
+    _load_geo_commune_postal_codes(env)
+    _load_geo_regions(env)
+    _load_geo_districts(env)
+    _link_geo_commune_districts(env)
 
 
 def post_init_hook(env):

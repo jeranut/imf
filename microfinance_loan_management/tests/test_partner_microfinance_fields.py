@@ -15,14 +15,15 @@ class TestPartnerSpouseRequired(MicrofinanceCommon):
             })
 
     def test_married_with_spouse_info_allowed(self):
+        spouse = self.env['res.partner'].create({'name': 'Conjoint Test', 'phone': '0341234567'})
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client marié complet',
             'microfinance_client_type': 'individual',
             'microfinance_marital_status': 'married',
-            'microfinance_spouse_name': 'Conjoint Test',
-            'microfinance_spouse_phone': '0341234567',
+            'microfinance_spouse_id': spouse.id,
         })
         self.assertTrue(partner.id)
+        self.assertEqual(partner.microfinance_spouse_phone, '0341234567')
 
     def test_married_incomplete_not_blocked_outside_microfinance_context(self):
         # Contact partagé avec d'autres usages de l'instance (EAT, immobilier) hors contexte

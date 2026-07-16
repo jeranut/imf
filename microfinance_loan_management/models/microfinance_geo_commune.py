@@ -31,6 +31,7 @@ class MicrofinanceGeoCommune(models.Model):
              "Madagascar. Laisser vide pour une entrée de regroupement "
              "purement locale (ex: ville mère sans code BCM propre).")
     name = fields.Char(string='Nom', required=True, index=True)
+    postal_code = fields.Char(string='Code postal')
 
     parent_city_id = fields.Many2one(
         'microfinance.geo.commune', string='Ville mère',
@@ -41,6 +42,18 @@ class MicrofinanceGeoCommune(models.Model):
              "autonome (ex: Fianarantsoa).")
     child_ids = fields.One2many(
         'microfinance.geo.commune', 'parent_city_id', string='Arrondissements')
+
+    district_id = fields.Many2one(
+        'microfinance.geo.district', string='District',
+        help="District de rattachement, selon le référentiel administratif "
+             "officiel (Loi n°2018-011). Nullable : toutes les communes du "
+             "référentiel BCM n'ont pas encore été rattachées automatiquement "
+             "— voir data/unmatched_ambiguous_report.csv pour les cas "
+             "restant à traiter manuellement (noms ambigus ou introuvables "
+             "lors du rapprochement automatique).")
+    region_id = fields.Many2one(
+        related='district_id.region_id', string='Région', store=True,
+        readonly=True)
 
     unit_label = fields.Selection([
         ('commune', 'Commune'),

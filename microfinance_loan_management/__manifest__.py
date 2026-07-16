@@ -53,6 +53,7 @@
         'web.assets_backend': [
             'microfinance_loan_management/static/lib/apexcharts/apexcharts.min.js',
             'microfinance_loan_management/static/src/js/microfinance_loan_dashboard.js',
+            'microfinance_loan_management/static/src/js/microfinance_cin_widget.js',
             'microfinance_loan_management/static/src/xml/microfinance_loan_dashboard.xml',
             'microfinance_loan_management/static/src/scss/microfinance_loan_dashboard.scss',
         ],

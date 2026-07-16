@@ -16,6 +16,8 @@ from . import microfinance_client_representative
 from . import microfinance_client_blacklist
 from . import microfinance_client_category
 from . import microfinance_client_group_member
+from . import microfinance_geo_region
+from . import microfinance_geo_district
 from . import microfinance_geo_commune
 from . import microfinance_geo_fokontany
 from . import microfinance_bailleur_fonds

@@ -46,6 +46,40 @@ class ResPartner(models.Model):
         for partner in self:
             partner.is_company = partner.microfinance_client_type == 'company'
 
+    @api.onchange('microfinance_commune_id', 'microfinance_fokontany_id')
+    def _onchange_microfinance_geo_derived_fields(self):
+        # La Commune pilote Ville/Code postal/District/Région (plutôt qu'une saisie manuelle
+        # dupliquée) : city = nom de la commune, zip = son code postal, district_id/region_id
+        # repris tels quels du rattachement déjà fait sur la commune (champs readonly côté vue,
+        # jamais de saisie manuelle directe — cf. PATCH_commune_model Lot 5). Le fokontany n'a
+        # pas de nom de ville propre (ne touche jamais city/district/region) mais reste
+        # prioritaire sur zip quand il a son propre code postal, plus précis que celui de la
+        # commune. city/zip restent modifiables à la main ensuite : on ne les efface jamais si
+        # aucune valeur n'est connue, un agent doit pouvoir corriger si le référentiel est
+        # incomplet. district_id/region_id restent vides si la commune n'est pas encore
+        # rattachée à un district (721 communes sur 1645, cf.
+        # docs/unmatched_ambiguous_report.csv).
+        for partner in self:
+            if partner.microfinance_commune_id:
+                partner.city = partner.microfinance_commune_id.name
+                if partner.microfinance_commune_id.postal_code:
+                    partner.zip = partner.microfinance_commune_id.postal_code
+                partner.microfinance_district_id = partner.microfinance_commune_id.district_id
+                partner.microfinance_region_id = partner.microfinance_commune_id.region_id
+            if partner.microfinance_fokontany_id.postal_code:
+                partner.zip = partner.microfinance_fokontany_id.postal_code
+
+    @api.onchange('microfinance_spouse_id')
+    def _onchange_microfinance_spouse_phone(self):
+        # phone en priorité, mobile en repli si phone est vide sur la fiche du conjoint ; ne
+        # touche jamais à la fiche du conjoint elle-même (spouse_phone n'est pas related, cf.
+        # commentaire sur le champ). Ne préremplit que si une valeur est trouvée : si le
+        # conjoint n'a ni phone ni mobile, la saisie manuelle reste possible sans être écrasée.
+        for partner in self:
+            spouse_phone = partner.microfinance_spouse_id.phone or partner.microfinance_spouse_id.mobile
+            if spouse_phone:
+                partner.microfinance_spouse_phone = spouse_phone
+
     @api.constrains('company_id', 'microfinance_client_type')
     def _check_microfinance_company_required(self):
         if not self.env.context.get('microfinance_context'):
@@ -109,12 +143,23 @@ class ResPartner(models.Model):
     ], string="Niveau d'éducation")
 
     # --- Particulier : Famille et compte ---
-    microfinance_spouse_name = fields.Char(string='Nom du conjoint')
+    microfinance_spouse_id = fields.Many2one('res.partner', string='Conjoint')
+    # Char indépendant (pas related) : contrairement à microfinance_spouse_profession, ce champ
+    # doit pouvoir se replier sur mobile quand phone est vide (cf. onchange ci-dessous) — un
+    # related='microfinance_spouse_id.phone' écrirait ce repli directement sur le phone du
+    # conjoint, un effet de bord non voulu sur sa fiche. Auto-rempli par onchange, jamais
+    # verrouillé (même logique que city/zip).
     microfinance_spouse_phone = fields.Char(string='Téléphone du conjoint')
-    microfinance_spouse_profession = fields.Char(string='Profession du conjoint')
+    # related/store/readonly=False : le conjoint est un contact à part entière (souvent lui-même
+    # client), la profession se lit et s'écrit directement sur sa fiche plutôt que d'être
+    # dupliquée ici — décision confirmée, une seule source de vérité.
+    microfinance_spouse_profession = fields.Many2one(
+        'microfinance.profession', related='microfinance_spouse_id.microfinance_profession',
+        string='Profession du conjoint', store=True, readonly=False)
     microfinance_next_of_kin_name = fields.Char(string='Personne à contacter')
     microfinance_next_of_kin_address = fields.Char(string='Adresse contact')
     microfinance_co_holder_name = fields.Char(string='Co-titulaire')
+    microfinance_guarantor_id = fields.Many2one('res.partner', string='Garant')
     microfinance_required_signatures = fields.Integer(string='Signatures requises', default=1)
 
     # --- Société : Identité légale (NIF/STAT/RCS remplacent le N° TVA natif) ---
@@ -139,16 +184,24 @@ class ResPartner(models.Model):
     microfinance_employee_count = fields.Integer(string='Employés')
 
     # --- Société : Localisation étendue ---
-    microfinance_region = fields.Char(string='Région')
-    microfinance_district = fields.Char(string='District')
-    # Dépréciés au profit de microfinance_commune_id / microfinance_fokontany_id
-    # (référentiel structuré BCM). Conservés tels quels dans l'attente d'un lot
-    # de migration séparé (rapprochement texte -> M2O à valider explicitement
-    # avant toute suppression de données existantes).
+    # Dépréciés au profit de microfinance_region_id / microfinance_district_id /
+    # microfinance_commune_id / microfinance_fokontany_id (référentiels structurés). Conservés
+    # tels quels dans l'attente d'un lot de migration séparé (rapprochement texte -> M2O à
+    # valider explicitement avant toute suppression de données existantes) : 721 communes sur
+    # 1645 ne sont pas encore rattachées à un district dans le référentiel (cf.
+    # docs/unmatched_ambiguous_report.csv), tant que ce n'est pas traité tous les clients ne
+    # peuvent pas être classés par district via le nouveau champ.
+    microfinance_region = fields.Char(string='Région (ancien, texte libre)')
+    microfinance_district = fields.Char(string='District (ancien, texte libre)')
     microfinance_commune = fields.Char(string='Commune (ancien, texte libre)')
     microfinance_locality = fields.Char(string='Localité (ancien, texte libre)')
     microfinance_commune_id = fields.Many2one('microfinance.geo.commune', string='Commune')
     microfinance_fokontany_id = fields.Many2one('microfinance.geo.fokontany', string='Fokontany')
+
+    # --- Référentiel administratif (Loi n°2018-011) : nouvelle section, distincte de la
+    # Résidence commune/fokontany (référentiel BCM) affichée dans la vue. ---
+    microfinance_region_id = fields.Many2one('microfinance.geo.region', string='Région')
+    microfinance_district_id = fields.Many2one('microfinance.geo.district', string='District')
 
     # --- Société : Fermeture ---
     microfinance_closure_date = fields.Date(string='Date de fermeture')
@@ -214,7 +267,7 @@ class ResPartner(models.Model):
                 if len(digits) != 12:
                     raise ValidationError(_('Le NIF doit contenir exactement 12 chiffres.'))
 
-    @api.constrains('microfinance_marital_status', 'microfinance_spouse_name', 'microfinance_spouse_phone')
+    @api.constrains('microfinance_marital_status', 'microfinance_spouse_id', 'microfinance_spouse_phone')
     def _check_spouse_required_if_married(self):
         # Hors contexte microfinance, ce contact est partagé avec d'autres usages de l'instance
         # (EAT, immobilier) : aucune contrainte microfinance ne doit s'y appliquer.
@@ -222,8 +275,8 @@ class ResPartner(models.Model):
             return
         for partner in self:
             if partner.microfinance_marital_status == 'married' and not (
-                partner.microfinance_spouse_name and partner.microfinance_spouse_phone
+                partner.microfinance_spouse_id and partner.microfinance_spouse_phone
             ):
                 raise ValidationError(_(
-                    'Le nom et le téléphone du conjoint sont obligatoires pour un client marié.'
+                    'Le conjoint et son téléphone sont obligatoires pour un client marié.'
                 ))
