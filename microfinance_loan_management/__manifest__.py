@@ -29,6 +29,7 @@
         'views/microfinance_bailleur_fonds_views.xml',
         'views/microfinance_fond_credit_views.xml',
         'views/microfinance_fond_contribution_views.xml',
+        'views/microfinance_geo_views.xml',
         'views/microfinance_profession_views.xml',
         'views/microfinance_repayment_frequency_views.xml',
         'views/microfinance_provision_rule_views.xml',

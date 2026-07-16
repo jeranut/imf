@@ -115,8 +115,9 @@
                         <field name="microfinance_district" placeholder="District"/>
                         <field name="microfinance_commune" placeholder="Commune"/>
                         <field name="microfinance_locality" placeholder="Fokontany / localité"/>
-                        <field name="microfinance_gps_coordinates" placeholder="Ex: -18.8792, 47.5079"/>
-                        <field name="microfinance_distance_to_branch"/>
+                        <field name="microfinance_commune_id"/>
+                        <field name="microfinance_fokontany_id"
+                               domain="[('commune_id', '=', microfinance_commune_id)]"/>
                     </group>
                     <group string="Fermeture">
                         <field name="microfinance_closure_date"/>

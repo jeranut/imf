@@ -141,10 +141,14 @@ class ResPartner(models.Model):
     # --- Société : Localisation étendue ---
     microfinance_region = fields.Char(string='Région')
     microfinance_district = fields.Char(string='District')
-    microfinance_commune = fields.Char(string='Commune')
-    microfinance_locality = fields.Char(string='Localité')
-    microfinance_gps_coordinates = fields.Char(string='GPS')
-    microfinance_distance_to_branch = fields.Float(string='Distance succursale')
+    # Dépréciés au profit de microfinance_commune_id / microfinance_fokontany_id
+    # (référentiel structuré BCM). Conservés tels quels dans l'attente d'un lot
+    # de migration séparé (rapprochement texte -> M2O à valider explicitement
+    # avant toute suppression de données existantes).
+    microfinance_commune = fields.Char(string='Commune (ancien, texte libre)')
+    microfinance_locality = fields.Char(string='Localité (ancien, texte libre)')
+    microfinance_commune_id = fields.Many2one('microfinance.geo.commune', string='Commune')
+    microfinance_fokontany_id = fields.Many2one('microfinance.geo.fokontany', string='Fokontany')
 
     # --- Société : Fermeture ---
     microfinance_closure_date = fields.Date(string='Date de fermeture')

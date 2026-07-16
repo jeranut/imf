@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
+import csv
 import logging
+import os
 
 _logger = logging.getLogger(__name__)
+
+GEO_DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
+GEO_MODULE = 'microfinance_loan_management'
 
 # Sous-comptes PCEC dédiés créés pour microfinance.loan.product : un compte par segment
 # (Individuel/Groupe) plutôt qu'un compte "famille" PCEC partagé entre segments, et un compte
@@ -195,6 +200,113 @@ def _backfill_bailleur_partner_ids(env):
         bailleur.partner_id = partner.id
 
 
+def _read_geo_csv(filename):
+    path = os.path.join(GEO_DATA_DIR, filename)
+    with open(path, encoding='utf-8') as f:
+        return list(csv.DictReader(f))
+
+
+def _force_geo_noupdate(env, xml_ids):
+    """_load_records(noupdate=True) ne pose ce flag que sur les ir.model.data nouvellement
+    créés : la requête ON CONFLICT sous-jacente (_update_xmlids) ne touche jamais la colonne
+    noupdate d'une ligne déjà existante. Sans ce correctif, les xml_ids déjà chargés une première
+    fois (via l'ancien mécanisme CSV de la clé 'data', qui les avait créés en noupdate=False)
+    resteraient réécrasables indéfiniment par un futur appel de ce hook."""
+    if not xml_ids:
+        return
+    env.cr.execute(
+        "UPDATE ir_model_data SET noupdate = TRUE "
+        "WHERE module = %s AND name = ANY(%s) AND NOT noupdate",
+        (GEO_MODULE, list(xml_ids)),
+    )
+
+
+def _load_geo_communes(env):
+    """Charge le référentiel des communes BCM depuis data/microfinance.geo.commune.csv, sous
+    forme de xml_ids noupdate=True gérés programmatiquement (et non plus via la clé 'data' du
+    manifeste) : un futur -u ne doit pas écraser une correction manuelle faite en base sur une
+    commune déjà chargée. _load_records(update=True) est l'API moderne équivalente à l'ancien
+    ir.model.data._update() (retiré des versions récentes d'Odoo) — elle détecte les xml_ids déjà
+    présents et, pour ceux marqués noupdate, ne réapplique pas les valeurs du CSV dessus.
+
+    Deux passes nécessaires car parent_city_id référence une autre ligne du même fichier,
+    potentiellement pas encore créée au moment où sa ligne est lue (ex: Antananarivo I peut
+    précéder ou suivre ANTANANARIVO selon l'ordre du CSV)."""
+    Commune = env['microfinance.geo.commune']
+    rows = _read_geo_csv('microfinance.geo.commune.csv')
+
+    # Passe 1 : créer/synchroniser toutes les communes sans parent_city_id.
+    data_list = [{
+        'xml_id': f'{GEO_MODULE}.{row["id"]}',
+        'values': {'code': row['code'] or False, 'name': row['name']},
+        'noupdate': True,
+    } for row in rows]
+    Commune._load_records(data_list, update=True)
+    _force_geo_noupdate(env, [row['id'] for row in rows])
+
+    # Passe 2 : poser parent_city_id maintenant que toutes les communes existent.
+    linked = 0
+    for row in rows:
+        parent_xml_id = row.get('parent_city_id/id')
+        if not parent_xml_id:
+            continue
+        commune = env.ref(f'{GEO_MODULE}.{row["id"]}', raise_if_not_found=False)
+        parent = env.ref(f'{GEO_MODULE}.{parent_xml_id}', raise_if_not_found=False)
+        if not commune or not parent:
+            _logger.warning(
+                "Référentiel géo : commune %s ou ville mère %s introuvable, lien ignoré.",
+                row['id'], parent_xml_id)
+            continue
+        if commune.parent_city_id != parent:
+            commune.write({'parent_city_id': parent.id})
+        linked += 1
+
+    _logger.info(
+        "Référentiel géo : %d communes synchronisées (%d rattachées à une ville mère).",
+        len(rows), linked)
+
+
+def _load_geo_fokontany(env):
+    """Charge les fokontany depuis data/microfinance.geo.fokontany-antananarivo.csv, en
+    résolvant commune_id par xml_id (la commune doit avoir été chargée par
+    _load_geo_communes avant cet appel)."""
+    Fokontany = env['microfinance.geo.fokontany']
+    rows = _read_geo_csv('microfinance.geo.fokontany-antananarivo.csv')
+
+    data_list = []
+    skipped = 0
+    for row in rows:
+        commune_xml_id = row.get('commune_id/id')
+        commune = env.ref(f'{GEO_MODULE}.{commune_xml_id}', raise_if_not_found=False) \
+            if commune_xml_id else False
+        if not commune:
+            skipped += 1
+            _logger.warning(
+                "Référentiel géo : fokontany %s ignoré, commune %s introuvable.",
+                row['id'], commune_xml_id)
+            continue
+        data_list.append({
+            'xml_id': f'{GEO_MODULE}.{row["id"]}',
+            'values': {
+                'name': row['name'],
+                'postal_code': row.get('postal_code') or False,
+                'commune_id': commune.id,
+            },
+            'noupdate': True,
+        })
+    Fokontany._load_records(data_list, update=True)
+    _force_geo_noupdate(env, [data['xml_id'].split('.', 1)[1] for data in data_list])
+
+    _logger.info(
+        "Référentiel géo : %d fokontany synchronisés (%d ignorés).",
+        len(data_list), skipped)
+
+
+def _load_geo_reference_data(env):
+    _load_geo_communes(env)
+    _load_geo_fokontany(env)
+
+
 def post_init_hook(env):
     """Sur chaque société utilisant le plan PCEC (plan_compta_pcec, chart_template ==
     'mg_pcec'), crée les sous-comptes dédiés par segment et les 7 journaux standards. Les
@@ -209,3 +321,4 @@ def post_init_hook(env):
     _seed_agency_partner_type(env)
     _backfill_existing_client_partner_type(env)
     _backfill_bailleur_partner_ids(env)
+    _load_geo_reference_data(env)

@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ==================== COMMUNE ==================== -->
+    <record id="view_microfinance_geo_commune_tree" model="ir.ui.view">
+        <field name="name">microfinance.geo.commune.tree</field>
+        <field name="model">microfinance.geo.commune</field>
+        <field name="arch" type="xml">
+            <tree string="Communes">
+                <field name="code"/>
+                <field name="name"/>
+                <field name="unit_label"/>
+                <field name="parent_city_id"/>
+                <field name="fokontany_count"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_geo_commune_form" model="ir.ui.view">
+        <field name="name">microfinance.geo.commune.form</field>
+        <field name="model">microfinance.geo.commune</field>
+        <field name="arch" type="xml">
+            <form string="Commune">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="Nom de la commune"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="code" placeholder="Code BCM"/>
+                            <field name="unit_label" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="parent_city_id"
+                                   placeholder="Laisser vide si commune autonome"/>
+                            <field name="active"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Arrondissements" name="children"
+                              invisible="not child_ids">
+                            <field name="child_ids" readonly="1">
+                                <tree>
+                                    <field name="code"/>
+                                    <field name="name"/>
+                                    <field name="fokontany_count"/>
+                                </tree>
+                            </field>
+                        </page>
+                        <page string="Fokontany" name="fokontany">
+                            <field name="fokontany_ids">
+                                <tree editable="bottom">
+                                    <field name="name"/>
+                                    <field name="postal_code"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_geo_commune_search" model="ir.ui.view">
+        <field name="name">microfinance.geo.commune.search</field>
+        <field name="model">microfinance.geo.commune</field>
+        <field name="arch" type="xml">
+            <search string="Communes">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="parent_city_id"/>
+                <filter string="Communes autonomes" name="autonomous"
+                        domain="[('parent_city_id', '=', False)]"/>
+                <filter string="Arrondissements" name="arrondissements"
+                        domain="[('parent_city_id', '!=', False)]"/>
+                <group expand="0" string="Grouper par">
+                    <filter string="Ville mère" name="group_parent"
+                            context="{'group_by': 'parent_city_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_geo_commune" model="ir.actions.act_window">
+        <field name="name">Communes</field>
+        <field name="res_model">microfinance.geo.commune</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_microfinance_geo_commune_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Créer une commune ou un arrondissement
+            </p>
+        </field>
+    </record>
+
+    <!-- ==================== FOKONTANY ==================== -->
+    <record id="view_microfinance_geo_fokontany_tree" model="ir.ui.view">
+        <field name="name">microfinance.geo.fokontany.tree</field>
+        <field name="model">microfinance.geo.fokontany</field>
+        <field name="arch" type="xml">
+            <tree string="Fokontany" editable="bottom">
+                <field name="name"/>
+                <field name="postal_code"/>
+                <field name="commune_id"/>
+                <field name="parent_city_id" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_geo_fokontany_search" model="ir.ui.view">
+        <field name="name">microfinance.geo.fokontany.search</field>
+        <field name="model">microfinance.geo.fokontany</field>
+        <field name="arch" type="xml">
+            <search string="Fokontany">
+                <field name="name"/>
+                <field name="commune_id"/>
+                <field name="parent_city_id"/>
+                <group expand="0" string="Grouper par">
+                    <filter string="Commune" name="group_commune"
+                            context="{'group_by': 'commune_id'}"/>
+                    <filter string="Ville mère" name="group_parent_city"
+                            context="{'group_by': 'parent_city_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_geo_fokontany" model="ir.actions.act_window">
+        <field name="name">Fokontany</field>
+        <field name="res_model">microfinance.geo.fokontany</field>
+        <field name="view_mode">tree,form</field>
+        <field name="search_view_id" ref="view_microfinance_geo_fokontany_search"/>
+        <field name="context">{'search_default_group_commune': 1}</field>
+    </record>
+
+    <!-- ==================== MENUS ==================== -->
+    <menuitem id="menu_microfinance_geo_commune"
+              name="Communes"
+              parent="menu_microfinance_config"
+              action="action_microfinance_geo_commune"
+              groups="microfinance_loan_management.group_microfinance_manager"
+              sequence="8"/>
+
+    <menuitem id="menu_microfinance_geo_fokontany"
+              name="Fokontany"
+              parent="menu_microfinance_config"
+              action="action_microfinance_geo_fokontany"
+              groups="microfinance_loan_management.group_microfinance_manager"
+              sequence="9"/>
+
+</odoo>
