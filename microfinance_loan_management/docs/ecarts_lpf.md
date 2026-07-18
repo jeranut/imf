@@ -163,11 +163,15 @@ navigateur à cette largeur précise (fait par ajustement CSS raisonné, pas tes
 
 ## Écarts vs LPF (à confirmer)
 
-1. **`verification_disponibilite='at_request'` sans effet observable.** Son point d'ancrage naturel
-   (transition de `microfinance.loan.application` vers un état "soumis") n'existe pas : ce modèle
-   est absent de `models/__init__.py` (hors registre Odoo), et sa méthode de transformation
-   demande→crédit référence un wizard inexistant. Câbler ce modèle est un chantier séparé,
-   identifié deux fois maintenant (audit initial du module + ce travail), hors périmètre ici.
+1. **`verification_disponibilite='at_request'` sans effet observable — partiellement résolu.**
+   Son point d'ancrage naturel (transition de `microfinance.loan.application` vers un état
+   "soumis") existe bien (`_check_state_transition`) ; en revanche `action_create_loan()`
+   référençait un wizard inexistant (`microfinance.loan.application.create.loan.wizard`),
+   confirmant le constat initial. Ce wizard a été construit dans le cadre du chantier
+   "Programmes progressifs" (`docs/workflows/programme_progressif/`), formulaire minimal
+   (produit/montant/durée). `verification_disponibilite='at_request'` reste néanmoins sans
+   effet réel : le wizard ne l'invoque pas (hors périmètre de ce câblage minimal) — écart
+   toujours ouvert, mais le blocage structurel (modèle absent) est levé.
 2. **Comptes GL classe 2/3.** Le PCEC Madagascar 2005 ne suit pas la convention
    classe 2 = Dettes / classe 3 = Fonds propres supposée au départ (classe 2 = opérations
    clientèle mixtes actif/passif, classe 3 = comptes divers mixtes ; les vrais fonds propres sont
@@ -215,8 +219,20 @@ navigateur à cette largeur précise (fait par ajustement CSS raisonné, pas tes
    n'est pas câblé. Faut-il la masquer/désactiver temporairement dans la vue pour éviter une
    fausse impression de contrôle actif, ou la garder telle quelle (docstring + ce document suffisent
    à la documenter) ?
-7. **Câblage de `microfinance.loan.application`** : chantier séparé, identifié à deux reprises —
-   à prioriser ou non.
+7. **Câblage de `microfinance.loan.application`** — fait (chantier "Programmes progressifs") :
+   `loan_product_id` ajouté sur le dossier (requis, domaine société), wizard
+   `microfinance.loan.application.create.loan.wizard` construit (produit pré-rempli,
+   montant, durée), `action_create_loan()` fonctionnel. Le reste du crédit (garanties,
+   périodicité, fonds bailleur, comptes, scoring) reste géré sur `microfinance.loan` après
+   création, non dupliqué dans le wizard.
+8. **Rang de prêt global (LPF) vs chaînage produit-à-produit (CEFOR).** LPF gère un rang de
+   prêt global par client (numéro de cycle de crédit, `loan_sequence_number` /
+   `microfinance.loan.application.tier` dans ce module) mais ne chaîne pas explicitement des
+   *produits* précis entre eux avec un critère de retard par étape. Le modèle
+   `microfinance.loan.progressive.program`/`.step` (chantier "Programmes progressifs",
+   `docs/workflows/programme_progressif/`) est un ajout CEFOR au-delà du comportement LPF,
+   pas un écart de conformité à corriger : LPF ne fait simplement rien de comparable à ce
+   niveau de granularité.
 
 ## Lot 8 — Fonds obligatoire si actif + verrouillage anti-contournement post-décaissement
 

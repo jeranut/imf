@@ -41,6 +41,7 @@ class MicrofinanceLoan(models.Model):
     application_date = fields.Date(string='Date de demande', default=fields.Date.context_today, required=True)
     approval_date = fields.Date(string="Date d'approbation", readonly=True)
     disbursement_date = fields.Date(string='Date de décaissement', readonly=True)
+    closed_date = fields.Date(string='Date de clôture', readonly=True, copy=False)
     interest_rate = fields.Float(string='Taux intérêt annuel (%)', related='product_id.interest_rate', readonly=False, store=True)
     interest_method = fields.Selection(related='product_id.interest_method', readonly=False, store=True)
     repayment_frequency_mode = fields.Selection(
@@ -148,6 +149,11 @@ class MicrofinanceLoan(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        if not self.env.context.get('microfinance_loan_creation_allowed'):
+            raise UserError(_(
+                "Un crédit ne peut être créé que depuis un dossier d'instruction accepté "
+                '(menu Dossiers d\'instruction → Créer le crédit).'
+            ))
         for vals in vals_list:
             if vals.get('name', 'Nouveau') == 'Nouveau':
                 # agency_code est obligatoire sur res.company (NOT NULL) : toute société valide
@@ -538,7 +544,7 @@ class MicrofinanceLoan(models.Model):
         for loan in self:
             if loan.balance_total > 0.01:
                 raise UserError(_('Impossible de clôturer : solde restant à payer.'))
-            loan.state = 'closed'
+            loan.write({'state': 'closed', 'closed_date': fields.Date.context_today(loan)})
             guarantees_to_release = loan.guarantee_ids.filtered(lambda g: g.state != 'released')
             if guarantees_to_release:
                 guarantees_to_release.write({'state': 'released'})

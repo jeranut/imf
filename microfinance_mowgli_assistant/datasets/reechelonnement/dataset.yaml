@@ -31,14 +31,14 @@ articles:
     menu: >
       Aucun menu dédié : le bouton Rééchelonner apparaît uniquement dans l'en-tête
       de la fiche crédit (microfinance.loan), accessible via
-      Microfinance > Crédits > Demande de crédit, lorsque le crédit est à l'état actif.
+      Microfinance > Crédits > Crédits, lorsque le crédit est à l'état actif.
     model: microfinance.loan
     prerequisites:
       - Le crédit (microfinance.loan) doit être à l'état actif (state = 'active').
       - Il doit rester au moins une échéance non payée (installment_ids avec state != 'paid').
       - Seul un utilisateur du groupe Manager crédit (ou Gestionnaire, qui hérite de ses droits) voit le bouton.
     steps:
-      - Ouvrir la fiche du crédit actif concerné depuis Microfinance > Crédits > Demande de crédit.
+      - Ouvrir la fiche du crédit actif concerné depuis Microfinance > Crédits > Crédits.
       - Cliquer sur le bouton Rééchelonner dans l'en-tête de la fiche crédit.
       - Le wizard microfinance.loan.reschedule.wizard s'ouvre avec le crédit préchargé.
       - Renseigner au moins l'un des deux champs new_term (nouvelle durée restante) et/ou new_first_due_date (nouvelle date de première échéance restante), et éventuellement un motif (reason).
@@ -57,7 +57,7 @@ articles:
       n'a pas les droits requis ou si le crédit n'est pas actif.
     answer: >
       <p>Pour rééchelonner un crédit actif, ouvrez la fiche du crédit depuis
-      <strong>Microfinance &gt; Crédits &gt; Demande de crédit</strong>, puis cliquez sur le
+      <strong>Microfinance &gt; Crédits &gt; Crédits</strong>, puis cliquez sur le
       bouton <strong>Rééchelonner</strong> dans l'en-tête (visible uniquement si le crédit est
       à l'état actif et pour un manager crédit ou un gestionnaire). Le wizard qui s'ouvre
       permet de renseigner une nouvelle durée restante et/ou une nouvelle date de première

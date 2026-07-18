@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_progressive_program_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.progressive.program.tree</field>
+        <field name="model">microfinance.loan.progressive.program</field>
+        <field name="arch" type="xml">
+            <tree decoration-muted="not active">
+                <field name="name"/>
+                <field name="code"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="step_count"/>
+                <field name="active" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_progressive_program_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.progressive.program.form</field>
+        <field name="model">microfinance.loan.progressive.program</field>
+        <field name="arch" type="xml">
+            <form string="Programme progressif">
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" placeholder="Nom du programme"/></h1></div>
+                    <group>
+                        <field name="code"/>
+                        <field name="company_id" groups="base.group_multi_company" placeholder="Toutes les sociétés"/>
+                        <field name="active"/>
+                    </group>
+                    <field name="description" placeholder="Description du parcours client…"/>
+                    <field name="step_ids">
+                        <tree editable="bottom">
+                            <field name="sequence_number" widget="handle"/>
+                            <field name="product_id"/>
+                            <field name="late_tolerance_days"/>
+                            <field name="late_tolerance_amount_percent"/>
+                            <field name="notes"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_loan_progressive_program" model="ir.actions.act_window">
+        <field name="name">Programmes progressifs</field>
+        <field name="res_model">microfinance.loan.progressive.program</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

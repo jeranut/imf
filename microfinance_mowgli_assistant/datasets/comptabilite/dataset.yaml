@@ -56,7 +56,7 @@ articles:
       - Pourquoi le bouton Décaisser n'apparaît-il pas sur ce dossier ?
       - Qui peut encaisser les frais de dossier ou décaisser un crédit ?
       - Comment encaisser les frais de dossier avant décaissement ?
-    menu: Microfinance > Crédits > Demande de crédit
+    menu: Microfinance > Crédits > Crédits
     model: microfinance.loan
     prerequisites:
       - Le crédit doit être à l'état Approuvé.
@@ -86,7 +86,7 @@ articles:
       d'encaissement des frais... » / « Configurez le compte commission sur
       crédit du produit pour netter les frais... » (comptes PCEC manquants).
     answer: >
-      <p>Depuis Microfinance > Crédits > Demande de crédit, ouvrez le
+      <p>Depuis Microfinance > Crédits > Crédits, ouvrez le
       dossier à l'état <strong>Approuvé</strong>.</p>
       <ol>
         <li>Si le produit facture les frais de dossier avant décaissement
@@ -230,7 +230,7 @@ articles:
     questions:
       - Quelles sont les étapes pour radier un crédit irrécouvrable ?
       - Comment passer un crédit en perte sur créance ?
-    menu: Microfinance > Crédits > Demande de crédit
+    menu: Microfinance > Crédits > Crédits
     model: microfinance.loan
     prerequisites:
       - Le crédit doit être à l'état Actif ou En défaut.
@@ -276,13 +276,13 @@ articles:
     questions:
       - Comment se déclenche le provisionnement comptable des crédits ?
       - Comment mettre à jour les provisions du portefeuille de crédits ?
-    menu: Microfinance > Crédits > Demande de crédit (vue liste, menu Actions)
+    menu: Microfinance > Crédits > Crédits (vue liste, menu Actions)
     model: microfinance.loan
     prerequisites:
       - Action réservée aux groupes Manager crédit et Finance microfinance.
       - Les comptes de provision (coût et contrepartie) doivent être configurés sur le produit.
     steps:
-      - Depuis Microfinance > Crédits > Demande de crédit, en vue liste, sélectionner un ou plusieurs crédits puis utiliser le menu Actions > « Comptabiliser les provisions » (action_post_provisions) ; le provisionnement peut aussi être exécuté par une tâche planifiée périodique.
+      - Depuis Microfinance > Crédits > Crédits, en vue liste, sélectionner un ou plusieurs crédits puis utiliser le menu Actions > « Comptabiliser les provisions » (action_post_provisions) ; le provisionnement peut aussi être exécuté par une tâche planifiée périodique.
       - Pour chaque crédit dont la provision requise (provision_amount) diffère de la provision déjà comptabilisée (provision_posted_amount), crée et poste une écriture de dotation (delta positif) ou de reprise (delta négatif), puis met à jour provision_posted_amount.
     tips: >
       Le taux de provision applicable est recherché dans les règles de
@@ -297,7 +297,7 @@ articles:
       « Configurez les comptes de provision (coût et contrepartie) pour le
       produit... »
     answer: >
-      <p>Depuis Microfinance > Crédits > Demande de crédit, en vue liste,
+      <p>Depuis Microfinance > Crédits > Crédits, en vue liste,
       sélectionnez un ou plusieurs crédits puis utilisez le menu
       Actions > « Comptabiliser les provisions » (réservé aux groupes
       Manager crédit et Finance microfinance). Le provisionnement peut

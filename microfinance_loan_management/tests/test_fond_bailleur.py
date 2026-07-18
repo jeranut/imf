@@ -173,7 +173,7 @@ class TestFondScopeReadonly(TestFondBailleurCommon):
 
     def test_change_company_id_after_save_blocked(self):
         fond = self._create_fond()
-        other_company = self.env['res.company'].create({'name': 'Autre agence (test readonly)'})
+        other_company = self.env['res.company'].create({'name': 'Autre agence (test readonly)', 'agency_code': 'FB1'})
         with self.assertRaises(UserError):
             fond.write({'company_id': other_company.id})
 
@@ -252,7 +252,7 @@ class TestFondMultiCompany(TestFondBailleurCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company_b = cls.env['res.company'].create({'name': 'Agence B fonds (test)'})
+        cls.company_b = cls.env['res.company'].create({'name': 'Agence B fonds (test)', 'agency_code': 'FB2'})
         cls.user_b = cls.env['res.users'].create({
             'name': 'Agent Agence B fonds (test)',
             'login': 'agent_agence_b_fonds_test',
@@ -306,7 +306,7 @@ class TestFondMultiCompany(TestFondBailleurCommon):
         self._create_contribution(fond, amount=5000.0, saisie_company_id=self.env.company.id).action_post()
 
         # Décaissement d'un crédit rattaché à l'agence B.
-        loan_b = self.env['microfinance.loan'].create({
+        loan_b = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
             'partner_id': self.partner_b.id,
             'product_id': self.product_b.id,
             'company_id': self.company_b.id,

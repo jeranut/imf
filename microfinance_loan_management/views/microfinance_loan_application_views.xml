@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.tree</field>
+        <field name="model">microfinance.loan.application</field>
+        <field name="arch" type="xml">
+            <tree decoration-success="state in ('accepted','accepted_condition','loan_created')" decoration-danger="state == 'refused'">
+                <field name="name"/>
+                <field name="application_date"/>
+                <field name="partner_id"/>
+                <field name="surveyor_id"/>
+                <field name="requested_amount"/>
+                <field name="loan_tier_label"/>
+                <field name="state" widget="badge"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_application_kanban" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.kanban</field>
+        <field name="model">microfinance.loan.application</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="state">
+                <field name="name"/><field name="partner_id"/><field name="requested_amount"/>
+                <field name="loan_tier_label"/><field name="state"/><field name="kanban_color"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div t-attf-class="oe_kanban_global_click o_kanban_record oe_kanban_color_#{kanban_color}">
+                            <strong><field name="name"/></strong>
+                            <div><field name="partner_id"/></div>
+                            <div>Montant demandé : <field name="requested_amount"/></div>
+                            <div><field name="loan_tier_label"/></div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_application_search" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.search</field>
+        <field name="model">microfinance.loan.application</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="surveyor_id"/>
+                <filter name="my_applications" string="Mes dossiers" domain="[('surveyor_id','=',uid)]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_state" string="État" context="{'group_by':'state'}"/>
+                    <filter name="group_surveyor" string="Enquêteur" context="{'group_by':'surveyor_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_application_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.form</field>
+        <field name="model">microfinance.loan.application</field>
+        <field name="arch" type="xml">
+            <form string="Dossier d'instruction de crédit" class="o_microfinance_loan_application_form">
+                <header>
+                    <button name="action_start_field_survey" string="Démarrer l'enquête terrain" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_reset_to_draft" string="Repasser en brouillon" type="object" invisible="state != 'field_survey'"/>
+                    <button name="action_start_analysis" string="Passer en analyse" type="object" class="btn-primary" invisible="state != 'field_survey'"/>
+                    <button name="action_submit_committee" string="Soumettre au comité" type="object" class="btn-primary" invisible="state != 'analysis'"/>
+                    <button name="action_ca_review" string="Avis CA" type="object" class="btn-primary" invisible="state != 'committee'"/>
+                    <button name="action_cdag_review" string="Avis CDAG" type="object" class="btn-primary" invisible="state != 'ca_review'"/>
+                    <button name="action_accept" string="Accepter" type="object" class="btn-primary" invisible="state != 'cdag_review'"/>
+                    <button name="action_accept_condition" string="Accepter sous condition" type="object" invisible="state != 'cdag_review'"/>
+                    <button name="action_refuse" string="Refuser" type="object" invisible="state != 'cdag_review'"/>
+                    <button name="action_create_loan" string="Créer le crédit" type="object" class="btn-primary" invisible="state not in ('accepted','accepted_condition') or loan_id"/>
+                    <button name="action_view_loan" string="Voir le crédit" type="object" invisible="not loan_id"/>
+                    <button name="action_sync_partner" string="Synchroniser vers la fiche contact" type="object"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,field_survey,analysis,committee,ca_review,cdag_review,accepted,loan_created"/>
+                </header>
+                <sheet>
+                    <div class="o_microfinance_survey_header">
+                        <div class="o_microfinance_survey_header_top">
+                            <field name="company_logo" widget="image" class="o_microfinance_survey_header_logo" readonly="1"/>
+                        </div>
+                        <div class="o_microfinance_survey_header_title">Fiche d'enquête</div>
+                        <div class="o_microfinance_survey_header_meta">
+                            <span><strong>Date : </strong><field name="application_date" readonly="1"/></span>
+                            <span><strong>Enquêteur : </strong><field name="surveyor_id" readonly="1"/></span>
+                            <span><strong>CA resp : </strong><field name="ca_responsible_id" readonly="1"/></span>
+                            <span><strong>Agence : </strong><field name="company_id" readonly="1"/></span>
+                            <span><strong>Référence : </strong><field name="name" readonly="1"/></span>
+                        </div>
+                        <div class="o_microfinance_survey_header_meta">
+                            <span><strong>Heure début enquête : </strong><field name="survey_start_time"/></span>
+                            <span><strong>Heure fin enquête : </strong><field name="survey_end_time"/></span>
+                        </div>
+                    </div>
+                    <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
+                    <field name="progressive_eligibility_status" invisible="1"/>
+                    <div class="alert alert-success" role="alert" invisible="progressive_eligibility_status != 'eligible'">
+                        <field name="progressive_eligibility_message" readonly="1" nolabel="1"/>
+                        <br/>
+                        <em>Information indicative — la décision d'octroi reste à l'appréciation du valideur.</em>
+                    </div>
+                    <div class="alert alert-warning" role="alert" invisible="progressive_eligibility_status not in ('warning', 'no_prior_loan', 'prior_active')">
+                        <field name="progressive_eligibility_message" readonly="1" nolabel="1"/>
+                        <br/>
+                        <em>Information indicative — la décision d'octroi reste à l'appréciation du valideur.</em>
+                    </div>
+                    <div class="alert alert-danger" role="alert" invisible="progressive_eligibility_status != 'defaulted'">
+                        <field name="progressive_eligibility_message" readonly="1" nolabel="1"/>
+                        <br/>
+                        <em>Information indicative — la décision d'octroi reste à l'appréciation du valideur.</em>
+                    </div>
+                    <group>
+                        <group string="Dossier">
+                            <field name="partner_id"/>
+                            <field name="loan_product_id"/>
+                            <field name="application_date"/>
+                            <field name="surveyor_id"/>
+                            <field name="ca_responsible_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="reference"/>
+                        </group>
+                        <group string="Rang du prêt">
+                            <field name="loan_sequence_number"/>
+                            <field name="is_first_loan"/>
+                            <field name="loan_tier_label"/>
+                            <field name="loan_id" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="I — Identification du partenaire">
+                        <field name="partner_surname" readonly="1"/>
+                        <field name="partner_marital_status" readonly="1"/>
+                        <field name="spouse_name" readonly="1" invisible="partner_marital_status != 'married'"/>
+                        <field name="dependent_count" readonly="1"/>
+                    </group>
+                    <button string="Modifier" type="object" name="action_open_partner_wizard" class="btn-secondary"/>
+
+                    <group string="II — Identification du garant">
+                        <field name="guarantor_count" readonly="1"/>
+                        <field name="primary_guarantor_name" readonly="1"/>
+                    </group>
+                    <button string="Modifier" type="object" name="action_open_guarantor_wizard" class="btn-secondary"/>
+
+                    <group string="III — Dossiers administratifs fournis">
+                        <field name="document_provided_count" readonly="1"/>
+                        <field name="document_missing_count" readonly="1"/>
+                    </group>
+                    <button string="Modifier" type="object" name="action_open_document_wizard" class="btn-secondary"/>
+
+                    <group string="IV — Analyse de l'activité à financer">
+                        <field name="activity_description" readonly="1"/>
+                        <field name="activity_sector" readonly="1"/>
+                    </group>
+                    <button string="Modifier" type="object" name="action_open_activity_wizard" class="btn-secondary"/>
+
+                    <group string="V — Analyse financière et capacité de remboursement">
+                        <field name="repayment_capacity_monthly_current" readonly="1"/>
+                        <field name="repayment_capacity_monthly_forecast" readonly="1"/>
+                    </group>
+                    <button string="Modifier" type="object" name="action_open_financial_wizard" class="btn-secondary"/>
+
+                    <group string="VI — Fiche de catégorisation sociale">
+                        <field name="social_level_id" readonly="1"/>
+                        <field name="total_points" readonly="1"/>
+                        <field name="field_visit_count" readonly="1"/>
+                    </group>
+                    <button string="Modifier les visites terrain" type="object" name="action_open_field_visit_wizard" class="btn-secondary"/>
+                    <button string="Modifier la grille sociale" type="object" name="action_open_social_grid_wizard" class="btn-secondary"/>
+
+                    <group string="VII — Avis du CA et du CDAG">
+                        <field name="requested_amount" readonly="1"/>
+                        <field name="ca_amount" readonly="1"/>
+                        <field name="cdag_amount" readonly="1"/>
+                    </group>
+                    <button string="Modifier" type="object" name="action_open_ca_cdag_wizard" class="btn-secondary"/>
+
+                    <!-- VIII — Comité d'octroi : standby, pas de workflow de comité
+                         multi-validateurs. Affiche seulement l'état du dossier (les
+                         boutons d'action sont déjà dans l'en-tête). -->
+                    <group string="VIII — Comité d'octroi">
+                        <field name="state" widget="badge"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_loan_application" model="ir.actions.act_window">
+        <field name="name">Dossiers d'instruction de crédit</field>
+        <field name="res_model">microfinance.loan.application</field>
+        <field name="view_mode">kanban,tree,form</field>
+    </record>
+</odoo>

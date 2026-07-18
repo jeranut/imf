@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_field_visit_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.field.visit.tree</field>
+        <field name="model">microfinance.loan.application.field.visit</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="application_id"/>
+                <field name="visit_type"/>
+                <field name="is_counter_visit" widget="boolean_toggle"/>
+                <field name="agent_id"/>
+                <field name="visit_date"/>
+                <field name="neighborhood_reputation" invisible="visit_type != 'home'"/>
+                <field name="commercial_attitude" invisible="visit_type != 'sales_point'"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_application_field_visit_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.field.visit.form</field>
+        <field name="model">microfinance.loan.application.field.visit</field>
+        <field name="arch" type="xml">
+            <form string="Visite terrain (VAD/VAV)">
+                <sheet>
+                    <field name="currency_id" invisible="1"/>
+                    <group>
+                        <group>
+                            <field name="application_id"/>
+                            <field name="visit_type"/>
+                            <field name="agent_id"/>
+                            <field name="visit_date"/>
+                        </group>
+                        <group>
+                            <field name="is_counter_visit"/>
+                            <field name="counter_visit_of_id" invisible="not is_counter_visit"/>
+                        </group>
+                    </group>
+                    <group string="Visite à domicile (VAD)" invisible="visit_type != 'home'">
+                        <field name="constats"/>
+                        <field name="neighborhood_reputation"/>
+                    </group>
+                    <group string="Visite au lieu de vente (VAV)" invisible="visit_type != 'sales_point'">
+                        <field name="project_exists"/>
+                        <field name="potential_clients_level"/>
+                        <field name="stock_value"/>
+                        <field name="competition_level"/>
+                        <field name="product_presentation"/>
+                        <field name="commercial_attitude"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_application_field_visit_search" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.field.visit.search</field>
+        <field name="model">microfinance.loan.application.field.visit</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="application_id"/>
+                <field name="agent_id"/>
+                <filter name="visit_type_home" string="VAD" domain="[('visit_type', '=', 'home')]"/>
+                <filter name="visit_type_sales_point" string="VAV" domain="[('visit_type', '=', 'sales_point')]"/>
+                <separator/>
+                <filter name="initial_visit" string="Visite initiale" domain="[('is_counter_visit', '=', False)]"/>
+                <filter name="counter_visit" string="Contre-visite" domain="[('is_counter_visit', '=', True)]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_application" string="Dossier" context="{'group_by': 'application_id'}"/>
+                    <filter name="group_visit_type" string="Type de visite" context="{'group_by': 'visit_type'}"/>
+                    <filter name="group_agent" string="Enquêteur" context="{'group_by': 'agent_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_loan_application_field_visit" model="ir.actions.act_window">
+        <field name="name">Visites d'enquêtes</field>
+        <field name="res_model">microfinance.loan.application.field.visit</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

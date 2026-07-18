@@ -1,0 +1,61 @@
+// Reproduit la mise en page "papier centré" du rapport Bilan (base_accounting_kit,
+// .bak-page-wrapper / .bak-page dans financial_report.scss) sur le formulaire dossier :
+// fond gris autour, carte blanche centrée à largeur contenue, ombre légère.
+.o_microfinance_loan_application_form {
+    .o_form_sheet_bg {
+        background: #f5f6f8;
+        padding: 28px 0;
+    }
+
+    .o_form_sheet {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 28px 34px;
+        background: #fff;
+        border: 1px solid #d8dadd;
+        border-radius: 4px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+        box-sizing: border-box;
+    }
+
+    // En-tête façon fiche papier CEFOR : logo à gauche, titre centré sans cadre.
+    .o_microfinance_survey_header {
+        margin-bottom: 16px;
+    }
+
+    .o_microfinance_survey_header_top {
+        margin-bottom: 6px;
+    }
+
+    .o_microfinance_survey_header_logo {
+        img {
+            max-height: 60px;
+            max-width: 140px;
+            object-fit: contain;
+        }
+    }
+
+    .o_microfinance_survey_header_title {
+        width: 100%;
+        text-align: center;
+        text-decoration: underline;
+        text-transform: uppercase;
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .o_microfinance_survey_header_meta {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: 24px;
+        row-gap: 4px;
+        font-size: 13px;
+        color: #374151;
+        margin-bottom: 6px;
+
+        .o_field_widget {
+            display: inline-block;
+        }
+    }
+}

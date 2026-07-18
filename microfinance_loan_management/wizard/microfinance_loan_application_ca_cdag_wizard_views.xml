@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_ca_cdag_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.ca.cdag.wizard.form</field>
+        <field name="model">microfinance.loan.application.ca.cdag.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Modifier les avis CA et CDAG">
+                <field name="application_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <group>
+                    <group string="Demande">
+                        <field name="requested_amount"/>
+                        <field name="required_savings"/>
+                        <field name="repayment_amount"/>
+                        <field name="period"/>
+                        <field name="available_savings"/>
+                    </group>
+                    <group string="Antécédent">
+                        <field name="previous_loan_amount"/>
+                        <field name="previous_loan_repayment_behavior"/>
+                    </group>
+                </group>
+                <group>
+                    <group string="Avis CA">
+                        <field name="ca_amount"/>
+                        <field name="ca_required_savings"/>
+                        <field name="ca_repayment_amount"/>
+                        <field name="ca_period"/>
+                    </group>
+                    <group string="Avis CDAG">
+                        <field name="cdag_amount"/>
+                        <field name="cdag_required_savings"/>
+                        <field name="cdag_repayment_amount"/>
+                        <field name="cdag_period"/>
+                    </group>
+                </group>
+                <footer>
+                    <button string="Valider" type="object" name="action_validate" class="btn-primary"/>
+                    <button string="Annuler" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

@@ -242,7 +242,7 @@
                     <section class="o_microfinance_activity_panel o_microfinance_activity_panel--loans">
                         <div class="o_microfinance_activity_panel__header">
                             <h2>Derniers prets</h2>
-                            <button type="button" class="btn btn-primary btn-sm" t-on-click="openNewLoan">Nouveau pret</button>
+                            <button type="button" class="btn btn-primary btn-sm" t-on-click="openNewLoan">Nouveau dossier</button>
                         </div>
                         <div class="table-responsive">
                             <table class="table table-hover align-middle o_microfinance_table">

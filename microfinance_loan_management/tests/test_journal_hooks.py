@@ -11,7 +11,7 @@ class TestJournalHooks(MicrofinanceCommon):
     ('type', 'in', ('bank', 'cash')), et qui ne seraient donc pas sélectionnables tels quels."""
 
     def test_create_journals_cre_epg_are_cash_not_general(self):
-        company = self.env['res.company'].create({'name': 'Agence hook journaux (test)'})
+        company = self.env['res.company'].create({'name': 'Agence hook journaux (test)', 'agency_code': 'JH1'})
         hooks._create_journals(self.env, company)
         journals = self.env['account.journal'].search([
             ('company_id', '=', company.id), ('code', 'in', ('CRE', 'EPG')),
@@ -27,7 +27,7 @@ class TestJournalHooks(MicrofinanceCommon):
         # OD (Opérations diverses) n'est jamais utilisé comme défaut d'un champ journal du
         # produit crédit/épargne : il reste 'general', réservé aux écritures de radiation/
         # provision (recherche dynamique du journal 'general' de la société).
-        company = self.env['res.company'].create({'name': 'Agence hook journaux OD (test)'})
+        company = self.env['res.company'].create({'name': 'Agence hook journaux OD (test)', 'agency_code': 'JH2'})
         hooks._create_journals(self.env, company)
         od = self.env['account.journal'].search([
             ('company_id', '=', company.id), ('code', '=', 'OD'),
@@ -37,7 +37,7 @@ class TestJournalHooks(MicrofinanceCommon):
     def test_create_journals_idempotent(self):
         # _create_journals ne recrée pas un journal déjà présent (même code + société) : appelé
         # deux fois, le nombre de journaux créés ne double pas.
-        company = self.env['res.company'].create({'name': 'Agence hook journaux idempotence (test)'})
+        company = self.env['res.company'].create({'name': 'Agence hook journaux idempotence (test)', 'agency_code': 'JH3'})
         hooks._create_journals(self.env, company)
         count_after_first_call = self.env['account.journal'].search_count([('company_id', '=', company.id)])
         hooks._create_journals(self.env, company)
@@ -47,7 +47,7 @@ class TestJournalHooks(MicrofinanceCommon):
     def test_loan_product_journal_defaults_match_view_domain(self):
         # Les défauts calculés (_journal_default) doivent retourner un journal satisfaisant le
         # domaine de vue déclaré sur le champ, une fois les journaux correctement typés.
-        company = self.env['res.company'].create({'name': 'Agence défauts journal produit (test)'})
+        company = self.env['res.company'].create({'name': 'Agence défauts journal produit (test)', 'agency_code': 'JH4'})
         hooks._create_journals(self.env, company)
         product = self.env['microfinance.loan.product'].with_company(company).new({})
         for field_name in ('disbursement_journal_id', 'payment_journal_id', 'fee_journal_id'):

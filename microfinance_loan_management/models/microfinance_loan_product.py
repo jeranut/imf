@@ -325,6 +325,23 @@ class MicrofinanceLoanProduct(models.Model):
     currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)
     active = fields.Boolean(string='Actif', default=True)
 
+    progressive_step_ids = fields.One2many(
+        'microfinance.loan.progressive.program.step', 'product_id', string='Étape (programme progressif)',
+        help="Au plus un enregistrement, du fait de la contrainte unique(product_id) sur "
+             'microfinance.loan.progressive.program.step.',
+    )
+    progressive_program_id = fields.Many2one(
+        'microfinance.loan.progressive.program', string='Programme progressif',
+        compute='_compute_progressive_program', store=True,
+    )
+    progressive_step_sequence = fields.Integer(
+        string='Rang dans le programme', compute='_compute_progressive_program', store=True,
+    )
+    is_progressive_step = fields.Boolean(
+        string="Fait partie d'un programme progressif",
+        compute='_compute_progressive_program', store=True,
+    )
+
     _sql_constraints = [
         ('code_company_unique', 'unique(code, company_id)', 'Le code produit doit être unique par société.'),
     ]
@@ -338,6 +355,14 @@ class MicrofinanceLoanProduct(models.Model):
                 number = self.env['ir.sequence'].next_by_code('microfinance.loan.product') or '00000'
                 vals['code'] = '%s%s' % (prefix, number)
         return super().create(vals_list)
+
+    @api.depends('progressive_step_ids.program_id', 'progressive_step_ids.sequence_number')
+    def _compute_progressive_program(self):
+        for product in self:
+            step = product.progressive_step_ids[:1]
+            product.progressive_program_id = step.program_id
+            product.progressive_step_sequence = step.sequence_number
+            product.is_progressive_step = bool(step)
 
     @api.constrains('min_amount', 'max_amount', 'min_term', 'max_term', 'interest_rate', 'grace_period_days',
                      'min_membership_days', 'min_guarantee_ratio', 'fee_amount', 'fee_rate')

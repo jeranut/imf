@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_financial_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.financial.wizard.form</field>
+        <field name="model">microfinance.loan.application.financial.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Modifier l'analyse financière">
+                <field name="application_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <group string="Situation actuelle">
+                    <field name="income_line_ids" nolabel="1"
+                        context="{'default_scenario': 'current'}"
+                        domain="[('scenario', '=', 'current')]">
+                        <tree editable="bottom">
+                            <field name="category"/>
+                            <field name="name"/>
+                            <field name="monthly_amount"/>
+                            <field name="scenario" column_invisible="1"/>
+                        </tree>
+                    </field>
+                    <field name="safety_margin_current"/>
+                </group>
+                <group string="Situation prévisionnelle">
+                    <field name="income_line_ids" nolabel="1"
+                        context="{'default_scenario': 'forecast'}"
+                        domain="[('scenario', '=', 'forecast')]">
+                        <tree editable="bottom">
+                            <field name="category"/>
+                            <field name="name"/>
+                            <field name="monthly_amount"/>
+                            <field name="scenario" column_invisible="1"/>
+                        </tree>
+                    </field>
+                    <field name="safety_margin_forecast"/>
+                </group>
+                <group string="Complément">
+                    <field name="income_growth_before"/>
+                    <field name="income_growth_after"/>
+                    <field name="financial_analysis_comment"/>
+                </group>
+                <group string="Plan de financement">
+                    <group string="Actuel">
+                        <field name="funding_plan_raw_materials_current"/>
+                        <field name="funding_plan_merchandise_current"/>
+                        <field name="funding_plan_available_cash_current"/>
+                    </group>
+                    <group string="Prévisionnel">
+                        <field name="funding_plan_equipment_forecast"/>
+                        <field name="funding_plan_raw_materials_forecast"/>
+                        <field name="funding_plan_merchandise_forecast"/>
+                    </group>
+                </group>
+                <group string="Suivi de l'augmentation du capital">
+                    <field name="capital_increase"/>
+                    <field name="capital_before_previous_loan"/>
+                    <field name="capital_currently_observed"/>
+                    <field name="capital_currently_confirmed"/>
+                    <field name="previous_loan_fund_usage"/>
+                </group>
+                <footer>
+                    <button string="Valider" type="object" name="action_validate" class="btn-primary"/>
+                    <button string="Annuler" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

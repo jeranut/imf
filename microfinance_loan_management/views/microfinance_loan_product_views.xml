@@ -24,6 +24,12 @@
             <form string="Produit de crédit">
                 <sheet>
                     <div class="oe_title"><h1><field name="name" placeholder="Nom du produit"/></h1></div>
+                    <field name="is_progressive_step" invisible="1"/>
+                    <div class="alert alert-info" role="alert" invisible="not is_progressive_step">
+                        Fait partie du programme progressif
+                        <field name="progressive_program_id" readonly="1" nolabel="1"/>,
+                        étape <field name="progressive_step_sequence" readonly="1" nolabel="1"/>.
+                    </div>
                     <group>
                         <group>
                             <field name="code"/>

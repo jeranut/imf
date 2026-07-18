@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_activity_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.activity.wizard.form</field>
+        <field name="model">microfinance.loan.application.activity.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Modifier l'analyse de l'activité">
+                <field name="application_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <group>
+                    <group string="Activité">
+                        <field name="activity_description"/>
+                        <field name="activity_code"/>
+                        <field name="activity_sector"/>
+                        <field name="activity_start_date"/>
+                        <field name="activity_interruption"/>
+                        <field name="is_cyclical"/>
+                        <field name="cyclical_period" invisible="not is_cyclical"/>
+                    </group>
+                    <group string="Lieu de vente">
+                        <field name="sale_location_status"/>
+                        <field name="sale_location_type"/>
+                        <field name="sale_location_enclosed"/>
+                        <field name="formalization_level"/>
+                    </group>
+                </group>
+                <group>
+                    <group string="Approvisionnement">
+                        <field name="supply_frequency"/>
+                        <field name="supplier_payment_mode"/>
+                        <field name="supplier_credit_delay_days" invisible="supplier_payment_mode != 'credit'"/>
+                    </group>
+                    <group string="Ventes">
+                        <field name="sale_frequency"/>
+                        <field name="customer_type"/>
+                        <field name="customer_payment_mode"/>
+                        <field name="customer_credit_delay_days" invisible="customer_payment_mode != 'credit'"/>
+                    </group>
+                </group>
+                <group string="Autres revenus et endettement">
+                    <field name="other_income_activities"/>
+                    <field name="loan_request_reason"/>
+                    <field name="has_existing_debt"/>
+                    <field name="debt_purpose" invisible="not has_existing_debt"/>
+                    <field name="debt_amount" invisible="not has_existing_debt"/>
+                    <field name="debt_creditor_type" invisible="not has_existing_debt"/>
+                    <field name="debt_repayment_mode" invisible="not has_existing_debt"/>
+                </group>
+                <footer>
+                    <button string="Valider" type="object" name="action_validate" class="btn-primary"/>
+                    <button string="Annuler" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

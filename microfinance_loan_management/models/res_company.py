@@ -81,6 +81,38 @@ class ResCompany(models.Model):
              "(microfinance_res_company_views.xml).",
     )
 
+    microfinance_social_grid_include_savings = fields.Boolean(
+        string="Grille sociale : inclure l'épargne dans le total",
+        help="Ajoute jusqu'à 4 points au maximum théorique du barème (32 → 36). "
+             'Pensez à ajuster vos niveaux (Microfinance > Configuration > Niveaux sociaux) '
+             'en conséquence après activation.',
+    )
+    microfinance_social_grid_include_administrative = fields.Boolean(
+        string="Grille sociale : inclure l'administratif dans le total",
+        help="Ajoute jusqu'à 4 points au maximum théorique. Ajustez vos niveaux en conséquence.",
+    )
+    microfinance_social_grid_include_impression_in_total = fields.Boolean(
+        string="Grille sociale : inclure l'impression de l'enquêteur dans le total du dossier",
+        help="Ajoute jusqu'à 4 points au maximum théorique. Ajustez vos niveaux en conséquence.",
+    )
+    # Nom raccourci par rapport à l'intitulé fonctionnel complet ("...eligibility") : la
+    # limite PostgreSQL de 63 octets par identifiant tronque silencieusement tout nom plus
+    # long, ce qui peut faire collisionner deux champs distincts sur la même colonne
+    # physique sans avertissement — champ renommé pour rester nettement sous la limite.
+    microfinance_social_grid_include_impression_next_loan = fields.Boolean(
+        string="Grille sociale : inclure l'impression de l'enquêteur dans l'éligibilité d'un prochain crédit",
+        help="Indépendant du réglage ci-dessus. Branché sur le contrôle de rang > 1 "
+             '(_check_previous_loan_requirements).',
+    )
+    microfinance_social_grid_impression_next_loan_min_score = fields.Integer(
+        string="Grille sociale : score minimum d'impression pour un prochain crédit",
+        default=1,
+        help='Actif uniquement si le réglage ci-dessus est coché. Un dossier de rang > 1 ne '
+             'peut pas être soumis au comité si l\'impression personnelle de l\'enquêteur sur '
+             'le dossier précédent (surveyor_impression_score) est strictement inférieure à '
+             'ce seuil.',
+    )
+
     def _compute_loan_product_code_locked(self):
         Product = self.env['microfinance.loan.product']
         for company in self:

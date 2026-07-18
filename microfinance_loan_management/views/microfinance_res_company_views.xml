@@ -15,6 +15,17 @@
                      microfinance.loan pour un simple agent créant un crédit. -->
                 <field name="microfinance_fond_credit_default_id"
                        groups="microfinance_loan_management.group_microfinance_manager"/>
+                <field name="microfinance_social_grid_include_savings"
+                       groups="microfinance_loan_management.group_microfinance_manager"/>
+                <field name="microfinance_social_grid_include_administrative"
+                       groups="microfinance_loan_management.group_microfinance_manager"/>
+                <field name="microfinance_social_grid_include_impression_in_total"
+                       groups="microfinance_loan_management.group_microfinance_manager"/>
+                <field name="microfinance_social_grid_include_impression_next_loan"
+                       groups="microfinance_loan_management.group_microfinance_manager"/>
+                <field name="microfinance_social_grid_impression_next_loan_min_score"
+                       invisible="not microfinance_social_grid_include_impression_next_loan"
+                       groups="microfinance_loan_management.group_microfinance_manager"/>
             </xpath>
         </field>
     </record>

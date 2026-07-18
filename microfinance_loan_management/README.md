@@ -59,21 +59,43 @@ défaut sur chacun).
 
 ## Le parcours d'un dossier de crédit
 
-1. **Création du dossier** : sélection du client, du produit, du montant et de la durée.
-2. **Soumission** : le système vérifie automatiquement les règles d'éligibilité du produit
-   (ancienneté, second crédit, arriérés du co-emprunteur…) et calcule le score de crédit.
-3. **Validation manager**, puis **validation finance**.
-4. **Approbation**.
-5. **Génération de l'échéancier** et **décaissement** : si des frais de dossier sont dus et
+Un crédit (`microfinance.loan`) ne se crée **jamais directement** : il ne peut naître que
+depuis un **dossier d'instruction** (`microfinance.loan.application`, menu **Microfinance >
+Crédits > Dossiers d'instruction**) accepté, via le bouton **Créer le crédit**. Toute tentative
+de création directe (API, import, ORM) sans passer par ce chemin est bloquée par un verrou
+serveur (`microfinance.loan.create()`), quel que soit le rôle de l'utilisateur — le menu
+**Crédits** ne sert plus qu'à consulter/suivre les crédits déjà créés (aucun bouton de
+création).
+
+### 1. Instruction du dossier
+
+1. **Création du dossier** : sélection du client, du produit visé (`loan_product_id`), et
+   des informations d'enquête (date, enquêteur, agence…).
+2. **Enquête terrain**, **Analyse**, **Soumission au comité**, **Avis CA**, **Avis CDAG** :
+   le dossier passe par ces étapes successives, chacune réservée au rôle correspondant
+   (enquêteur, membre du comité, membre CA, membre CDAG).
+3. **Acceptation** (avec ou sans condition) ou **Refus** par le CDAG.
+
+### 2. Création et validation du crédit
+
+4. **Créer le crédit** : depuis un dossier accepté, ce bouton ouvre un wizard minimal
+   (produit pré-rempli depuis le dossier, montant, durée) qui crée le crédit
+   (`microfinance.loan`, état initial *brouillon*) et le relie au dossier.
+5. **Soumission** du crédit : le système vérifie automatiquement les règles d'éligibilité du
+   produit (ancienneté, second crédit, arriérés du co-emprunteur…) et calcule le score de
+   crédit.
+6. **Validation manager**, puis **validation finance**.
+7. **Approbation**.
+8. **Génération de l'échéancier** et **décaissement** : si des frais de dossier sont dus et
    exigés avant décaissement, ils doivent d'abord être encaissés.
-6. **Remboursements** : à la sélection du crédit (formulaire ou assistant), le montant et le
+9. **Remboursements** : à la sélection du crédit (formulaire ou assistant), le montant et le
    journal se préremplissent automatiquement — montant dû (échéances déjà en retard cumulées,
    ou à défaut la prochaine échéance), journal configuré sur le produit — librement modifiables
    pour un remboursement partiel ou anticipé. Chaque versement est ensuite automatiquement
    réparti entre pénalité, intérêt et capital de l'échéance la plus ancienne encore due. Un
    remboursement comptabilisé peut être annulé (contre-passation) si besoin, par exemple en cas
    d'erreur de saisie.
-7. **Clôture automatique** dès que le solde restant dû atteint zéro.
+10. **Clôture automatique** dès que le solde restant dû atteint zéro.
 
 En cours de route, un crédit actif peut être **rééchelonné** (nouvelle durée et/ou nouvelle
 date de première échéance restante) : l'ancien échéancier reste consultable dans l'historique

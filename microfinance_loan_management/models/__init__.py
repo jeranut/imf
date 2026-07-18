@@ -3,9 +3,12 @@ from . import res_company
 from . import microfinance_profession
 from . import microfinance_repayment_frequency
 from . import microfinance_loan_product
+from . import microfinance_loan_progressive_program
 from . import microfinance_scoring
 from . import microfinance_provision_rule
 from . import microfinance_loan
+from . import microfinance_social_category_level
+from . import microfinance_loan_application
 from . import microfinance_loan_guarantee
 from . import microfinance_loan_reschedule_history
 from . import microfinance_loan_installment

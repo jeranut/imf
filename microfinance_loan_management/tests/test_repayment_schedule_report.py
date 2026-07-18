@@ -20,10 +20,12 @@ class TestRepaymentScheduleReport(MicrofinanceCommon):
         html = report._render_qweb_html(report.report_name, loan.ids)[0].decode('utf-8')
 
         # Les montants de chaque tranche réelle doivent apparaître exactement dans le rendu.
-        # Widget monétaire du rapport = formatage localisé (virgule décimale, ex. "490,00"),
-        # pas le point Python par défaut.
+        # Widget monétaire du rapport : décimale au point tant qu'aucune langue localisée
+        # (ex. fr_FR, qui donnerait une virgule) n'est installée/active sur la base — ce test ne
+        # doit pas dépendre d'une langue précise étant installée, aucun autre test de la suite ne
+        # fait cette hypothèse.
         def _fmt(value):
-            return ('%.2f' % value).replace('.', ',')
+            return '%.2f' % value
 
         for inst in installments:
             self.assertIn(_fmt(inst.principal_amount), html)
@@ -105,6 +107,7 @@ class TestRepaymentScheduleReport(MicrofinanceCommon):
             'name': 'Agence %s calendrier (test)' % label,
             'street': '12 Rue de l\'Agence %s' % label,
             'city': city,
+            'agency_code': 'RS%s' % label,
         })
         principal_account = self.env['account.account'].create({
             'name': 'Prêts clients test %s' % label, 'code': 'TPRET%s' % label,
@@ -137,7 +140,7 @@ class TestRepaymentScheduleReport(MicrofinanceCommon):
             'company_id': company.id,
         })
         partner = self.env['res.partner'].create({'name': 'Client Agence %s' % label})
-        loan = self.env['microfinance.loan'].create({
+        loan = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
             'partner_id': partner.id,
             'product_id': product.id,
             'company_id': company.id,

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="social_category_level_1" model="microfinance.social.category.level">
+        <field name="name">Niv 1</field>
+        <field name="min_points">14</field>
+        <field name="max_points">16</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="social_category_level_2" model="microfinance.social.category.level">
+        <field name="name">Niv 2</field>
+        <field name="min_points">17</field>
+        <field name="max_points">18</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="social_category_level_3" model="microfinance.social.category.level">
+        <field name="name">Niv 3</field>
+        <field name="min_points">19</field>
+        <field name="max_points">20</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="social_category_level_4" model="microfinance.social.category.level">
+        <field name="name">Niv 4</field>
+        <field name="min_points">21</field>
+        <field name="max_points">22</field>
+        <field name="sequence">40</field>
+    </record>
+    <record id="social_category_level_5" model="microfinance.social.category.level">
+        <field name="name">Niv 5</field>
+        <field name="min_points">23</field>
+        <field name="max_points">24</field>
+        <field name="sequence">50</field>
+    </record>
+    <record id="social_category_level_6" model="microfinance.social.category.level">
+        <field name="name">Niv 6</field>
+        <field name="min_points">25</field>
+        <field name="max_points">26</field>
+        <field name="sequence">60</field>
+    </record>
+    <record id="social_category_level_7" model="microfinance.social.category.level">
+        <field name="name">Niv 7</field>
+        <field name="min_points">27</field>
+        <field name="max_points">29</field>
+        <field name="sequence">70</field>
+    </record>
+    <record id="social_category_level_8" model="microfinance.social.category.level">
+        <field name="name">Niv 8</field>
+        <field name="min_points">30</field>
+        <field name="max_points">32</field>
+        <field name="sequence">80</field>
+    </record>
+</odoo>

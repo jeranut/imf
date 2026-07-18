@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_social_grid_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.social.grid.wizard.form</field>
+        <field name="model">microfinance.loan.application.social.grid.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Modifier la grille de catégorisation sociale">
+                <field name="application_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <group string="Ménage">
+                    <field name="household_size"/>
+                    <field name="members_over_14"/>
+                    <field name="members_under_14"/>
+                </group>
+                <group>
+                    <group string="Actifs, épargne, activité, revenus">
+                        <field name="assets_score"/>
+                        <field name="assets_exact_amount"/>
+                        <field name="savings_amount"/>
+                        <field name="savings_score"/>
+                        <field name="activity_score"/>
+                        <field name="income_score"/>
+                        <field name="income_net_benefit_amount"/>
+                    </group>
+                    <group string="Alimentation, santé, habitat">
+                        <field name="food_score"/>
+                        <field name="health_score"/>
+                        <field name="housing_state_score"/>
+                        <field name="housing_surface_score"/>
+                    </group>
+                </group>
+                <group>
+                    <group string="Éducation">
+                        <field name="education_borrower_score"/>
+                        <field name="education_children_score"/>
+                    </group>
+                    <group string="Administratif">
+                        <field name="administrative_score"/>
+                    </group>
+                </group>
+                <group string="Impression de l'enquêteur">
+                    <field name="surveyor_impression_score"/>
+                    <field name="surveyor_level_impression"/>
+                    <field name="is_eligible"/>
+                </group>
+                <footer>
+                    <button string="Valider" type="object" name="action_validate" class="btn-primary"/>
+                    <button string="Annuler" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

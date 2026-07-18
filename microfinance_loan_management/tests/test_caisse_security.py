@@ -89,7 +89,7 @@ class TestCaisseFicheJourneeSecurity(MicrofinanceCommon):
             fiche.with_user(user).read(['state'])
 
     def test_company_isolation(self):
-        company_b = self.env['res.company'].create({'name': 'Agence B caisse (test)'})
+        company_b = self.env['res.company'].create({'name': 'Agence B caisse (test)', 'agency_code': 'CS1'})
         self.env['account.journal'].create({
             'name': 'Caisse agence B (test)', 'code': 'BCAI2', 'type': 'cash', 'company_id': company_b.id,
         })

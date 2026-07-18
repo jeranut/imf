@@ -92,5 +92,8 @@ class TestFee(MicrofinanceCommon):
         self.assertEqual(fee_line.credit, 25.0)
         cash_line = move.line_ids.filtered(lambda l: l.account_id == self.bank_account)
         self.assertEqual(cash_line.credit, 975.0)
-        # Le capital dû reste plein : le client rembourse 1000, pas 975.
-        self.assertEqual(loan.balance_total, 1000.0)
+        # Le capital dû reste plein : le client rembourse 1000, pas 975. balance_total inclut
+        # les intérêts de l'échéancier (résiduel = principal + intérêt + pénalité - payé) et ne
+        # convient donc pas à cette vérification pour un prêt à terme > 1 : on compare la somme
+        # des seuls principal_amount des échéances, qui reste indépendante du nettage des frais.
+        self.assertEqual(sum(loan.installment_ids.mapped('principal_amount')), 1000.0)

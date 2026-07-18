@@ -12,7 +12,7 @@ class TestFondCreditDefaultPerCompany(TestFondBailleurCommon):
     def test_new_loan_prefills_fond_from_company_default(self):
         fond = self._create_fond()
         self.env.company.microfinance_fond_credit_default_id = fond.id
-        with Form(self.env['microfinance.loan']) as loan_form:
+        with Form(self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True)) as loan_form:
             loan_form.partner_id = self.partner
             loan_form.product_id = self.product
             loan_form.loan_amount = 1000.0
@@ -24,7 +24,7 @@ class TestFondCreditDefaultPerCompany(TestFondBailleurCommon):
         default_fond = self._create_fond(name='Fonds par defaut')
         other_fond = self._create_fond(name='Fonds choisi manuellement')
         self.env.company.microfinance_fond_credit_default_id = default_fond.id
-        with Form(self.env['microfinance.loan']) as loan_form:
+        with Form(self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True)) as loan_form:
             loan_form.partner_id = self.partner
             loan_form.product_id = self.product
             loan_form.loan_amount = 1000.0
@@ -34,7 +34,7 @@ class TestFondCreditDefaultPerCompany(TestFondBailleurCommon):
         self.assertEqual(loan.fond_credit_id, other_fond)
 
     def test_no_default_configured_leaves_fond_empty(self):
-        with Form(self.env['microfinance.loan']) as loan_form:
+        with Form(self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True)) as loan_form:
             loan_form.partner_id = self.partner
             loan_form.product_id = self.product
             loan_form.loan_amount = 1000.0
@@ -56,7 +56,7 @@ class TestFondCreditDefaultPerCompany(TestFondBailleurCommon):
         fond_1 = self._create_fond(name='Fonds 1')
         fond_2 = self._create_fond(name='Fonds 2')
         self.env.company.microfinance_fond_credit_default_id = fond_1.id
-        with Form(self.env['microfinance.loan']) as loan_form:
+        with Form(self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True)) as loan_form:
             loan_form.partner_id = self.partner
             loan_form.product_id = self.product
             loan_form.loan_amount = 1000.0

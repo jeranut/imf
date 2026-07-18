@@ -15,12 +15,17 @@ class TestPartnerSpouseRequired(MicrofinanceCommon):
             })
 
     def test_married_with_spouse_info_allowed(self):
+        # microfinance_spouse_phone n'est pas un champ related (préremplissage via
+        # @api.onchange côté formulaire uniquement, cf. res_partner.py) : un create() ORM direct
+        # doit le renseigner explicitement, comme le ferait une vraie saisie utilisateur avant
+        # l'enregistrement.
         spouse = self.env['res.partner'].create({'name': 'Conjoint Test', 'phone': '0341234567'})
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client marié complet',
             'microfinance_client_type': 'individual',
             'microfinance_marital_status': 'married',
             'microfinance_spouse_id': spouse.id,
+            'microfinance_spouse_phone': '0341234567',
         })
         self.assertTrue(partner.id)
         self.assertEqual(partner.microfinance_spouse_phone, '0341234567')

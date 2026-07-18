@@ -8,7 +8,7 @@ class TestFondDashboardKpi(TestFondBailleurCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company_b = cls.env['res.company'].create({'name': 'Agence B dashboard (test)'})
+        cls.company_b = cls.env['res.company'].create({'name': 'Agence B dashboard (test)', 'agency_code': 'FD1'})
 
     def test_kpi_sums_single_company_and_multi_company_funds_for_agency_a(self):
         fond_a = self._create_fond(name='Fonds A', scope='single_company')
@@ -35,7 +35,7 @@ class TestFondDashboardMultiCompanyChart(TestFondBailleurCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company_b = cls.env['res.company'].create({'name': 'Agence B dashboard chart (test)'})
+        cls.company_b = cls.env['res.company'].create({'name': 'Agence B dashboard chart (test)', 'agency_code': 'FD2'})
         cls.principal_account_b = cls.env['account.account'].create({
             'name': 'Prets clients agence B (dashboard)', 'code': 'DBFPRET', 'account_type': 'asset_current',
             'company_id': cls.company_b.id,
@@ -76,7 +76,7 @@ class TestFondDashboardMultiCompanyChart(TestFondBailleurCommon):
                                   verification_disponibilite='never')
         self._create_contribution(fond, amount=5000.0, saisie_company_id=self.env.company.id).action_post()
 
-        loan_b = self.env['microfinance.loan'].create({
+        loan_b = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
             'partner_id': self.partner_b.id,
             'product_id': self.product_b.id,
             'company_id': self.company_b.id,
@@ -116,7 +116,7 @@ class TestFondDashboardSingleCompanyChart(TestFondBailleurCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company_b = cls.env['res.company'].create({'name': 'Agence B dashboard single (test)'})
+        cls.company_b = cls.env['res.company'].create({'name': 'Agence B dashboard single (test)', 'agency_code': 'FD3'})
 
     def test_three_single_company_funds_show_three_distinct_bars(self):
         self._create_fond(name='Fonds A1', scope='single_company')
@@ -146,7 +146,7 @@ class TestFondMatrix(TestFondBailleurCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company_b = cls.env['res.company'].create({'name': 'Agence B matrice (test)'})
+        cls.company_b = cls.env['res.company'].create({'name': 'Agence B matrice (test)', 'agency_code': 'FD4'})
         cls.principal_account_b = cls.env['account.account'].create({
             'name': 'Prets clients agence B (matrice)', 'code': 'MFPRET', 'account_type': 'asset_current',
             'company_id': cls.company_b.id,
@@ -177,7 +177,7 @@ class TestFondMatrix(TestFondBailleurCommon):
         cls.partner_b = cls.env['res.partner'].create({'name': 'Client Test Matrice Agence B'})
 
     def _disburse_loan_b(self, fond, amount=1000.0):
-        loan_b = self.env['microfinance.loan'].create({
+        loan_b = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
             'partner_id': self.partner_b.id,
             'product_id': self.product_b.id,
             'company_id': self.company_b.id,

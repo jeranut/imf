@@ -73,7 +73,7 @@ class TestRepaymentAccounting(MicrofinanceCommon):
         # Isolation multi-société : le journal et les comptes utilisés dans l'écriture de
         # remboursement doivent être ceux de l'agence du crédit, pas une valeur par défaut
         # globale - même agence que celle qui a décaissé le crédit.
-        company_b = self.env['res.company'].create({'name': 'Agence B remboursement (test)'})
+        company_b = self.env['res.company'].create({'name': 'Agence B remboursement (test)', 'agency_code': 'RA1'})
         principal_account_b = self.env['account.account'].create({
             'name': 'Prets clients B (compta remboursement)', 'code': 'RBPRET', 'account_type': 'asset_current',
             'company_id': company_b.id,
@@ -107,7 +107,7 @@ class TestRepaymentAccounting(MicrofinanceCommon):
             'account_penalites_id': penalty_account_b.id,
         })
         partner_b = self.env['res.partner'].create({'name': 'Client B (compta remboursement)'})
-        loan_b = self.env['microfinance.loan'].create({
+        loan_b = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
             'partner_id': partner_b.id, 'product_id': product_b.id, 'company_id': company_b.id,
             'loan_amount': 900.0, 'term': 3,
         })

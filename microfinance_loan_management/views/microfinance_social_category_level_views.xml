@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_social_category_level_tree" model="ir.ui.view">
+        <field name="name">microfinance.social.category.level.tree</field>
+        <field name="model">microfinance.social.category.level</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="min_points"/>
+                <field name="max_points"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="active" widget="boolean_toggle"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_social_category_level_form" model="ir.ui.view">
+        <field name="name">microfinance.social.category.level.form</field>
+        <field name="model">microfinance.social.category.level</field>
+        <field name="arch" type="xml">
+            <form string="Niveau de catégorisation sociale">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="min_points"/>
+                        <field name="max_points"/>
+                        <field name="sequence"/>
+                        <field name="company_id"/>
+                        <field name="active"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_social_category_level" model="ir.actions.act_window">
+        <field name="name">Niveaux sociaux</field>
+        <field name="res_model">microfinance.social.category.level</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

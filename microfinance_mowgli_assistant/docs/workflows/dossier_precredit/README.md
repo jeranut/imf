@@ -2,7 +2,14 @@
 
 ## 1. Objectif métier
 Ce workflow couvre deux volets :
-**(A)** l'instruction/validation d'un crédit avant décaissement, portée par `microfinance.loan` à travers ses états `draft` → `submitted` → `manager_validated` → `finance_validated` → `approved` (le décaissement lui-même, `action_disburse`, appartient au workflow `comptabilite`) ;
+**(A)** l'instruction du dossier de crédit (`microfinance.loan.application`, de `draft` à
+`accepted`/`accepted_condition` via l'enquête terrain, l'analyse, le comité, l'avis CA et
+l'avis CDAG), la création du crédit depuis un dossier accepté (wizard
+`microfinance.loan.application.create.loan.wizard`, **seul point d'entrée de création** —
+`microfinance.loan.create()` est verrouillé côté serveur en dehors de ce chemin, quel que
+soit le rôle de l'utilisateur), puis la validation du crédit lui-même à travers ses états
+`draft` → `submitted` → `manager_validated` → `finance_validated` → `approved` (le
+décaissement lui-même, `action_disburse`, appartient au workflow `comptabilite`) ;
 **(B)** la qualification/vetting du client, gérée depuis la fiche partenaire (`res.partner`) : catégories de classification, liste noire, représentants/comité et membres de groupe.
 Ce workflow ne couvre pas le décaissement, les remboursements ni la comptabilité (voir `comptabilite`), ni le recouvrement des impayés (voir `par_reporting`), ni les garanties/scoring (voir `garanties_scoring`).
 
@@ -18,17 +25,28 @@ D'après `security/groups.xml` et les `groups=` des boutons de `microfinance_loa
 ## 3. Menus utilisés
 Chemins reconstruits depuis `microfinance_menus.xml` et `microfinance_partner_views.xml` :
 - `Microfinance > Clients` (`menu_clients_root`, parent `menu_microfinance_root`, action `action_microfinance_client` — ouvre `res.partner` en tree/form/kanban avec contexte `microfinance_context: True`). C'est ici que sont gérées les fiches client, y compris les entités de qualification (catégories, liste noire, représentants, membres de groupe), embarquées comme listes éditables dans le formulaire partenaire — aucun menu séparé n'existe pour `microfinance.client.category`, `microfinance.client.blacklist`, `microfinance.client.representative` ou `microfinance.client.group.member`.
-- `Microfinance > Crédits > Demande de crédit` (`menu_credits_root` parent `menu_microfinance_root` ; `menu_microfinance_loans` parent `menu_credits_root`, action `action_microfinance_loan`) : ouvre la liste/formulaire de `microfinance.loan`, où se déroule tout le cycle draft → approved.
+- `Microfinance > Crédits > Dossiers d'instruction` (`menu_credits_root` parent `menu_microfinance_root` ; `menu_microfinance_loan_applications` parent `menu_credits_root`, action `action_microfinance_loan_application`) : ouvre la liste/formulaire de `microfinance.loan.application`, où se déroule l'instruction du dossier (draft → accepted/refused) ; bouton **Créer le crédit** une fois accepté.
+- `Microfinance > Crédits > Crédits` (`menu_microfinance_loans` parent `menu_credits_root`, action `action_microfinance_loan`) : consultation/suivi des crédits déjà créés, où se déroule le reste du cycle draft → approved ; **ce menu ne permet plus de créer un crédit** (vues dédiées `create="0"`).
 
 ## 4. Étapes principales
-**(A) Cycle `microfinance.loan`**, dérivé des boutons `action_*` du formulaire (`microfinance_loan_views.xml` en-tête) et de `microfinance_loan.py` :
-1. Créer un crédit (`Microfinance > Crédits > Demande de crédit`, nouveau) : état initial `draft`. Renseigner `partner_id`, `product_id`, `loan_amount`, `term`, `repayment_frequency_id` (si le produit laisse le choix), `co_borrower_id` (optionnel).
-2. (Optionnel avant soumission) Générer l'échéancier prévisionnel avec **Générer échéancier** (`action_generate_schedule`, disponible tant que `state` est dans `draft, submitted, manager_validated, finance_validated, approved`).
-3. Cliquer sur **Soumettre** (`action_submit`) : exécute `_check_eligibility()` puis `action_calculate_scoring(silent=True)`, passe l'état à `submitted`.
-4. Le manager clique sur **Valider manager** (`action_manager_validate`) : état `manager_validated`, `manager_id` renseigné à l'utilisateur courant.
-5. L'utilisateur finance clique sur **Valider finance** (`action_finance_validate`) : état `finance_validated`, `finance_user_id` renseigné.
-6. Le manager clique sur **Approuver** (`action_approve`) : état `approved`, `approval_date` renseignée à la date du jour.
-7. (Suite hors périmètre de ce workflow) Encaissement des frais de dossier et décaissement (`action_charge_fee`, `action_disburse`) font passer le crédit à l'état `active` — voir workflow `comptabilite`.
+**(A) Instruction du dossier puis cycle `microfinance.loan`**, dérivé des boutons `action_*`
+des formulaires (`microfinance_loan_application_views.xml`, `microfinance_loan_views.xml`
+en-tête) et de `microfinance_loan_application.py`/`microfinance_loan.py` :
+1. Créer un dossier (`Microfinance > Crédits > Dossiers d'instruction`, nouveau) : état initial `draft`. Renseigner `partner_id`, `loan_product_id`.
+2. **Démarrer l'enquête terrain** (`field_survey`), **Passer en analyse** (`analysis`), **Soumettre au comité** (`committee`), **Avis CA** (`ca_review`, groupe Membre CA), **Avis CDAG** (`cdag_review`, groupe Membre CDAG).
+3. **Accepter** / **Accepter sous condition** / **Refuser** depuis `cdag_review` (groupe Membre CDAG).
+4. Depuis un dossier accepté, cliquer sur **Créer le crédit** (`action_create_loan`) : ouvre le wizard `microfinance.loan.application.create.loan.wizard` (produit pré-rempli depuis `loan_product_id`, montant et durée à saisir). Valider le wizard crée le crédit (`microfinance.loan`, état initial `draft`), le relie au dossier (`loan_id`) et fait passer le dossier à l'état `loan_created`.
+5. (Optionnel avant soumission du crédit) Générer l'échéancier prévisionnel avec **Générer échéancier** (`action_generate_schedule`, disponible tant que `state` est dans `draft, submitted, manager_validated, finance_validated, approved`).
+6. Cliquer sur **Soumettre** (`action_submit`) sur la fiche crédit : exécute `_check_eligibility()` puis `action_calculate_scoring(silent=True)`, passe l'état à `submitted`.
+7. Le manager clique sur **Valider manager** (`action_manager_validate`) : état `manager_validated`, `manager_id` renseigné à l'utilisateur courant.
+8. L'utilisateur finance clique sur **Valider finance** (`action_finance_validate`) : état `finance_validated`, `finance_user_id` renseigné.
+9. Le manager clique sur **Approuver** (`action_approve`) : état `approved`, `approval_date` renseignée à la date du jour.
+10. (Suite hors périmètre de ce workflow) Encaissement des frais de dossier et décaissement (`action_charge_fee`, `action_disburse`) font passer le crédit à l'état `active` — voir workflow `comptabilite`.
+
+**Verrou de création** : `microfinance.loan.create()` lève une `UserError` sauf si le contexte
+porte le flag `microfinance_loan_creation_allowed` (posé uniquement par le wizard ci-dessus,
+étape 4) — vérifié sur le chemin d'appel, pas sur le groupe de l'utilisateur. Toute tentative
+de création directe (menu, API, import) échoue avec ce message, quel que soit le rôle.
 
 **(B) Qualification client**, dérivée de `microfinance_partner_views.xml` :
 1. Ouvrir/créer une fiche client via `Microfinance > Clients`.
@@ -98,7 +116,10 @@ Dérivées de `_check_eligibility()` (appelée par `action_submit`, `microfinanc
 
 ## 8. Contrôles et blocages
 
-### (A) `microfinance.loan`
+### (A) `microfinance.loan.application` / `microfinance.loan`
+- *« Un crédit ne peut être créé que depuis un dossier d'instruction accepté (menu Dossiers d'instruction → Créer le crédit). »* — toute tentative de création directe de `microfinance.loan` hors du wizard (menu Crédits, API, import), quel que soit le rôle de l'utilisateur.
+- *« Transition invalide : impossible de passer de "X" à "Y". »* — tentative de sauter une étape du cycle de vie du dossier.
+- *« Vous n'avez pas le rôle requis pour amener un dossier à l'étape "X". »* — utilisateur sans le groupe requis pour l'étape visée (Enquêteur, Membre CA, Membre CDAG).
 - *« Ancienneté client insuffisante pour ce produit : il manque X jour(s)... »* — client trop récent pour le produit choisi.
 - *« Ce client a déjà un crédit actif. Ce produit n'autorise pas de second crédit en parallèle. »*
 - *« Ce client a déjà un crédit actif en arriérés. Un second crédit ne peut pas être soumis. »*
@@ -170,11 +191,13 @@ Aucun indicateur spécifique à l'instruction précrédit ou à la qualification
 Cloisonnement multi-société : `microfinance_loan_company_rule` (`security/microfinance_company_rules.xml`) restreint `microfinance.loan` à `company_id in company_ids`, sans groupe ciblé (`groups=[]`), donc appliqué à tous les utilisateurs internes sans exception.
 
 ## 13. Cas d'utilisation complets
-1. **Instruction complète d'un crédit standard** : l'agent crédit ouvre `Microfinance > Crédits > Demande de crédit`, crée un nouveau crédit, sélectionne `partner_id` et `product_id`, saisit `loan_amount` et `term`, clique sur **Soumettre** (passe en `submitted`, score calculé automatiquement). Le manager ouvre le crédit et clique sur **Valider manager** (`manager_validated`). L'utilisateur finance clique sur **Valider finance** (`finance_validated`). Le manager clique sur **Approuver** (`approved`, `approval_date` renseignée). Le crédit est prêt pour le décaissement (workflow `comptabilite`).
+1. **Instruction complète d'un crédit standard** : l'agent crédit ouvre `Microfinance > Crédits > Dossiers d'instruction`, crée un dossier, sélectionne `partner_id` et `loan_product_id`, le fait passer par enquête terrain → analyse → comité → avis CA → avis CDAG, puis clique sur **Accepter**. Depuis le dossier accepté, il clique sur **Créer le crédit**, saisit le montant et la durée dans le wizard, et valide : le crédit est créé (`draft`) et relié au dossier. Sur la fiche crédit, il clique sur **Soumettre** (passe en `submitted`, score calculé automatiquement). Le manager clique sur **Valider manager** (`manager_validated`). L'utilisateur finance clique sur **Valider finance** (`finance_validated`). Le manager clique sur **Approuver** (`approved`, `approval_date` renseignée). Le crédit est prêt pour le décaissement (workflow `comptabilite`).
 2. **Création d'une fiche client société avec comité** : l'agent ouvre `Microfinance > Clients`, crée une fiche, choisit `microfinance_client_type = 'company'`, renseigne `microfinance_nif` (12 chiffres, sinon `ValidationError`), remplit les blocs Identité légale / Activité et finances / Localisation étendue, puis ajoute des lignes dans **Comité** (représentant légal, président, etc.) via `microfinance_representative_ids`.
 3. **Blocage d'un second crédit sur client en arriérés** : l'agent tente de soumettre un nouveau crédit pour un client ayant déjà un crédit `active` avec des échéances en retard, sur un produit configuré avec `allow_second_loan=True` mais `block_second_if_arrears=True`. Le clic sur **Soumettre** échoue avec *« Ce client a déjà un crédit actif en arriérés. Un second crédit ne peut pas être soumis. »* — le dossier reste en `draft` jusqu'à régularisation.
 
 ## 14. Erreurs fréquentes
+- *« Un crédit ne peut être créé que depuis un dossier d'instruction accepté... »* — tentative de création directe d'un crédit hors du wizard (menu Crédits, API, import).
+- *« Transition invalide... »* / *« Vous n'avez pas le rôle requis... »* — étape du dossier sautée ou rôle insuffisant (voir section 8).
 - *« Ancienneté client insuffisante pour ce produit... »* — client créé trop récemment par rapport à `product.min_membership_days`.
 - *« Ce client a déjà un crédit actif... »* / *« ...en arriérés... »* — cumul de crédits non autorisé par le produit.
 - *« Ce produit exige une garantie validée avant soumission. »* / *« Garanties insuffisantes... »* — dossier de garanties incomplet (voir workflow `garanties_scoring`).

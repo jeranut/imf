@@ -19,7 +19,7 @@ D'après `microfinance_loan_management/security/groups.xml` et les deux `ir.mode
 
 ## 3. Menus utilisés
 Depuis `microfinance_loan_management/views/microfinance_menus.xml` et `microfinance_savings_management/views/microfinance_savings_menus.xml` :
-- Microfinance > Crédits > Demande de crédit (`menu_microfinance_loans`, parent `menu_credits_root`, action `action_microfinance_loan`) — formulaire crédit portant les boutons de décaissement/frais/radiation.
+- Microfinance > Crédits > Crédits (`menu_microfinance_loans`, parent `menu_credits_root`, action `action_microfinance_loan`) — formulaire crédit portant les boutons de décaissement/frais/radiation.
 - Microfinance > Crédits > Échéances (`menu_microfinance_installments`, parent `menu_credits_root`, action `action_microfinance_installment`).
 - Microfinance > Crédits > Remboursements (`menu_microfinance_payments`, parent `menu_credits_root`, action `action_microfinance_payment`).
 - Microfinance > Épargne > Transactions épargne (`menu_microfinance_savings_transactions`, parent `microfinance_loan_management.menu_epargne_root`, action `action_microfinance_savings_transaction`).
@@ -47,7 +47,7 @@ Depuis `microfinance_loan_management/views/microfinance_menus.xml` et `microfina
 2. Saisir la date de radiation et le motif (obligatoire), cliquer « Radier » (`action_confirm`) → appelle `action_confirm_write_off` : crée et poste une écriture de perte sur créance pour le solde restant, passe le crédit en `written_off`.
 
 **E. Provisionnement comptable**
-1. Depuis Microfinance > Crédits > Demande de crédit, en vue liste, sélectionner un ou plusieurs crédits puis utiliser le menu Actions > « Comptabiliser les provisions » (réservé aux groupes Manager/Finance) ; le provisionnement peut aussi être exécuté par une tâche planifiée périodique prévue à cet effet.
+1. Depuis Microfinance > Crédits > Crédits, en vue liste, sélectionner un ou plusieurs crédits puis utiliser le menu Actions > « Comptabiliser les provisions » (réservé aux groupes Manager/Finance) ; le provisionnement peut aussi être exécuté par une tâche planifiée périodique prévue à cet effet.
 2. Pour chaque crédit dont la provision requise (`provision_amount`) diffère de la provision déjà comptabilisée (`provision_posted_amount`), crée et poste une écriture de dotation (delta positif) ou de reprise (delta négatif), puis met à jour `provision_posted_amount`.
 
 **F. Transaction d'épargne**
@@ -191,7 +191,7 @@ Dans `microfinance.dashboard` / contrôleur `/microfinance/dashboard/data` :
 | Auditeur microfinance (`microfinance_loan_management.group_microfinance_auditor`) | Oui | Non | Non | Non |
 
 ## 13. Cas d'utilisation complets
-1. **Décaissement avec frais préalables.** Un utilisateur Finance ouvre Microfinance > Crédits > Demande de crédit sur un dossier `approved` avec frais dus. Il clique « Encaisser les frais de dossier » (écriture de frais postée, `fee_paid=True`), puis « Activer / Décaisser » (l'échéancier est généré si besoin, l'écriture de décaissement est postée, le crédit passe en `Actif`).
+1. **Décaissement avec frais préalables.** Un utilisateur Finance ouvre Microfinance > Crédits > Crédits sur un dossier `approved` avec frais dus. Il clique « Encaisser les frais de dossier » (écriture de frais postée, `fee_paid=True`), puis « Activer / Décaisser » (l'échéancier est généré si besoin, l'écriture de décaissement est postée, le crédit passe en `Actif`).
 2. **Remboursement et clôture automatique.** Un agent ouvre le crédit `Actif`, clique « Enregistrer remboursement », saisit le montant correspondant au solde restant, laisse « Comptabiliser maintenant » coché et valide : le paiement est créé, alloué (pénalité/intérêt/capital), comptabilisé, et le crédit passe automatiquement en `Clôturé` car le solde atteint 0.
 3. **Annulation d'un remboursement erroné.** Un Manager ouvre le remboursement `Comptabilisé` concerné depuis Microfinance > Crédits > Remboursements, clique « Annuler (contre-passation) », saisit le motif, confirme : l'écriture d'origine est contre-passée, les montants sont restitués aux échéances, le paiement passe en `Annulé` (et le crédit repasse en `Actif` s'il avait été clôturé automatiquement par ce paiement).
 4. **Radiation d'un crédit en défaut.** Un Manager ouvre un crédit `En défaut`, clique « Radier », saisit la date et le motif dans l'assistant, confirme : une écriture de perte sur créance est postée pour le solde restant et le crédit passe en `Radié`.

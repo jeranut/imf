@@ -39,3 +39,8 @@ from . import test_caisse_security
 from . import test_caisse_fiche_journee_report
 from . import test_cashier_access
 from . import test_repayment_schedule_report
+from . import test_social_category_grid
+from . import test_field_visit
+from . import test_application_workflow
+from . import test_loan_progressive_program
+from . import test_loan_creation_lock

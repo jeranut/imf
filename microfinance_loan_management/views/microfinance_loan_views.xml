@@ -173,8 +173,54 @@
                         <page string="Notes"><field name="note"/></page>
                     </notebook>
                 </sheet>
-                <chatter/>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids" widget="mail_followers"/>
+                    <field name="activity_ids" widget="mail_activity"/>
+                    <field name="message_ids" widget="mail_thread"/>
+                </div>
             </form>
+        </field>
+    </record>
+    <!-- Vues dédiées au menu "Crédits" (consultation seule) : la création d'un crédit ne
+         doit plus se faire que depuis le dossier d'instruction (wizard
+         microfinance.loan.application.create.loan.wizard, verrouillé côté serveur sur
+         microfinance.loan.create()). mode="primary" plutôt qu'une duplication d'arch à la
+         main : ces vues héritent de tout le contenu des vues génériques (y compris les
+         ajouts du module scoring sur le formulaire), sans jamais s'appliquer aux fetches
+         des vues génériques elles-mêmes (action_view_loan depuis le dossier, wizards de
+         remboursement/rééchelonnement/radiation gardent leur comportement normal,
+         create compris). Seule la création est concernée ici, edit/delete inchangés. -->
+    <record id="view_microfinance_loan_kanban_readonly_create" model="ir.ui.view">
+        <field name="name">microfinance.loan.kanban.readonly.create</field>
+        <field name="model">microfinance.loan</field>
+        <field name="mode">primary</field>
+        <field name="inherit_id" ref="view_microfinance_loan_kanban"/>
+        <field name="arch" type="xml">
+            <xpath expr="//kanban" position="attributes">
+                <attribute name="create">0</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_tree_readonly_create" model="ir.ui.view">
+        <field name="name">microfinance.loan.tree.readonly.create</field>
+        <field name="model">microfinance.loan</field>
+        <field name="mode">primary</field>
+        <field name="inherit_id" ref="view_microfinance_loan_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="attributes">
+                <attribute name="create">0</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_form_readonly_create" model="ir.ui.view">
+        <field name="name">microfinance.loan.form.readonly.create</field>
+        <field name="model">microfinance.loan</field>
+        <field name="mode">primary</field>
+        <field name="inherit_id" ref="view_microfinance_loan_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="attributes">
+                <attribute name="create">0</attribute>
+            </xpath>
         </field>
     </record>
     <record id="action_microfinance_loan" model="ir.actions.act_window">
@@ -182,5 +228,11 @@
         <field name="res_model">microfinance.loan</field>
         <field name="view_mode">kanban,tree,form</field>
         <field name="context">{'search_default_active': 1}</field>
+        <field name="view_ids" eval="[
+            (5, 0, 0),
+            (0, 0, {'view_mode': 'kanban', 'view_id': ref('view_microfinance_loan_kanban_readonly_create')}),
+            (0, 0, {'view_mode': 'tree', 'view_id': ref('view_microfinance_loan_tree_readonly_create')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('view_microfinance_loan_form_readonly_create')}),
+        ]"/>
     </record>
 </odoo>
