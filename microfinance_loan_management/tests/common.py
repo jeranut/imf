@@ -59,7 +59,13 @@ class MicrofinanceCommon(TransactionCase):
             'company_id': company.id,
             'default_account_id': cls.bank_account.id,
         })
-        cls.partner = cls.env['res.partner'].create({'name': 'Client Test Microfinance'})
+        # microfinance_partner_type='client' déclenche l'attribution du numéro de compte
+        # permanent (microfinance_account_number), dont dérive maintenant la référence des
+        # dossiers d'instruction (microfinance.loan.application.name, related) — sans ce
+        # marquage, name resterait vide sur tous les dossiers créés dans les tests.
+        cls.partner = cls.env['res.partner'].create({
+            'name': 'Client Test Microfinance', 'microfinance_partner_type': 'client',
+        })
         cls.product = cls.env['microfinance.loan.product'].create({
             'name': 'Produit Test',
             'code': 'PTEST',
@@ -87,6 +93,10 @@ class MicrofinanceCommon(TransactionCase):
             'account_interets_recus_groupe_id': cls.interest_account_groupe.id,
             'account_penalites_id': cls.penalty_account.id,
         })
+
+    def _set_product_policy(self, policy):
+        self.env['ir.config_parameter'].sudo().set_param(
+            'microfinance_loan_management.microfinance_product_policy', policy)
 
     def _create_loan(self, **kwargs):
         vals = {

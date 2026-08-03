@@ -3,15 +3,18 @@ from .common import MicrofinanceCommon
 
 
 class TestAgencyNumbering(MicrofinanceCommon):
-    """Numérotation AGENCE/SÉRIE pour microfinance.loan (crédit actif).
+    """Numérotation AGENCE/SÉRIE pour microfinance.loan (crédit accordé) : séquence dédiée et
+    indépendante (microfinance.loan.agency), incrémentée à chaque crédit créé, tous clients
+    confondus de l'agence — exactement le "numéro crédit" attendu par le correctif de
+    numérotation à trois niveaux (cf. docs_dev/programme_progressif/STATUS.md), déjà correct
+    avant ce correctif, aucun changement de code n'a été nécessaire ici.
 
-    microfinance.loan.application ('dossier d'instruction') a aussi reçu la même logique de
-    numérotation dans son create(), mais ce modèle n'est actuellement pas fonctionnel dans ce
-    codebase : jamais importé dans models/__init__.py (donc jamais enregistré dans le registre),
-    et référence en plus 6 sous-modèles inexistants (microfinance.loan.application.dependent,
-    .guarantor.line, .document.line, .income.line, .field.visit, .social.score). Remise en état
-    hors périmètre de cette tâche (numérotation) — voir docs_dev/savings/ecarts_lpf.md pour le
-    détail. Pas de test possible tant que ce modèle ne charge pas."""
+    Remarque : le commentaire précédent de cette classe affirmait que
+    microfinance.loan.application n'était pas fonctionnel (jamais importé, sous-modèles
+    manquants) — c'est obsolète, ce modèle est pleinement implémenté et testé ailleurs
+    (tests/test_application_workflow.py, etc.), sa propre numérotation (name) a été corrigée
+    séparément par le correctif de numérotation (related vers
+    partner_id.microfinance_account_number, cf. tests/test_partner_account_number.py)."""
 
     @classmethod
     def setUpClass(cls):

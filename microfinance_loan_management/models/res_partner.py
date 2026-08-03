@@ -4,6 +4,10 @@ import re
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
 
+# Réglage global unique (toutes agences confondues, cf. Microfinance > Configuration >
+# Paramètres) : pas de champ dupliqué par société, ne s'applique qu'aux nouveaux dossiers.
+MICROFINANCE_PRODUCT_POLICY_PARAM = 'microfinance_loan_management.microfinance_product_policy'
+
 
 class ResPartner(models.Model):
     _inherit = 'res.partner'
@@ -88,6 +92,29 @@ class ResPartner(models.Model):
             if not partner.company_id:
                 raise ValidationError(_('La société (agence) est obligatoire pour un client microfinance.'))
 
+    # --- Numéro de compte client (permanent) ---
+    # Attribué une seule fois, à la création de la fiche, dès que ce contact est reconnu comme
+    # client microfinance (microfinance_partner_type == 'client'). Sert de référence unique
+    # affichée sur tous les dossiers d'instruction de ce client (microfinance_loan_application.name
+    # devient un related vers ce champ) — ne change jamais après attribution.
+    microfinance_account_number = fields.Char(
+        string='Numéro de compte client', readonly=True, copy=False,
+        help="Numéro de compte permanent (format AGENCE/NNNNNN), attribué automatiquement et "
+             "une seule fois à la création de la fiche, dès que ce contact est un client "
+             "microfinance. Sert de référence unique pour ce client sur tous ses dossiers "
+             "d'instruction — ne change jamais, non modifiable manuellement.",
+    )
+
+    def _assign_microfinance_account_number(self):
+        self.ensure_one()
+        if self.microfinance_account_number:
+            return
+        company = self.company_id or self.env.company
+        number = company._get_or_create_numbering_sequence('microfinance.partner.account')
+        self.with_context(microfinance_allow_account_number_write=True).write({
+            'microfinance_account_number': '%s/%s' % (company.agency_code, number),
+        })
+
     # --- Communs ---
     microfinance_internal_reference = fields.Char(string='Référence interne')
     microfinance_statistical_number = fields.Char(string='Numéro statistique')
@@ -119,6 +146,221 @@ class ResPartner(models.Model):
             'context': {'default_partner_id': self.id},
         }
 
+    # --- Crédit : sélection produit (indépendant / progressif) et dossier courant ---
+    # États du dossier considérés comme non terminaux pour la réutilisation : tout état sauf
+    # 'refused' (rejeté, un nouveau dossier peut être retenté) et 'loan_created' (dossier déjà
+    # transformé en crédit, cf. microfinance.loan.application.ALLOWED_TRANSITIONS).
+    _CREDIT_APPLICATION_TERMINAL_STATES = ('refused', 'loan_created')
+
+    microfinance_product_policy = fields.Selection([
+        ('independent', 'Produit indépendant'),
+        ('progressive', 'Produit progressif'),
+    ], string='Politique de produit', compute='_compute_microfinance_product_policy',
+        help="Reflet en lecture seule du réglage global (Microfinance > Configuration > "
+             "Paramètres), unique pour toutes les agences : détermine le domaine du champ "
+             "Produit ci-dessous. Non modifiable depuis la fiche client.",
+    )
+    microfinance_selected_product_id = fields.Many2one(
+        'microfinance.loan.product', string='Produit sélectionné',
+        help="Produit visé par ce client pour son prochain crédit. Optionnel (client "
+             "épargne uniquement, ou aucun produit encore choisi). Non modifiable tant que "
+             "le dossier ou le crédit en cours sur le produit actuellement sélectionné n'est "
+             "pas rejeté ou entièrement remboursé.",
+    )
+    microfinance_current_loan_application_id = fields.Many2one(
+        'microfinance.loan.application', string='Dossier de crédit courant', readonly=True, copy=False,
+        help="Dossier d'instruction associé au produit sélectionné ci-dessus : réutilisé tant "
+             "qu'il n'est ni rejeté ni transformé en crédit clôturé ou annulé, sinon recréé "
+             "automatiquement à l'enregistrement.",
+    )
+    microfinance_progressive_eligible_product_ids = fields.Many2many(
+        'microfinance.loan.product', compute='_compute_microfinance_progressive_eligible_products',
+        string='Produits progressifs éligibles',
+        help="Produits de programme progressif actuellement accessibles à ce client : la 1ère "
+             "étape de chaque programme (aucun prérequis), et les étapes suivantes dont le prêt "
+             "précédent est clôturé sans retard bloquant (statut 'Éligible' ou 'Avertissement').",
+    )
+
+    @api.depends()
+    def _compute_microfinance_product_policy(self):
+        # Réglage global unique (Microfinance > Configuration > Paramètres), jamais par
+        # société : pas de dépendance de champ, relu depuis ir.config_parameter à chaque
+        # accès (cf. prompt correctif politique produit globale).
+        policy = self.env['ir.config_parameter'].sudo().get_param(
+            MICROFINANCE_PRODUCT_POLICY_PARAM, 'independent')
+        for partner in self:
+            partner.microfinance_product_policy = policy
+
+    @api.depends('company_id', 'microfinance_loan_ids.state', 'microfinance_loan_ids.product_id')
+    def _compute_microfinance_progressive_eligible_products(self):
+        Step = self.env['microfinance.loan.progressive.program.step'].sudo()
+        Loan = self.env['microfinance.loan'].sudo()
+        # Instance jetable (jamais enregistrée) pour réutiliser _evaluate_progressive_eligibility
+        # tel quel plutôt que de dupliquer la logique déjà validée sur loan.application.
+        evaluator = self.env['microfinance.loan.application'].new()
+        all_steps = Step.search([])
+        for partner in self:
+            eligible = self.env['microfinance.loan.product']
+            for step in all_steps.filtered(lambda s: s.product_id.company_id == partner.company_id):
+                if step.sequence_number <= 1:
+                    eligible |= step.product_id
+                    continue
+                prior_step = Step.search([
+                    ('program_id', '=', step.program_id.id),
+                    ('sequence_number', '=', step.sequence_number - 1),
+                ], limit=1)
+                if not prior_step:
+                    eligible |= step.product_id
+                    continue
+                prior_loans = Loan.search([
+                    ('partner_id', '=', partner.id),
+                    ('product_id', '=', prior_step.product_id.id),
+                ])
+                if not prior_loans:
+                    continue
+                status, _message = evaluator._evaluate_progressive_eligibility(prior_loans, prior_step)
+                if status in ('eligible', 'warning'):
+                    eligible |= step.product_id
+            partner.microfinance_progressive_eligible_product_ids = eligible
+
+    def _microfinance_product_change_unlocked(self, application):
+        self.ensure_one()
+        if not application:
+            return True
+        if application.state == 'refused':
+            return True
+        if application.state == 'loan_created':
+            # Un crédit annulé n'a jamais été décaissé (cf. PRIOR_LOAN_STATES qui l'exclut déjà
+            # des prêts antérieurs réalisés) : il ne doit pas bloquer un nouveau choix de produit.
+            return application.loan_id.state in ('closed', 'cancelled')
+        return False
+
+    microfinance_product_change_locked = fields.Boolean(
+        compute='_compute_microfinance_product_lock',
+        help="Vrai si le champ produit ne peut pas être modifié (dossier en cours "
+             "d'instruction, ou crédit décaissé non encore entièrement remboursé).",
+    )
+    microfinance_product_lock_message = fields.Char(compute='_compute_microfinance_product_lock')
+
+    @api.depends(
+        'microfinance_current_loan_application_id.state',
+        'microfinance_current_loan_application_id.loan_id.state',
+    )
+    def _compute_microfinance_product_lock(self):
+        for partner in self:
+            application = partner.microfinance_current_loan_application_id
+            locked = bool(application) and not partner._microfinance_product_change_unlocked(application)
+            partner.microfinance_product_change_locked = locked
+            partner.microfinance_product_lock_message = locked and _(
+                "Le produit ne peut être changé tant que le crédit en cours sur '%s' n'est pas "
+                "entièrement remboursé (ou le dossier rejeté)."
+            ) % application.loan_product_id.display_name
+
+    @api.constrains('microfinance_selected_product_id')
+    def _check_microfinance_product_change_allowed(self):
+        if not self.env.context.get('microfinance_context'):
+            return
+        for partner in self:
+            application = partner.microfinance_current_loan_application_id
+            if not application or application.loan_product_id == partner.microfinance_selected_product_id:
+                continue
+            if not partner._microfinance_product_change_unlocked(application):
+                raise ValidationError(_(
+                    "Le produit ne peut être changé tant que le crédit en cours sur '%s' n'est "
+                    "pas entièrement remboursé (ou le dossier rejeté)."
+                ) % application.loan_product_id.display_name)
+
+    @api.constrains('microfinance_selected_product_id')
+    def _check_microfinance_product_matches_policy(self):
+        if not self.env.context.get('microfinance_context'):
+            return
+        for partner in self:
+            product = partner.microfinance_selected_product_id
+            if not product:
+                continue
+            if partner.microfinance_product_policy == 'independent' and product.is_progressive_step:
+                raise ValidationError(_(
+                    "Le produit '%s' fait partie d'un programme progressif : la politique de "
+                    "produit actuelle (Microfinance > Configuration > Paramètres) est réglée "
+                    "sur 'Produit indépendant'."
+                ) % product.display_name)
+            if partner.microfinance_product_policy == 'progressive' and (
+                product not in partner.microfinance_progressive_eligible_product_ids
+            ):
+                raise ValidationError(_(
+                    "Le produit '%s' n'est pas (ou plus) accessible à ce client selon la "
+                    "politique de produit progressif actuellement configurée."
+                ) % product.display_name)
+
+    def _get_or_create_loan_application(self):
+        self.ensure_one()
+        product = self.microfinance_selected_product_id
+        if not product:
+            return False
+        Application = self.env['microfinance.loan.application']
+        application = Application.search([
+            ('partner_id', '=', self.id),
+            ('loan_product_id', '=', product.id),
+            ('state', 'not in', self._CREDIT_APPLICATION_TERMINAL_STATES),
+        ], limit=1)
+        created = False
+        if not application:
+            application = Application.create({
+                'partner_id': self.id,
+                'loan_product_id': product.id,
+                'company_id': self.company_id.id or self.env.company.id,
+            })
+            created = True
+        if self.microfinance_current_loan_application_id != application:
+            self.microfinance_current_loan_application_id = application.id
+        self._notify_microfinance_loan_application(application, created)
+        return application
+
+    def _notify_microfinance_loan_application(self, application, created):
+        self.ensure_one()
+        message = (
+            _("Nouveau dossier de crédit brouillon créé : %s.") % application.name
+            if created else
+            _("Dossier de crédit existant réutilisé : %s.") % application.name
+        )
+        self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
+            'type': 'success',
+            'title': _('Dossier de crédit'),
+            'message': message,
+            'sticky': False,
+        })
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            # Jamais saisi manuellement, même à la création : uniquement attribué par
+            # _assign_microfinance_account_number() ci-dessus, sur la base de la séquence dédiée.
+            vals.pop('microfinance_account_number', None)
+        partners = super().create(vals_list)
+        for partner in partners:
+            if partner.microfinance_partner_type == 'client':
+                partner._assign_microfinance_account_number()
+        if self.env.context.get('microfinance_context'):
+            for partner in partners:
+                if partner.microfinance_selected_product_id:
+                    partner._get_or_create_loan_application()
+        return partners
+
+    def write(self, vals):
+        if 'microfinance_account_number' in vals and not self.env.context.get(
+            'microfinance_allow_account_number_write'
+        ):
+            raise ValidationError(_(
+                'Le numéro de compte client est permanent : il ne peut jamais être modifié '
+                'manuellement.'
+            ))
+        result = super().write(vals)
+        if self.env.context.get('microfinance_context') and 'microfinance_selected_product_id' in vals:
+            for partner in self:
+                if partner.microfinance_selected_product_id:
+                    partner._get_or_create_loan_application()
+        return result
+
     # --- Particulier : Identification ---
     microfinance_registration_number = fields.Char(string="N° d'enregistrement")
     microfinance_id_type = fields.Selection([
@@ -128,9 +370,11 @@ class ResPartner(models.Model):
     microfinance_id_issue_date = fields.Date(string='Date de délivrance')
     microfinance_id_issue_place = fields.Char(string='Lieu de délivrance')
     microfinance_birthdate = fields.Date(string='Date de naissance')
+    microfinance_birth_place = fields.Char(string='Lieu de naissance')
     microfinance_gender = fields.Selection([('m', 'Masculin'), ('f', 'Féminin')], string='Genre')
     microfinance_marital_status = fields.Selection([
-        ('single', 'Célibataire'), ('married', 'Marié(e)'), ('divorced', 'Divorcé(e)/Séparé(e)'), ('widowed', 'Veuf/Veuve'),
+        ('single', 'Célibataire'), ('married', 'Marié(e)'), ('cohabiting', 'Union libre'),
+        ('divorced', 'Divorcé(e)/Séparé(e)'), ('widowed', 'Veuf/Veuve'),
     ], string='Situation matrimoniale')
     microfinance_profession = fields.Many2one(
         'microfinance.profession', string='Profession',
@@ -138,6 +382,10 @@ class ResPartner(models.Model):
              "> Professions), plutôt qu'une liste figée : une institution peut y ajouter ses "
              "propres valeurs à tout moment.",
     )
+    # Générique (pas préfixé "spouse_") : réutilisable aussi bien pour le client que pour son
+    # conjoint (lu via microfinance_spouse_id.microfinance_employer sur le dossier d'instruction,
+    # cf. correctif synchronisation Bloc A) — symétrique à microfinance_profession.
+    microfinance_employer = fields.Char(string='Employeur')
     microfinance_education_level = fields.Selection([
         ('none', 'Aucun'), ('primary', 'Primaire'), ('secondary', 'Secondaire'), ('higher', 'Supérieur'),
     ], string="Niveau d'éducation")
@@ -158,6 +406,14 @@ class ResPartner(models.Model):
         string='Profession du conjoint', store=True, readonly=False)
     microfinance_next_of_kin_name = fields.Char(string='Personne à contacter')
     microfinance_next_of_kin_address = fields.Char(string='Adresse contact')
+    microfinance_next_of_kin_phone = fields.Char(string='Téléphone du contact')
+    microfinance_housing_status = fields.Selection([
+        ('owner_inheritance', 'Propriétaire (héritage)'),
+        ('owner_purchase', 'Propriétaire (achat)'),
+        ('owner_donation', 'Propriétaire (donation)'),
+        ('tenant_free', 'Locataire sans loyer'),
+        ('tenant_paying', 'Locataire avec loyer'),
+    ], string="Statut d'occupation du logement")
     microfinance_co_holder_name = fields.Char(string='Co-titulaire')
     microfinance_guarantor_id = fields.Many2one('res.partner', string='Garant')
     microfinance_required_signatures = fields.Integer(string='Signatures requises', default=1)

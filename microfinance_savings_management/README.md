@@ -46,6 +46,23 @@ recalculé automatiquement à partir des transactions (dépôt, retrait, intér�
 prélevés, prélèvement automatique, virement) ; chaque transaction validée génère
 automatiquement son écriture comptable.
 
+## Numérotation du compte épargne
+
+Le numéro d'un compte d'épargne (format `AGENCE/TYPE/NNNNNN`, ex. `IS/I/000001`) n'est **pas**
+une séquence propre à l'épargne : pour le premier compte d'un type donné (I particulier, E
+société, G groupe, T dépôt à terme) ouvert pour un client, le suffixe numérique reprend
+exactement celui du numéro de compte permanent du client (voir README du module Crédit,
+section "Numérotation") — `IS/000001` (client) devient `IS/I/000001` (épargne). Un compte
+supplémentaire du même type pour ce même client (par exemple une épargne obligatoire liée à un
+crédit, en plus d'une épargne volontaire) ne peut pas reprendre ce numéro sans collision : il
+reçoit alors un numéro de la séquence indépendante de ce type, propre à l'agence.
+
+Le **compte épargne principal** d'un client (produit configuré sur
+**Réglages > Sociétés > [agence] > Produit d'épargne par défaut**) s'ouvre automatiquement,
+en brouillon, dès la création du premier dossier d'instruction de crédit de ce client — sans
+configuration de produit par défaut, aucun compte n'est ouvert automatiquement (l'agence doit
+alors ouvrir les comptes épargne manuellement, comme avant).
+
 ## Intégration avec le crédit
 
 - **Prélèvement automatique sur épargne** : si le produit de crédit l'autorise, une échéance

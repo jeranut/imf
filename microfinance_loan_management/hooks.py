@@ -3,6 +3,8 @@ import csv
 import logging
 import os
 
+from odoo import fields
+
 _logger = logging.getLogger(__name__)
 
 GEO_DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
@@ -418,6 +420,295 @@ def _load_geo_reference_data(env):
     _link_geo_commune_districts(env)
 
 
+# Référentiel Catégorie d'activité / Activité (Bloc IV), fourni par Micka le 2026-07-19 :
+# (code_categorie, categorie, code_activite, activite). Ne pas retrier ni "nettoyer" l'ordre de
+# cette liste : c'est cet ordre qui détermine, pour les 2 codes d'activité en double (27 et 30),
+# laquelle des deux occurrences est conservée à l'import (décision confirmée avec Micka, Option
+# A : on garde la première occurrence dans l'ordre ci-dessous, on ignore la suivante — cf.
+# docs_dev/programme_progressif/STATUS.md).
+ACTIVITY_REFERENCE_DATA = [
+    ('G4711', 'Commerce de détail en magasins non spécialisés, avec vente prédominante de produits alimentaires, boissons et tabacs', '0', 'Épicerie'),
+    ('G4721', 'Commerce de détail de produits alimentaires en magasins spécialisés', '2', 'Vente viande, poisson'),
+    ('G4752', 'Commerce de détail de quincaillerie, peintures et verrerie en magasins spécialisés', '18', 'Quincaillerie'),
+    ('G4764', 'Commerce de détail de jeux et jouets en magasin spécialisé', '6', 'Vente jouets, cadeaux'),
+    ('G4771', "Commerce de détail de vêtements, de chaussures et d'articles de cuir en magasins spécialisés", '5', 'Vente vêtements, chaussures'),
+    ('G4772', "Commerce de détail de produits pharmaceutiques et médicaux, de produits de beauté et d'articles de toilette", '7', 'Plantes médicinales, médicaments'),
+    ('G4774', "Commerce de détail d'articles d'occasion", '15', 'Brocante'),
+    ('G4789', "Commerce de détail sur éventaires et marchés d'autres articles", '1', 'Fruits & légumes'),
+    ('G4789', "Commerce de détail sur éventaires et marchés d'autres articles", '4', 'Volaille, lapin vivant'),
+    ('G4799', "Autres commerces de détail autres qu'en magasins, sur éventaires ou marchés", '8', 'Marchand ambulant'),
+    ('G4799', "Autres commerces de détail autres qu'en magasins, sur éventaires ou marchés", '9', 'Autre achat ou revente'),
+    ('H4922', 'Transports routiers de marchandises', '26', 'Transporteurs'),
+    ('I5629', 'Autres activités de services de restauration', '11', 'Petite gargote extérieure'),
+    ('I5629', 'Autres activités de services de restauration', '20', 'Hôtely, gargote intérieure'),
+    ('S9602', 'Coiffure et autres soins esthétiques', '21', 'Coiffure et beauté'),
+    ('N7722', 'Location de vidéocassettes et de vidéodisques', '23', 'Location vidéo'),
+    ('Q8892', 'Autres activités de services aux particuliers et aux familles', '22', 'Lavanderie'),
+    ('Q8892', 'Autres activités de services aux particuliers et aux familles', '25', 'Photos'),
+    ('Q8892', 'Autres activités de services aux particuliers et aux familles', '29', 'Tailleur'),
+    ('Q8892', 'Autres activités de services aux particuliers et aux familles', '30', 'Autres services'),
+    ('S9512', 'Réparation de matériel de communication', '24', 'Réparateur TV, radio'),
+    ('S9523', "Réparation de chaussures et d'articles de cuir", '30', 'Autres services'),
+    ('S9529', "Réparation d'autres articles personnels et ménagers", '27', 'Réparateur à domicile'),
+    ('A0112', 'Culture du riz (y compris biologique et génétiquement modifié)', '43', 'Riziculture'),
+    ('A0113', 'Culture de légumes, de melons, de racines et de tubercules', '44', 'Produits maraîchers'),
+    ('A0119', 'Autres cultures temporaires', '45', 'Pépinière'),
+    ('A0125', "Culture d'autres fruits sur arbres et arbustes, et de fruits à coque", '46', 'Arbre fruitier'),
+    ('A0141', 'Élevage de bovins et de buffles', '39', 'Zébus'),
+    ('A0145', 'Élevage de porcins', '38', 'Porc'),
+    ('A0146', 'Élevage de volailles', '32', 'Poulet de chair'),
+    ('A0146', 'Élevage de volailles', '33', 'Poule pondeuse'),
+    ('A0146', 'Élevage de volailles', '34', 'Poulet gasy'),
+    ('A0146', 'Élevage de volailles', '35', 'Canard'),
+    ('A0146', 'Élevage de volailles', '36', 'Oie'),
+    ('A0146', 'Élevage de volailles', '37', 'Dinde'),
+    ('A0149', "Élevage d'autres animaux", '40', 'Apiculture'),
+    ('A0149', "Élevage d'autres animaux", '41', 'Pisciculture'),
+    ('A0149', "Élevage d'autres animaux", '42', 'Lapin'),
+    ('C1071', 'Boulangerie, pâtisserie, biscuiterie', '3', 'Boulangerie, pâtisserie'),
+    ('C1312', 'Tissage des fibres textiles', '49', '(non résolu)'),
+    ('C1399', "Fabrication d'autres textiles nca", '47', '(non résolu)'),
+    ('C1410', "Fabrication de vêtements autres qu'en fourrure", '13', 'Confection'),
+    ('C2392', 'Fabrication de matériaux de construction non réfractaires en argile et céramique', '50', '(non résolu)'),
+    ('C2393', "Fabrication d'autres articles en porcelaine et en céramique", '48', '(non résolu)'),
+    ('C2396', 'Taille, façonnage et finissage de la pierre', '28', 'Lapidaire'),
+    ('C3100', 'Fabrication de meubles de bureau et autres', '14', 'Menuiserie'),
+    ('C3240', 'Fabrication de jeux et jouets', '16', 'Fabrication de jouets'),
+    ('C3290', 'Autres activités de fabrication, nca', '12', 'Artisanat'),
+    ('C3290', 'Autres activités de fabrication, nca', '19', 'Autre fabrication'),
+    ('C3290', 'Autres activités de fabrication, nca', '17', 'Forgeron, ferrailleur'),
+    ('C3319', "Réparation d'autres matériels", '27', 'Réparateur à domicile'),
+    ('F4100', 'Construction de bâtiments', '31', 'Habitat'),
+]
+
+
+def _load_activity_reference_data(env):
+    """Charge le référentiel Catégorie d'activité / Activité (Bloc IV) depuis
+    ACTIVITY_REFERENCE_DATA, avec le même mécanisme que le référentiel géo (xml_ids
+    noupdate=True via _load_records, cf. _force_geo_noupdate). Dédoublonne les catégories (un
+    code_categorie = une seule catégorie créée) et applique l'Option A confirmée avec Micka sur
+    les codes d'activité en double : garde la première occurrence dans l'ordre de
+    ACTIVITY_REFERENCE_DATA, ignore les suivantes (rapport détaillé en log)."""
+    Category = env['microfinance.loan.application.activity.category']
+    Activity = env['microfinance.loan.application.activity']
+
+    category_xml_ids = {}  # code_categorie -> xml_id (première occurrence)
+    category_data_list = []
+    for code_categ, categorie, _code_act, _act in ACTIVITY_REFERENCE_DATA:
+        if code_categ in category_xml_ids:
+            continue
+        xml_id = f'activity_category_{code_categ}'
+        category_xml_ids[code_categ] = xml_id
+        category_data_list.append({
+            'xml_id': f'{GEO_MODULE}.{xml_id}',
+            'values': {'code': code_categ, 'name': categorie},
+            'noupdate': True,
+        })
+    Category._load_records(category_data_list, update=True)
+    _force_geo_noupdate(env, [xml_id for xml_id in category_xml_ids.values()])
+
+    activity_first_seen = {}  # code_activite -> (code_categorie, activite) première occurrence
+    skipped = []
+    activity_data_list = []
+    for code_categ, categorie, code_act, act in ACTIVITY_REFERENCE_DATA:
+        if code_act in activity_first_seen:
+            skipped.append((code_act, act, code_categ, categorie))
+            continue
+        activity_first_seen[code_act] = (code_categ, act)
+        category = env.ref(f'{GEO_MODULE}.{category_xml_ids[code_categ]}')
+        xml_id = f'activity_{code_act}'
+        activity_data_list.append({
+            'xml_id': f'{GEO_MODULE}.{xml_id}',
+            'values': {'code': code_act, 'name': act, 'category_id': category.id},
+            'noupdate': True,
+        })
+    Activity._load_records(activity_data_list, update=True)
+    _force_geo_noupdate(env, [f'activity_{code}' for code in activity_first_seen])
+
+    _logger.info(
+        "Référentiel activités (Bloc IV) : %d catégorie(s), %d activité(s) chargées, "
+        "%d doublon(s) de code d'activité ignoré(s) (première occurrence conservée) : %s",
+        len(category_data_list), len(activity_data_list), len(skipped),
+        '; '.join(
+            f"code {code} ({act!r}) sous {categ_code} ignoré (déjà utilisé par "
+            f"{activity_first_seen[code][0]}/{activity_first_seen[code][1]!r})"
+            for code, act, categ_code, _categ_name in skipped
+        ) or 'aucun',
+    )
+
+
+# Désignations par défaut Section V (revenus familiaux, dépenses d'activité, dépenses
+# familiales) et fréquences de montant avec leur multiplicateur — configurables librement
+# ensuite par Micka (Configuration > Financement), ces valeurs ne sont qu'un point de départ,
+# pas une liste figée.
+FINANCIAL_DESIGNATION_INCOME_DATA = [
+    'Bénéfices activité financée', 'Bénéfices autre activité', 'Salaire', 'Pension',
+    'Loyers perçus', 'Contribution autres membres', 'Autres revenus',
+]
+FINANCIAL_DESIGNATION_ACTIVITY_EXPENSE_DATA = [
+    'Ticket', 'Transport', 'Location table/parasol', 'Loyer lieu de vente',
+    'Employés (activités)', 'Patente', 'Autres',
+]
+FINANCIAL_DESIGNATION_FAMILY_EXPENSE_DATA = [
+    'Nourriture', 'Charbon', 'Goûter', 'Bougie', 'Eau (@ pompy)', 'Jirama', 'Pétrole', 'Savon',
+    'Kojakoja madinika', 'Transport (frais)', 'Paraky (tabac)', 'Sigara (cigarettes)', 'Loyer',
+    'Ecolage', 'Téléphone', 'Employés (domestiques)', 'Santé', 'Charges financières',
+    'Participation familiale', 'Cotisation', 'Autres',
+]
+# (code xml_id, nom, multiplicateur)
+FINANCIAL_FREQUENCY_DATA = [
+    ('daily', 'Quotidien', 30.0),
+    ('weekly', 'Hebdomadaire', 4.0),
+    ('monthly', 'Mensuel', 1.0),
+]
+
+
+def _load_financial_designation_list(env, model_name, xml_id_prefix, names):
+    Model = env[model_name]
+    data_list = [{
+        'xml_id': f'{GEO_MODULE}.{xml_id_prefix}_{index}',
+        'values': {'name': name, 'sequence': (index + 1) * 10},
+        'noupdate': True,
+    } for index, name in enumerate(names)]
+    Model._load_records(data_list, update=True)
+    _force_geo_noupdate(env, [data['xml_id'].split('.', 1)[1] for data in data_list])
+    return len(data_list)
+
+
+def _load_financial_reference_data(env):
+    """Charge les désignations par défaut des 3 catalogues Section V et les fréquences de
+    montant (avec multiplicateur), même mécanisme que le référentiel géo/activités (xml_ids
+    noupdate=True via _load_records, cf. _force_geo_noupdate) — modifiable ensuite librement
+    par Micka dans Configuration > Financement, ce n'est qu'un jeu de valeurs de départ."""
+    count_income = _load_financial_designation_list(
+        env, 'microfinance.financial.designation.income',
+        'financial_designation_income', FINANCIAL_DESIGNATION_INCOME_DATA)
+    count_activity_expense = _load_financial_designation_list(
+        env, 'microfinance.financial.designation.activity.expense',
+        'financial_designation_activity_expense', FINANCIAL_DESIGNATION_ACTIVITY_EXPENSE_DATA)
+    count_family_expense = _load_financial_designation_list(
+        env, 'microfinance.financial.designation.family.expense',
+        'financial_designation_family_expense', FINANCIAL_DESIGNATION_FAMILY_EXPENSE_DATA)
+
+    Frequency = env['microfinance.financial.frequency']
+    frequency_data_list = [{
+        'xml_id': f'{GEO_MODULE}.financial_frequency_{code}',
+        'values': {'name': name, 'multiplier': multiplier, 'sequence': (index + 1) * 10},
+        'noupdate': True,
+    } for index, (code, name, multiplier) in enumerate(FINANCIAL_FREQUENCY_DATA)]
+    Frequency._load_records(frequency_data_list, update=True)
+    _force_geo_noupdate(env, [data['xml_id'].split('.', 1)[1] for data in frequency_data_list])
+
+    _logger.info(
+        "Référentiel financier (Section V) : %d désignation(s) revenu, %d désignation(s) "
+        "dépense d'activité, %d désignation(s) dépense familiale, %d fréquence(s) chargée(s).",
+        count_income, count_activity_expense, count_family_expense, len(frequency_data_list),
+    )
+
+
+def _financial_line_keep_key(line):
+    """Préserve en priorité une saisie existante quand un doublon porte déjà un montant.
+    Dernier critère de départage (line.id, pas -line.id) : au sein d'une même transaction,
+    write_date/create_date peuvent être identiques à la microseconde près (valeur mise en
+    cache par le curseur) — dans ce cas, on garde la ligne la plus récemment créée (id le
+    plus grand) plutôt que la plus ancienne."""
+    return (
+        bool(line.amount),
+        bool(line.frequency_id),
+        line.write_date or line.create_date or fields.Datetime.now(),
+        line.id,
+    )
+
+
+def _cleanup_existing_financial_lines(env):
+    """Nettoie les lignes financières historiques créées en double par l'ancien hook de lecture.
+
+    Pour chaque dossier, catégorie et situation : supprime les lignes sans désignation, les
+    lignes liées à une désignation inactive et les doublons, puis recrée les désignations actives
+    manquantes. Idempotent : un second passage ne modifie plus rien.
+    """
+    Line = env['microfinance.loan.application.income.line'].with_context(active_test=False)
+    Application = env['microfinance.loan.application'].with_context(active_test=False)
+    Frequency = env['microfinance.financial.frequency'].with_context(active_test=False)
+    monthly_frequency = env.ref(
+        'microfinance_loan_management.financial_frequency_monthly',
+        raise_if_not_found=False,
+    )
+    if not monthly_frequency or not monthly_frequency.active:
+        monthly_frequency = Frequency.search([('active', '=', True)], order='sequence, id', limit=1)
+
+    category_designations = {
+        'family_income': (
+            env['microfinance.financial.designation.income'].search([('active', '=', True)]),
+            'income_designation_id',
+        ),
+        'activity_expense': (
+            env['microfinance.financial.designation.activity.expense'].search([('active', '=', True)]),
+            'activity_expense_designation_id',
+        ),
+        'family_expense': (
+            env['microfinance.financial.designation.family.expense'].search([('active', '=', True)]),
+            'family_expense_designation_id',
+        ),
+    }
+
+    deleted_empty = deleted_duplicate = deleted_inactive = created_missing = 0
+    for application in Application.search([]):
+        for category, (designations, field_name) in category_designations.items():
+            active_designation_ids = set(designations.ids)
+            for situation in ('current', 'forecast'):
+                lines = Line.search([
+                    ('application_id', '=', application.id),
+                    ('category', '=', category),
+                    ('situation', '=', situation),
+                ])
+                to_delete = Line.browse()
+                by_designation = {}
+                for line in lines:
+                    designation = line[field_name]
+                    if not designation:
+                        to_delete |= line
+                        deleted_empty += 1
+                    elif designation.id not in active_designation_ids:
+                        to_delete |= line
+                        deleted_inactive += 1
+                    else:
+                        by_designation.setdefault(designation.id, Line.browse())
+                        by_designation[designation.id] |= line
+
+                kept_designation_ids = set()
+                for designation_id, duplicate_lines in by_designation.items():
+                    kept = max(duplicate_lines, key=_financial_line_keep_key)
+                    kept_designation_ids.add(designation_id)
+                    duplicates = duplicate_lines - kept
+                    if duplicates:
+                        to_delete |= duplicates
+                        deleted_duplicate += len(duplicates)
+
+                if to_delete:
+                    to_delete.unlink()
+
+                missing_designations = designations.filtered(
+                    lambda designation: designation.id not in kept_designation_ids)
+                for designation in missing_designations:
+                    vals = {
+                        'application_id': application.id,
+                        'category': category,
+                        'situation': situation,
+                        field_name: designation.id,
+                    }
+                    if monthly_frequency:
+                        vals['frequency_id'] = monthly_frequency.id
+                    Line.create(vals)
+                    created_missing += 1
+
+    _logger.info(
+        "Nettoyage lignes financières : %d vide(s), %d doublon(s), %d inactive(s) supprimé(s), "
+        "%d ligne(s) manquante(s) recréée(s).",
+        deleted_empty, deleted_duplicate, deleted_inactive, created_missing,
+    )
+
+
 def post_init_hook(env):
     """Sur chaque société utilisant le plan PCEC (plan_compta_pcec, chart_template ==
     'mg_pcec'), crée les sous-comptes dédiés par segment et les 7 journaux standards. Les
@@ -433,3 +724,6 @@ def post_init_hook(env):
     _backfill_existing_client_partner_type(env)
     _backfill_bailleur_partner_ids(env)
     _load_geo_reference_data(env)
+    _load_activity_reference_data(env)
+    _load_financial_reference_data(env)
+    _cleanup_existing_financial_lines(env)

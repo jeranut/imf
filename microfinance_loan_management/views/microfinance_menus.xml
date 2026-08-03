@@ -37,14 +37,34 @@
     <menuitem id="menu_microfinance_analysis_cash_book" name="Flux de caisse" parent="menu_microfinance_analysis" action="base_accounting_kit.action_account_cash_book_view" sequence="4"
         groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor"/>
     <menuitem id="menu_microfinance_config" name="Configuration" parent="menu_microfinance_root" sequence="90" groups="microfinance_loan_management.group_microfinance_manager"/>
-    <menuitem id="menu_microfinance_products" name="Produits de crédit" parent="menu_microfinance_config" action="action_microfinance_loan_product" sequence="1"/>
-    <menuitem id="menu_microfinance_repayment_frequency" name="Périodicités de remboursement" parent="menu_microfinance_config" action="action_microfinance_repayment_frequency" sequence="2"/>
-    <menuitem id="menu_microfinance_scoring" name="Scoring crédit" parent="menu_microfinance_config" action="action_microfinance_scoring_profile" sequence="2"/>
-    <menuitem id="menu_microfinance_provision_rule" name="Règles de provisionnement" parent="menu_microfinance_config" action="action_microfinance_provision_rule" sequence="3"/>
-    <menuitem id="menu_microfinance_guarantee_valuation_rule" name="Ratios de valorisation des garanties" parent="menu_microfinance_config" action="action_microfinance_guarantee_valuation_rule" sequence="4"/>
-    <menuitem id="menu_microfinance_profession" name="Professions" parent="menu_microfinance_config" action="action_microfinance_profession" sequence="5"/>
-    <menuitem id="menu_microfinance_bailleur_fonds" name="Bailleurs de fonds" parent="menu_microfinance_config" action="action_microfinance_bailleur_fonds" sequence="6"/>
-    <menuitem id="menu_microfinance_fond_credit" name="Fonds de crédit" parent="menu_microfinance_config" action="action_microfinance_fond_credit" sequence="7"/>
-    <menuitem id="menu_microfinance_social_category_level" name="Niveaux sociaux" parent="menu_microfinance_config" action="action_microfinance_social_category_level" sequence="8"/>
-    <menuitem id="menu_microfinance_loan_progressive_program" name="Programmes progressifs" parent="menu_microfinance_config" action="action_microfinance_loan_progressive_program" sequence="9"/>
+
+    <!-- Sous-groupes thématiques du menu Configuration (réorganisation 2026-07-19, cf.
+         docs_dev/programme_progressif/STATUS.md) — toute nouvelle entrée de configuration doit
+         être rattachée à l'un de ces 6 groupes, ou à un nouveau groupe si aucun ne convient,
+         jamais ajoutée directement au niveau racine de Configuration (cf.
+         docs_dev/configuration/STATUS.md). -->
+    <menuitem id="menu_microfinance_config_general" name="Général" parent="menu_microfinance_config" sequence="1"/>
+    <menuitem id="menu_microfinance_config_credit" name="Crédit" parent="menu_microfinance_config" sequence="2"/>
+    <menuitem id="menu_microfinance_config_savings" name="Épargne" parent="menu_microfinance_config" sequence="3"/>
+    <menuitem id="menu_microfinance_config_financing" name="Financement" parent="menu_microfinance_config" sequence="4"/>
+    <menuitem id="menu_microfinance_config_geography" name="Géographie" parent="menu_microfinance_config" sequence="5"/>
+    <menuitem id="menu_microfinance_config_social_profile" name="Profil socio-économique" parent="menu_microfinance_config" sequence="6"/>
+
+    <menuitem id="menu_microfinance_settings" name="Paramètres" parent="menu_microfinance_config_general" action="action_microfinance_config_settings" sequence="0"/>
+    <menuitem id="menu_microfinance_products" name="Produits de crédit" parent="menu_microfinance_config_credit" action="action_microfinance_loan_product" sequence="1"/>
+    <menuitem id="menu_microfinance_repayment_frequency" name="Périodicités de remboursement" parent="menu_microfinance_config_credit" action="action_microfinance_repayment_frequency" sequence="2"/>
+    <menuitem id="menu_microfinance_scoring" name="Scoring crédit" parent="menu_microfinance_config_credit" action="action_microfinance_scoring_profile" sequence="3"/>
+    <menuitem id="menu_microfinance_provision_rule" name="Règles de provisionnement" parent="menu_microfinance_config_credit" action="action_microfinance_provision_rule" sequence="4"/>
+    <menuitem id="menu_microfinance_guarantee_valuation_rule" name="Ratios de valorisation des garanties" parent="menu_microfinance_config_credit" action="action_microfinance_guarantee_valuation_rule" sequence="5"/>
+    <menuitem id="menu_microfinance_loan_progressive_program" name="Programmes progressifs" parent="menu_microfinance_config_credit" action="action_microfinance_loan_progressive_program" sequence="6"/>
+    <menuitem id="menu_microfinance_profession" name="Professions" parent="menu_microfinance_config_social_profile" action="action_microfinance_profession" sequence="1"/>
+    <menuitem id="menu_microfinance_bailleur_fonds" name="Bailleurs de fonds" parent="menu_microfinance_config_financing" action="action_microfinance_bailleur_fonds" sequence="1"/>
+    <menuitem id="menu_microfinance_fond_credit" name="Fonds de crédit" parent="menu_microfinance_config_financing" action="action_microfinance_fond_credit" sequence="2"/>
+    <menuitem id="menu_microfinance_financial_designation_income" name="Désignations de revenus familiaux" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_income" sequence="3"/>
+    <menuitem id="menu_microfinance_financial_designation_activity_expense" name="Désignations de dépenses d'activité" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_activity_expense" sequence="4"/>
+    <menuitem id="menu_microfinance_financial_designation_family_expense" name="Désignations de dépenses familiales" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_family_expense" sequence="5"/>
+    <menuitem id="menu_microfinance_financial_frequency" name="Fréquences de montant" parent="menu_microfinance_config_financing" action="action_microfinance_financial_frequency" sequence="6"/>
+    <menuitem id="menu_microfinance_social_category_level" name="Niveaux sociaux" parent="menu_microfinance_config_social_profile" action="action_microfinance_social_category_level" sequence="2"/>
+    <menuitem id="menu_microfinance_activity_category" name="Catégories d'activité" parent="menu_microfinance_config_social_profile" action="action_microfinance_loan_application_activity_category" sequence="3"/>
+    <menuitem id="menu_microfinance_activity" name="Activités" parent="menu_microfinance_config_social_profile" action="action_microfinance_loan_application_activity" sequence="4"/>
 </odoo>

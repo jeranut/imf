@@ -63,9 +63,27 @@ class MicrofinanceSavingsAccount(models.Model):
                 partner = self.env['res.partner'].browse(vals.get('partner_id'))
                 product = self.env['microfinance.savings.product'].browse(vals.get('product_id'))
                 type_code = self._get_account_type_code(partner, product)
-                number = company._get_or_create_numbering_sequence('microfinance.savings.account.%s' % type_code)
-                vals['name'] = '%s/%s/%s' % (company.agency_code, type_code, number)
+                vals['name'] = self._get_savings_account_name(company, partner, type_code)
         return super().create(vals_list)
+
+    def _get_savings_account_name(self, company, partner, type_code):
+        """Le 1er compte épargne d'un type donné pour un client reprend le numéro de compte
+        permanent du client (AGENCE/TYPE/NNNNNN, même suffixe numérique que
+        partner.microfinance_account_number : IS/000001 -> IS/I/000001) — synchronisé
+        mécaniquement, sans séquence propre, cf. correctif numérotation à trois niveaux.
+        Un compte supplémentaire du même type pour le même client (cas réel : épargne
+        obligatoire liée à un crédit en parallèle d'une épargne volontaire, ou plusieurs
+        comptes volontaires) ne peut pas reprendre ce même numéro sans collision : il garde
+        l'ancienne numérotation par séquence indépendante, propre à ce type, pour rester
+        unique."""
+        existing_same_type = self.search([('partner_id', '=', partner.id)]).filtered(
+            lambda a: self._get_account_type_code(a.partner_id, a.product_id) == type_code
+        )
+        if not existing_same_type and partner.microfinance_account_number:
+            agency, suffix = partner.microfinance_account_number.split('/', 1)
+            return '%s/%s/%s' % (agency, type_code, suffix)
+        number = company._get_or_create_numbering_sequence('microfinance.savings.account.%s' % type_code)
+        return '%s/%s/%s' % (company.agency_code, type_code, number)
 
     @api.depends('transaction_ids.amount', 'transaction_ids.transaction_type', 'transaction_ids.state')
     def _compute_balance(self):

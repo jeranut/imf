@@ -8,6 +8,8 @@
             <xpath expr="//field[@name='name']" position="after">
                 <field name="savings_product_code_locked" invisible="1"/>
                 <field name="savings_product_code_prefix" readonly="savings_product_code_locked"/>
+                <field name="microfinance_savings_default_product_id"
+                       groups="microfinance_loan_management.group_microfinance_manager"/>
             </xpath>
         </field>
     </record>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="res_config_settings_view_form_microfinance" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.microfinance</field>
+        <field name="model">res.config.settings</field>
+        <field name="priority" eval="70"/>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="Microfinance" string="Microfinance" name="microfinance_loan_management"
+                    groups="microfinance_loan_management.group_microfinance_manager">
+                    <block title="Politique de produit" id="microfinance_product_policy_settings">
+                        <setting string="Politique de produit"
+                            help="Détermine si les nouveaux dossiers de crédit se créent sur des produits indépendants ou sur des produits rattachés à un programme progressif. Réglage unique pour l'ensemble des agences ; ne s'applique qu'aux nouveaux dossiers, jamais rétroactivement.">
+                            <field name="microfinance_product_policy" widget="radio"/>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="action_microfinance_config_settings" model="ir.actions.act_window">
+        <field name="name">Paramètres</field>
+        <field name="res_model">res.config.settings</field>
+        <field name="view_mode">form</field>
+        <field name="target">inline</field>
+        <field name="context">{'module': 'microfinance_loan_management'}</field>
+    </record>
+</odoo>

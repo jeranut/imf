@@ -17,7 +17,7 @@
               sequence="3"/>
     <menuitem id="menu_microfinance_savings_products"
               name="Produits d'épargne"
-              parent="microfinance_loan_management.menu_microfinance_config"
+              parent="microfinance_loan_management.menu_microfinance_config_savings"
               action="action_microfinance_savings_product"
-              sequence="5"/>
+              sequence="1"/>
 </odoo>

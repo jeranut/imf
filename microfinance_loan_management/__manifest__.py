@@ -31,8 +31,9 @@
         'views/microfinance_bailleur_fonds_views.xml',
         'views/microfinance_fond_credit_views.xml',
         'views/microfinance_fond_contribution_views.xml',
-        'views/microfinance_geo_views.xml',
         'views/microfinance_profession_views.xml',
+        'views/microfinance_financial_designation_views.xml',
+        'views/microfinance_loan_application_activity_views.xml',
         'views/microfinance_repayment_frequency_views.xml',
         'views/microfinance_provision_rule_views.xml',
         'views/microfinance_loan_guarantee_views.xml',
@@ -48,20 +49,18 @@
         'wizard/microfinance_loan_reschedule_wizard_views.xml',
         'wizard/microfinance_loan_writeoff_wizard_views.xml',
         'wizard/microfinance_loan_payment_cancel_wizard_views.xml',
-        'wizard/microfinance_loan_application_activity_wizard_views.xml',
-        'wizard/microfinance_loan_application_ca_cdag_wizard_views.xml',
-        'wizard/microfinance_loan_application_social_grid_wizard_views.xml',
-        'wizard/microfinance_loan_application_partner_wizard_views.xml',
-        'wizard/microfinance_loan_application_guarantor_wizard_views.xml',
-        'wizard/microfinance_loan_application_document_wizard_views.xml',
-        'wizard/microfinance_loan_application_financial_wizard_views.xml',
-        'wizard/microfinance_loan_application_field_visit_wizard_views.xml',
         'wizard/microfinance_loan_application_create_loan_wizard_views.xml',
         'views/microfinance_dashboard_views.xml',
         'views/microfinance_partner_views.xml',
         'views/microfinance_client_blacklist_views.xml',
         'views/microfinance_caisse_fiche_journee_views.xml',
+        'views/res_config_settings_views.xml',
         'views/microfinance_menus.xml',
+        # Chargé après microfinance_menus.xml : ses <menuitem> référencent
+        # menu_microfinance_config_geography, défini dans microfinance_menus.xml (les xmlids
+        # de <menuitem parent="..."> doivent déjà exister au moment du chargement du fichier,
+        # Odoo ne les résout pas en différé au sein d'un même module).
+        'views/microfinance_geo_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_financial_designation_income_tree" model="ir.ui.view">
+        <field name="name">microfinance.financial.designation.income.tree</field>
+        <field name="model">microfinance.financial.designation.income</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="active" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+    <record id="action_microfinance_financial_designation_income" model="ir.actions.act_window">
+        <field name="name">Désignations de revenus familiaux</field>
+        <field name="res_model">microfinance.financial.designation.income</field>
+        <field name="view_mode">tree</field>
+    </record>
+
+    <record id="view_microfinance_financial_designation_activity_expense_tree" model="ir.ui.view">
+        <field name="name">microfinance.financial.designation.activity.expense.tree</field>
+        <field name="model">microfinance.financial.designation.activity.expense</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="active" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+    <record id="action_microfinance_financial_designation_activity_expense" model="ir.actions.act_window">
+        <field name="name">Désignations de dépenses d'activité</field>
+        <field name="res_model">microfinance.financial.designation.activity.expense</field>
+        <field name="view_mode">tree</field>
+    </record>
+
+    <record id="view_microfinance_financial_designation_family_expense_tree" model="ir.ui.view">
+        <field name="name">microfinance.financial.designation.family.expense.tree</field>
+        <field name="model">microfinance.financial.designation.family.expense</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="active" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+    <record id="action_microfinance_financial_designation_family_expense" model="ir.actions.act_window">
+        <field name="name">Désignations de dépenses familiales</field>
+        <field name="res_model">microfinance.financial.designation.family.expense</field>
+        <field name="view_mode">tree</field>
+    </record>
+
+    <record id="view_microfinance_financial_frequency_tree" model="ir.ui.view">
+        <field name="name">microfinance.financial.frequency.tree</field>
+        <field name="model">microfinance.financial.frequency</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="multiplier"/>
+                <field name="active" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+    <record id="action_microfinance_financial_frequency" model="ir.actions.act_window">
+        <field name="name">Fréquences de montant</field>
+        <field name="res_model">microfinance.financial.frequency</field>
+        <field name="view_mode">tree</field>
+    </record>
+</odoo>

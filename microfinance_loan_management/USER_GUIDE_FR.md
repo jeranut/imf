@@ -266,6 +266,39 @@ crédit") ne sert plus qu'à consulter et suivre les crédits déjà créés —
 
 4. Cliquer sur **Enregistrer**
 
+### Numérotation : ne pas confondre compte client, dossier et crédit
+
+Trois numéros différents apparaissent au fil du parcours d'un client, à ne pas confondre :
+
+- **Numéro de compte client** (ex. `IS/000047`) : attribué une seule fois, automatiquement, à
+  la création de la fiche client. Il ne change **jamais**. C'est ce numéro qui s'affiche comme
+  "Référence dossier" sur **tous** les dossiers d'instruction de ce client — un même client
+  garde donc la même référence d'un dossier à l'autre, ce n'est plus un numéro par dossier.
+- **Numéro épargne** (module Épargne, ex. `IS/I/000047`) : reprend automatiquement le numéro
+  de compte client, avec un segment de type inséré. Aucune saisie ni séquence à gérer.
+- **Numéro crédit** (ex. `IS/000312`, visible sur le crédit lui-même une fois créé) : change à
+  chaque nouveau crédit accordé dans l'agence, tous clients confondus — sans rapport avec le
+  numéro de compte du client ni avec la référence du dossier. Un client fidèle avec plusieurs
+  crédits au fil des années aura donc plusieurs numéros crédit différents, tout en gardant
+  toujours le même numéro de compte et la même référence de dossier.
+
+### Section I — Identification du partenaire : synchronisation et gel
+
+Le bouton **Modifier** de la section "I — Identification du partenaire" ouvre un formulaire
+(identité, adresse, conjoint) qui n'est **pas** une simple saisie libre :
+
+- **Tant que le dossier est en Brouillon ou en Enquête terrain**, ces champs sont
+  pré-remplis et resynchronisés automatiquement depuis la fiche du client (et celle de son
+  conjoint, s'il est déjà renseigné). Une correction manuelle par l'enquêteur reste en place
+  tant que rien ne déclenche une nouvelle synchronisation (changement du client sur le dossier,
+  ou modification de la donnée d'origine sur la fiche contact).
+- **Dès que le dossier passe en Analyse** (ou au-delà), toutes ces informations se **figent
+  définitivement** : elles ne sont plus modifiables, pour préserver telle quelle la situation
+  constatée au moment de l'enquête — à l'exception de l'**adresse actuelle** et du
+  **téléphone**, qui restent modifiables à tout moment (mais qui, eux, ne se resynchronisent
+  jamais automatiquement depuis la fiche client, même avant le gel : ce sont des champs
+  ordinaires).
+
 ### États du dossier et actions
 
 Le dossier passe par plusieurs états. À chaque étape, des boutons d'action apparaissent :

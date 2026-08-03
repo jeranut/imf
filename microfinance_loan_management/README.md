@@ -67,14 +67,53 @@ serveur (`microfinance.loan.create()`), quel que soit le rôle de l'utilisateur 
 **Crédits** ne sert plus qu'à consulter/suivre les crédits déjà créés (aucun bouton de
 création).
 
+### 0. Point d'entrée : sélection du produit depuis la fiche client
+
+Sur la fiche client (section **CRÉDIT**, juste avant les onglets Épargne/Crédit), l'agent
+sélectionne directement le produit visé pour le prochain crédit de ce client. La liste
+proposée dépend d'une **politique de produit globale**, unique pour toutes les agences
+(**Microfinance > Configuration > Paramètres**, réservé aux managers crédit) — ce n'est pas
+un choix fait par client :
+- *Produit indépendant* : tous les produits hors programme progressif.
+- *Produit progressif* : uniquement les produits auxquels ce client est déjà éligible (la
+  1ère étape d'un programme est toujours accessible, les étapes suivantes seulement une fois
+  le produit précédent remboursé sans retard significatif).
+
+Un changement de cette politique ne s'applique jamais rétroactivement : les dossiers et
+crédits déjà créés sous l'ancienne politique continuent normalement, seuls les nouveaux
+dossiers suivent le nouveau réglage. Le champ produit reste optionnel : un client peut être
+épargne uniquement, ou n'avoir encore choisi aucun produit.
+
+À l'enregistrement de la fiche, si un produit est sélectionné :
+- un dossier d'instruction déjà en cours pour ce produit est réutilisé tel quel (jamais de
+  doublon) ;
+- sinon, un nouveau dossier brouillon est créé automatiquement (client, produit, agence
+  pré-remplis), à compléter ensuite par le gestionnaire directement sur le dossier.
+
+Le champ produit reste modifiable librement tant qu'aucun crédit n'est encore décaissé sur le
+produit actuellement sélectionné ; une fois le crédit issu de ce dossier actif, il devient en
+lecture seule (message explicatif affiché) jusqu'à son remboursement intégral, ou jusqu'au
+rejet du dossier / à l'annulation du crédit.
+
 ### 1. Instruction du dossier
 
 1. **Création du dossier** : sélection du client, du produit visé (`loan_product_id`), et
-   des informations d'enquête (date, enquêteur, agence…).
+   des informations d'enquête (date, enquêteur, agence…) — ou reprise automatique du dossier
+   créé depuis la fiche client (étape 0 ci-dessus).
 2. **Enquête terrain**, **Analyse**, **Soumission au comité**, **Avis CA**, **Avis CDAG** :
    le dossier passe par ces étapes successives, chacune réservée au rôle correspondant
    (enquêteur, membre du comité, membre CA, membre CDAG).
 3. **Acceptation** (avec ou sans condition) ou **Refus** par le CDAG.
+
+**Section I — Identification du partenaire (Bloc A)** : tant que le dossier est en
+**Brouillon** ou en **Enquête terrain**, ces champs (identité, adresse, conjoint) sont
+synchronisés automatiquement depuis la fiche du client (et celle de son conjoint) —
+l'enquêteur peut corriger une valeur à la main, sa correction reste tant que rien ne déclenche
+une resynchronisation (changement de client sur le dossier, ou modification de la donnée
+source sur la fiche contact). Dès que le dossier passe en **Analyse** (et au-delà), ce bloc se
+**fige définitivement** pour préserver l'historique de l'enquête, à l'exception de l'adresse
+actuelle et du téléphone qui restent modifiables à tout moment (mais ne se resynchronisent
+jamais automatiquement, même avant le gel).
 
 ### 2. Création et validation du crédit
 
@@ -103,6 +142,28 @@ du crédit, avec le motif et l'auteur de chaque rééchelonnement.
 
 Un crédit qui devient irrécouvrable peut être **radié** (passé en perte) : il sort alors du
 suivi de risque actif.
+
+## Numérotation
+
+Trois numéros distincts, tous au format `AGENCE/NNNNNN` (`AGENCE/I/NNNNNN` pour l'épargne),
+volontairement différents et à ne pas confondre :
+
+1. **Numéro de compte client** (`res.partner.microfinance_account_number`) — attribué **une
+   seule fois**, automatiquement, à la création de la fiche client (dès qu'un contact est
+   reconnu comme client microfinance). Ne change jamais, non modifiable manuellement. C'est ce
+   numéro qui s'affiche comme référence sur **tous** les dossiers d'instruction de ce client
+   (`microfinance.loan.application.name`) — un même client garde donc la même référence de
+   dossier en dossier, ce n'est pas un numéro par dossier.
+2. **Numéro épargne** (module Gestion de l'épargne) — dérivé automatiquement du numéro de
+   compte client : même suffixe numérique, avec un segment de type inséré
+   (`IS/000001` → `IS/I/000001`). Aucune séquence propre, toujours synchronisé avec le numéro
+   client. Voir le README du module épargne pour le cas d'un client ayant plusieurs comptes.
+3. **Numéro crédit** (`microfinance.loan.name`) — généré à l'attribution effective du crédit
+   (création du `microfinance.loan` via le wizard), sur une séquence **indépendante**, partagée
+   entre tous les clients d'une même agence. Change à chaque nouveau crédit accordé, sans
+   aucun lien avec le numéro de compte client ni avec le numéro du dossier d'instruction : un
+   client peut avoir plusieurs crédits au fil du temps, chacun avec son propre numéro crédit,
+   tout en gardant le même numéro de compte.
 
 ## Garanties
 

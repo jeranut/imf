@@ -75,7 +75,8 @@
                     <field name="state" widget="statusbar" statusbar_visible="draft,field_survey,analysis,committee,ca_review,cdag_review,accepted,loan_created"/>
                 </header>
                 <sheet>
-                    <div class="o_microfinance_survey_header">
+                    <field name="survey_page" invisible="1"/>
+                    <div class="o_microfinance_survey_header" invisible="survey_page != 'partner_identification'">
                         <div class="o_microfinance_survey_header_top">
                             <field name="company_logo" widget="image" class="o_microfinance_survey_header_logo" readonly="1"/>
                         </div>
@@ -92,7 +93,7 @@
                             <span><strong>Heure fin enquête : </strong><field name="survey_end_time"/></span>
                         </div>
                     </div>
-                    <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
+                    <div class="oe_title" invisible="survey_page != 'partner_identification'"><h1><field name="name" readonly="1"/></h1></div>
                     <field name="progressive_eligibility_status" invisible="1"/>
                     <div class="alert alert-success" role="alert" invisible="progressive_eligibility_status != 'eligible'">
                         <field name="progressive_eligibility_message" readonly="1" nolabel="1"/>
@@ -109,7 +110,7 @@
                         <br/>
                         <em>Information indicative — la décision d'octroi reste à l'appréciation du valideur.</em>
                     </div>
-                    <group>
+                    <group invisible="survey_page != 'partner_identification'">
                         <group string="Dossier">
                             <field name="partner_id"/>
                             <field name="loan_product_id"/>
@@ -127,59 +128,465 @@
                             <field name="loan_id" readonly="1"/>
                         </group>
                     </group>
-                    <group string="I — Identification du partenaire">
-                        <field name="partner_surname" readonly="1"/>
-                        <field name="partner_marital_status" readonly="1"/>
-                        <field name="spouse_name" readonly="1" invisible="partner_marital_status != 'married'"/>
-                        <field name="dependent_count" readonly="1"/>
+                    <div invisible="survey_page != 'partner_identification'">
+                    <group string="I — Identification du partenaire"/>
+                    <div class="alert alert-info" role="alert" invisible="state in ('draft', 'field_survey')">
+                        Dossier hors instruction : ces informations sont figées pour l'audit (synchronisées
+                        automatiquement depuis la fiche client tant que le dossier était en Brouillon ou en
+                        Enquête terrain). Seules l'adresse actuelle et le téléphone restent modifiables.
+                    </div>
+                    <group string="1. Partenaire">
+                        <group>
+                            <field name="partner_surname" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_nickname" placeholder="Surnom usuel, le cas échéant"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_id_card_number" placeholder="N° CIN"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_id_card_issue_date" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_id_card_issue_place" placeholder="Ex: Antananarivo"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_id_card_duplicate_date" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_id_card_duplicate_place" placeholder="Ex: Antananarivo"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_birth_date" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_birth_place" placeholder="Ex: Antananarivo"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_marital_status" readonly="state not in ('draft', 'field_survey')"/>
+                        </group>
+                        <group>
+                            <field name="partner_address_changed" readonly="state not in ('draft', 'field_survey')"/>
+                            <!-- partner_current_address/partner_phone : jamais gelés, même hors Brouillon/Enquête
+                                 terrain (cf. docstring du modèle) — toujours modifiables. -->
+                            <field name="partner_current_address" placeholder="Adresse complète actuelle"/>
+                            <field name="partner_fokontany" placeholder="Fokontany"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_address_since" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_housing_status" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_agency_distance_km" placeholder="Ex: 12"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_phone" placeholder="Ex: 034 12 345 67"/>
+                            <field name="partner_phone_type"/>
+                            <field name="partner_phone_type_detail" placeholder="Précisez" invisible="partner_phone_type != 'other'"/>
+                            <field name="partner_reference_contact_name" placeholder="Nom de la personne de référence"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_reference_contact_phone" placeholder="Ex: 034 12 345 67"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                        </group>
                     </group>
-                    <button string="Modifier" type="object" name="action_open_partner_wizard" class="btn-secondary"/>
+                    <group string="2. Conjoint(e)" invisible="partner_marital_status != 'married'">
+                        <group>
+                            <field name="spouse_name" placeholder="Nom et prénom du conjoint"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="spouse_id_card_number" placeholder="N° CIN du conjoint"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="spouse_id_card_issue_date" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="spouse_id_card_issue_place" placeholder="Ex: Antananarivo"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="spouse_address" placeholder="Adresse du conjoint"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="spouse_fokontany" placeholder="Fokontany du conjoint"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                        </group>
+                        <group>
+                            <field name="spouse_profession" placeholder="Profession du conjoint"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="spouse_employer" placeholder="Nom de l'employeur, le cas échéant"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="spouse_phone" placeholder="Ex: 034 12 345 67"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="union_duration" placeholder="Ex: 5 ans"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                        </group>
+                    </group>
+                    <group string="3. Enfants et personnes à charge">
+                        <field name="children_count" readonly="1"/>
+                        <field name="children_schooled_count" readonly="1"/>
+                    </group>
+                    <field name="dependent_ids" nolabel="1">
+                        <tree editable="bottom">
+                            <field name="name" placeholder="Nom et prénom"/>
+                            <field name="relationship"/>
+                            <field name="birth_date"/>
+                            <field name="age" readonly="1"/>
+                            <field name="school_class" placeholder="Classe"/>
+                            <field name="school_name" placeholder="École"/>
+                            <field name="remark" placeholder="Remarque"/>
+                        </tree>
+                    </field>
+                    <field name="surveyor_comment" placeholder="Commentaire de l'enquêteur..."/>
+                    <button string="Page suivante" type="object" name="action_survey_next_page" class="btn-primary" icon="fa-arrow-right"/>
+                    </div>
+
+                    <div invisible="survey_page != 'guarantor_documents_activity'">
+                    <button string="Page précédente" type="object" name="action_survey_previous_page" class="btn-primary" icon="fa-arrow-left"/>
 
                     <group string="II — Identification du garant">
-                        <field name="guarantor_count" readonly="1"/>
-                        <field name="primary_guarantor_name" readonly="1"/>
+                        <group>
+                            <field name="guarantor_count" readonly="1"/>
+                            <field name="primary_guarantor_name" readonly="1"/>
+                        </group>
+                        <group/>
                     </group>
-                    <button string="Modifier" type="object" name="action_open_guarantor_wizard" class="btn-secondary"/>
+                    <group>
+                        <group string="Identité">
+                            <field name="guarantor_partner_id" placeholder="Rechercher ou créer le garant..."/>
+                            <field name="guarantor_id_card_number" placeholder="N° CIN" widget="microfinance_grouped_digits"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="guarantor_id_card_issue_date" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="guarantor_id_card_issue_place" placeholder="Ex: Antananarivo"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="guarantor_id_card_duplicate_date" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="guarantor_id_card_duplicate_place" placeholder="Ex: Antananarivo"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                        </group>
+                        <group string="Adresse et contact">
+                            <field name="guarantor_address" placeholder="Adresse complète"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="guarantor_fokontany" placeholder="Fokontany"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="guarantor_profession" placeholder="Profession du garant"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="guarantor_employer" placeholder="Nom de l'employeur, le cas échéant"
+                                readonly="state not in ('draft', 'field_survey')"/>
+                            <!-- guarantor_phone : jamais gelé, comme partner_phone sur le Bloc A. -->
+                            <field name="guarantor_phone" placeholder="Ex: 034 12 345 67"/>
+                            <field name="guarantor_relationship_with_borrower" placeholder="Ex: Frère, voisin, collègue..."
+                                readonly="state not in ('draft', 'field_survey')"/>
+                        </group>
+                    </group>
+                    <field name="guarantor_surveyor_comment" placeholder="Commentaire de l'enquêteur..."/>
 
                     <group string="III — Dossiers administratifs fournis">
-                        <field name="document_provided_count" readonly="1"/>
-                        <field name="document_missing_count" readonly="1"/>
+                        <group>
+                            <field name="document_provided_count" readonly="1"/>
+                            <field name="document_missing_count" readonly="1"/>
+                        </group>
+                        <group/>
                     </group>
-                    <button string="Modifier" type="object" name="action_open_document_wizard" class="btn-secondary"/>
+                    <field name="document_line_ids" nolabel="1">
+                        <tree editable="bottom">
+                            <field name="name" placeholder="Type de document"/>
+                            <field name="provided_by_partner" widget="boolean_toggle"/>
+                            <field name="provided_by_guarantor" widget="boolean_toggle"/>
+                            <field name="observation" placeholder="Observation"/>
+                        </tree>
+                    </field>
 
-                    <group string="IV — Analyse de l'activité à financer">
-                        <field name="activity_description" readonly="1"/>
-                        <field name="activity_sector" readonly="1"/>
+                    <group string="IV — Analyse de l'activité à financer"/>
+                    <group>
+                        <group string="Activité">
+                            <field name="activity_id" placeholder="Sélectionner ou créer une activité..."
+                                options="{'no_quick_create': True}"/>
+                            <field name="activity_sector_id" readonly="1"/>
+                            <field name="activity_description" placeholder="Décrire l'activité exercée..."/>
+                            <field name="activity_start_date"/>
+                            <field name="activity_duration" readonly="1"/>
+                            <field name="activity_interruption" placeholder="Interruptions constatées, le cas échéant..."/>
+                            <field name="is_cyclical"/>
+                            <field name="cyclical_period" placeholder="Ex: saison des pluies, période scolaire..." invisible="not is_cyclical"/>
+                        </group>
+                        <group string="Lieu de vente">
+                            <field name="sale_location_status"/>
+                            <field name="sale_location_type"/>
+                            <field name="sale_location_enclosed" widget="radio"/>
+                            <field name="formalization_level"/>
+                        </group>
                     </group>
-                    <button string="Modifier" type="object" name="action_open_activity_wizard" class="btn-secondary"/>
+                    <group>
+                        <group string="Approvisionnement">
+                            <field name="supply_frequency"/>
+                            <field name="supplier_payment_mode"/>
+                            <field name="supplier_credit_delay_days" placeholder="Ex: 15" invisible="supplier_payment_mode != 'credit'"/>
+                        </group>
+                        <group string="Ventes">
+                            <field name="sale_frequency"/>
+                            <field name="customer_type"/>
+                            <field name="customer_payment_mode"/>
+                            <field name="customer_credit_delay_days" placeholder="Ex: 15" invisible="customer_payment_mode != 'credit'"/>
+                        </group>
+                    </group>
+                    <group string="Autres revenus et endettement">
+                        <field name="other_income_activities" placeholder="Autres sources de revenus du foyer..."/>
+                        <field name="loan_request_reason" placeholder="Motif de la demande de prêt..."/>
+                        <field name="has_existing_debt"/>
+                        <field name="debt_purpose" placeholder="Objet de la dette en cours" invisible="not has_existing_debt"/>
+                        <field name="debt_amount" placeholder="Ex: 500 000" invisible="not has_existing_debt"/>
+                        <field name="debt_creditor_type" invisible="not has_existing_debt"/>
+                        <field name="debt_repayment_mode" invisible="not has_existing_debt"/>
+                    </group>
+                    <button string="Page suivante" type="object" name="action_survey_next_page" class="btn-primary" icon="fa-arrow-right"/>
+                    </div>
 
-                    <group string="V — Analyse financière et capacité de remboursement">
+                    <div invisible="survey_page != 'financial_visits_ca_cdag'">
+                    <button string="Page précédente" type="object" name="action_survey_previous_page" class="btn-primary" icon="fa-arrow-left"/>
+
+                    <group string="V — Analyse financière et capacité de remboursement"/>
+
+                    <group string="Situation actuelle — Revenus familiaux"/>
+                    <field name="income_line_family_income_current_ids" nolabel="1"
+                        context="{'default_category': 'family_income', 'default_situation': 'current'}">
+                        <tree editable="bottom">
+                            <field name="income_designation_id"/>
+                            <field name="amount" placeholder="Ex: 170 000"/>
+                            <field name="frequency_id"/>
+                            <field name="monthly_amount" sum="Total" readonly="1"/>
+                        <field name="currency_id" column_invisible="1"/>
+                        </tree>
+                    </field>
+
+                    <group string="Situation actuelle — Dépenses d'activité"/>
+                    <field name="income_line_activity_expense_current_ids" nolabel="1"
+                        context="{'default_category': 'activity_expense', 'default_situation': 'current'}">
+                        <tree editable="bottom">
+                            <field name="activity_expense_designation_id"/>
+                            <field name="amount" placeholder="Ex: 10 000"/>
+                            <field name="frequency_id"/>
+                            <field name="monthly_amount" sum="Total" readonly="1"/>
+                        <field name="currency_id" column_invisible="1"/>
+                        </tree>
+                    </field>
+
+                    <group string="Situation actuelle — Dépenses familiales"/>
+                    <field name="income_line_family_expense_current_ids" nolabel="1"
+                        context="{'default_category': 'family_expense', 'default_situation': 'current'}">
+                        <tree editable="bottom">
+                            <field name="family_expense_designation_id"/>
+                            <field name="amount" placeholder="Ex: 5 000"/>
+                            <field name="frequency_id"/>
+                            <field name="monthly_amount" sum="Sous-total" readonly="1"/>
+                        <field name="currency_id" column_invisible="1"/>
+                        </tree>
+                    </field>
+                    <group>
+                        <field name="safety_margin_current"/>
+                        <field name="total_family_expense_current" readonly="1" string="Total dépenses familiales (majoré)"/>
+                    </group>
+
+                    <group string="Capacité de remboursement — Situation actuelle">
                         <field name="repayment_capacity_monthly_current" readonly="1"/>
-                        <field name="repayment_capacity_monthly_forecast" readonly="1"/>
+                        <field name="repayment_capacity_weekly_current" readonly="1"/>
                     </group>
-                    <button string="Modifier" type="object" name="action_open_financial_wizard" class="btn-secondary"/>
+
+                    <group string="Accroissement du revenu">
+                        <field name="income_growth_occurred" widget="radio"/>
+                        <field name="income_growth_before" placeholder="Ex: 300 000" invisible="income_growth_occurred != 'yes'"/>
+                        <field name="income_growth_after" placeholder="Ex: 450 000" invisible="income_growth_occurred != 'yes'"/>
+                    </group>
+                    <field name="financial_analysis_comment" placeholder="Commentaire de l'enquêteur..."/>
+
+                    <group string="Situation prévisionnelle — Revenus familiaux"/>
+                    <field name="income_line_family_income_forecast_ids" nolabel="1"
+                        context="{'default_category': 'family_income', 'default_situation': 'forecast'}">
+                        <tree editable="bottom">
+                            <field name="income_designation_id"/>
+                            <field name="amount" placeholder="Ex: 170 000"/>
+                            <field name="frequency_id"/>
+                            <field name="monthly_amount" sum="Total" readonly="1"/>
+                        <field name="currency_id" column_invisible="1"/>
+                        </tree>
+                    </field>
+
+                    <group string="Situation prévisionnelle — Dépenses d'activité"/>
+                    <field name="income_line_activity_expense_forecast_ids" nolabel="1"
+                        context="{'default_category': 'activity_expense', 'default_situation': 'forecast'}">
+                        <tree editable="bottom">
+                            <field name="activity_expense_designation_id"/>
+                            <field name="amount" placeholder="Ex: 10 000"/>
+                            <field name="frequency_id"/>
+                            <field name="monthly_amount" sum="Total" readonly="1"/>
+                        <field name="currency_id" column_invisible="1"/>
+                        </tree>
+                    </field>
+
+                    <group string="Situation prévisionnelle — Dépenses familiales"/>
+                    <field name="income_line_family_expense_forecast_ids" nolabel="1"
+                        context="{'default_category': 'family_expense', 'default_situation': 'forecast'}">
+                        <tree editable="bottom">
+                            <field name="family_expense_designation_id"/>
+                            <field name="amount" placeholder="Ex: 5 000"/>
+                            <field name="frequency_id"/>
+                            <field name="monthly_amount" sum="Sous-total" readonly="1"/>
+                        <field name="currency_id" column_invisible="1"/>
+                        </tree>
+                    </field>
+                    <group>
+                        <field name="safety_margin_forecast"/>
+                        <field name="total_family_expense_forecast" readonly="1" string="Total dépenses familiales (majoré)"/>
+                    </group>
+
+                    <group string="Capacité de remboursement — Situation prévisionnelle">
+                        <field name="repayment_capacity_monthly_forecast" readonly="1"/>
+                        <field name="repayment_capacity_weekly_forecast" readonly="1"/>
+                    </group>
+
+                    <group string="Plan de financement">
+                        <group string="Actuel">
+                            <field name="funding_plan_raw_materials_current"/>
+                            <field name="funding_plan_merchandise_current"/>
+                            <field name="funding_plan_available_cash_current"/>
+                        </group>
+                        <group string="Prévisionnel">
+                            <field name="funding_plan_equipment_forecast"/>
+                            <field name="funding_plan_raw_materials_forecast"/>
+                            <field name="funding_plan_merchandise_forecast"/>
+                        </group>
+                    </group>
+                    <group string="Suivi de l'augmentation du capital">
+                        <field name="capital_increase"/>
+                        <field name="capital_before_previous_loan"/>
+                        <field name="capital_currently_observed"/>
+                        <field name="capital_currently_confirmed"/>
+                        <field name="previous_loan_fund_usage"/>
+                    </group>
 
                     <group string="VI — Fiche de catégorisation sociale">
-                        <field name="social_level_id" readonly="1"/>
-                        <field name="total_points" readonly="1"/>
-                        <field name="field_visit_count" readonly="1"/>
+                        <group>
+                            <field name="social_level_id" readonly="1"/>
+                            <field name="total_points" readonly="1"/>
+                            <field name="field_visit_count" readonly="1"/>
+                        </group>
+                        <group/>
                     </group>
-                    <button string="Modifier les visites terrain" type="object" name="action_open_field_visit_wizard" class="btn-secondary"/>
-                    <button string="Modifier la grille sociale" type="object" name="action_open_social_grid_wizard" class="btn-secondary"/>
+                    <group string="Ménage">
+                        <field name="household_size"/>
+                        <field name="members_over_14"/>
+                        <field name="members_under_14"/>
+                    </group>
+                    <group>
+                        <group string="Actifs, épargne, activité, revenus">
+                            <field name="assets_score"/>
+                            <field name="assets_exact_amount"/>
+                            <field name="savings_amount"/>
+                            <field name="savings_score"/>
+                            <field name="activity_score"/>
+                            <field name="income_score"/>
+                            <field name="income_net_benefit_amount"/>
+                        </group>
+                        <group string="Alimentation, santé, habitat">
+                            <field name="food_score"/>
+                            <field name="health_score"/>
+                            <field name="housing_state_score"/>
+                            <field name="housing_surface_score"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Éducation">
+                            <field name="education_borrower_score"/>
+                            <field name="education_children_score"/>
+                        </group>
+                        <group string="Administratif">
+                            <field name="administrative_score"/>
+                        </group>
+                    </group>
+                    <group string="Impression de l'enquêteur">
+                        <field name="surveyor_impression_score"/>
+                        <field name="surveyor_level_impression"/>
+                        <field name="is_eligible"/>
+                    </group>
+                    <group string="Visite à domicile (VAD)">
+                        <field name="field_visit_ids" string="VAD" nolabel="1"
+                            context="{'default_visit_type': 'home', 'default_is_counter_visit': False}"
+                            domain="[('visit_type', '=', 'home'), ('is_counter_visit', '=', False)]">
+                            <tree editable="bottom">
+                                <field name="agent_id"/>
+                                <field name="visit_date"/>
+                                <field name="constats"/>
+                                <field name="neighborhood_reputation"/>
+                                <field name="visit_type" column_invisible="1"/>
+                                <field name="is_counter_visit" column_invisible="1"/>
+                            </tree>
+                        </field>
+                        <field name="field_visit_ids" string="Contre-VAD" nolabel="1"
+                            context="{'default_visit_type': 'home', 'default_is_counter_visit': True}"
+                            domain="[('visit_type', '=', 'home'), ('is_counter_visit', '=', True)]">
+                            <tree editable="bottom">
+                                <field name="agent_id"/>
+                                <field name="visit_date"/>
+                                <field name="counter_visit_of_id"/>
+                                <field name="constats"/>
+                                <field name="neighborhood_reputation"/>
+                                <field name="application_id" column_invisible="1"/>
+                                <field name="visit_type" column_invisible="1"/>
+                                <field name="is_counter_visit" column_invisible="1"/>
+                            </tree>
+                        </field>
+                    </group>
+                    <group string="Visite au lieu de vente (VAV)">
+                        <field name="field_visit_ids" string="VAV" nolabel="1"
+                            context="{'default_visit_type': 'sales_point', 'default_is_counter_visit': False}"
+                            domain="[('visit_type', '=', 'sales_point'), ('is_counter_visit', '=', False)]">
+                            <tree editable="bottom">
+                                <field name="agent_id"/>
+                                <field name="visit_date"/>
+                                <field name="project_exists"/>
+                                <field name="potential_clients_level"/>
+                                <field name="stock_value"/>
+                                <field name="competition_level"/>
+                                <field name="product_presentation"/>
+                                <field name="commercial_attitude"/>
+                                <field name="visit_type" column_invisible="1"/>
+                                <field name="is_counter_visit" column_invisible="1"/>
+                            </tree>
+                        </field>
+                        <field name="field_visit_ids" string="Contre-VAV" nolabel="1"
+                            context="{'default_visit_type': 'sales_point', 'default_is_counter_visit': True}"
+                            domain="[('visit_type', '=', 'sales_point'), ('is_counter_visit', '=', True)]">
+                            <tree editable="bottom">
+                                <field name="agent_id"/>
+                                <field name="visit_date"/>
+                                <field name="counter_visit_of_id"/>
+                                <field name="project_exists"/>
+                                <field name="potential_clients_level"/>
+                                <field name="stock_value"/>
+                                <field name="competition_level"/>
+                                <field name="product_presentation"/>
+                                <field name="commercial_attitude"/>
+                                <field name="application_id" column_invisible="1"/>
+                                <field name="visit_type" column_invisible="1"/>
+                                <field name="is_counter_visit" column_invisible="1"/>
+                            </tree>
+                        </field>
+                    </group>
 
-                    <group string="VII — Avis du CA et du CDAG">
-                        <field name="requested_amount" readonly="1"/>
-                        <field name="ca_amount" readonly="1"/>
-                        <field name="cdag_amount" readonly="1"/>
+                    <group string="VII — Avis du CA et du CDAG"/>
+                    <group>
+                        <group string="Demande">
+                            <field name="requested_amount"/>
+                            <field name="required_savings"/>
+                            <field name="repayment_amount"/>
+                            <field name="period"/>
+                            <field name="available_savings"/>
+                        </group>
+                        <group string="Antécédent">
+                            <field name="previous_loan_amount"/>
+                            <field name="previous_loan_repayment_behavior"/>
+                        </group>
                     </group>
-                    <button string="Modifier" type="object" name="action_open_ca_cdag_wizard" class="btn-secondary"/>
+                    <group>
+                        <group string="Avis CA">
+                            <field name="ca_amount"/>
+                            <field name="ca_required_savings"/>
+                            <field name="ca_repayment_amount"/>
+                            <field name="ca_period"/>
+                        </group>
+                        <group string="Avis CDAG">
+                            <field name="cdag_amount"/>
+                            <field name="cdag_required_savings"/>
+                            <field name="cdag_repayment_amount"/>
+                            <field name="cdag_period"/>
+                        </group>
+                    </group>
 
                     <!-- VIII — Comité d'octroi : standby, pas de workflow de comité
                          multi-validateurs. Affiche seulement l'état du dossier (les
                          boutons d'action sont déjà dans l'en-tête). -->
                     <group string="VIII — Comité d'octroi">
-                        <field name="state" widget="badge"/>
+                        <group>
+                            <field name="state" widget="badge"/>
+                        </group>
+                        <group/>
                     </group>
+                    </div>
                 </sheet>
             </form>
         </field>

@@ -62,12 +62,16 @@ class TestApplicationWorkflow(MicrofinanceCommon):
         application.with_user(self.manager_user).action_ca_review()
         self.assertEqual(application.state, 'ca_review')
 
-    def test_automatic_numbering(self):
+    def test_numbering_derived_from_client_permanent_account_number(self):
+        # name n'est plus une séquence propre au dossier : il reprend le numéro de compte
+        # permanent du client (cf. correctif numérotation) — deux dossiers du même client
+        # partagent donc la même référence, contrairement à l'ancien comportement.
         app1 = self._create_application()
         app2 = self._create_application()
-        self.assertNotEqual(app1.name, 'Nouveau')
+        self.assertTrue(app1.name)
         self.assertTrue(app1.name.startswith('%s/' % self.env.company.agency_code))
-        self.assertNotEqual(app1.name, app2.name)
+        self.assertEqual(app1.name, self.partner.microfinance_account_number)
+        self.assertEqual(app1.name, app2.name)
 
     def test_previous_loan_requirement_triggered_on_rank_greater_than_one(self):
         company = self.env.company

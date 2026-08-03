@@ -102,9 +102,11 @@
                         <field name="microfinance_id_issue_date" invisible="microfinance_id_type != 'cin'"/>
                         <field name="microfinance_id_issue_place" placeholder="Ex: Antananarivo" invisible="microfinance_id_type != 'cin'"/>
                         <field name="microfinance_birthdate"/>
+                        <field name="microfinance_birth_place" placeholder="Ex: Antananarivo"/>
                         <field name="microfinance_gender"/>
                         <field name="microfinance_marital_status"/>
                         <field name="microfinance_profession" placeholder="Rechercher ou créer une profession..."/>
+                        <field name="microfinance_employer" placeholder="Nom de l'employeur, le cas échéant"/>
                         <field name="microfinance_education_level"/>
                     </group>
                     <group string="Famille et compte">
@@ -138,6 +140,8 @@
                             invisible="microfinance_marital_status == 'single'"/>
                         <field name="microfinance_next_of_kin_name" placeholder="Nom de la personne à contacter en cas d'urgence"/>
                         <field name="microfinance_next_of_kin_address" placeholder="Adresse de cette personne"/>
+                        <field name="microfinance_next_of_kin_phone" placeholder="Ex: 034 12 345 67"/>
+                        <field name="microfinance_housing_status"/>
                         <field name="microfinance_co_holder_name" placeholder="Nom du co-titulaire du compte, le cas échéant"/>
                         <!-- Pas de context de préremplissage ici : le garant a typiquement une
                              adresse différente du client, formulaire de création vierge
@@ -188,6 +192,39 @@
                             <field name="account_authorization"/>
                         </tree>
                     </field>
+                </group>
+
+                <!-- Rangée CRÉDIT / ÉPARGNE : point d'entrée unique de sélection du produit de
+                     crédit, commun aux clients Particulier et Société (contrairement aux blocs
+                     ci-dessus, pas de condition sur microfinance_client_type). ÉPARGNE reste un
+                     simple titre en attente d'un chantier séparé. -->
+                <group invisible="not context.get('microfinance_context') or microfinance_partner_type != 'client'">
+                    <group string="Crédit">
+                        <field name="microfinance_progressive_eligible_product_ids" invisible="1"/>
+                        <field name="microfinance_product_change_locked" invisible="1"/>
+                        <!-- Politique de produit (indépendant/progressif) : réglage global unique
+                             pour toutes les agences (Microfinance > Configuration > Paramètres),
+                             plus de choix par client ici (cf. correctif politique produit globale). -->
+                        <field name="microfinance_product_policy" invisible="1"/>
+                        <div class="alert alert-warning mb-2" role="alert" colspan="2"
+                            invisible="not microfinance_product_change_locked">
+                            <field name="microfinance_product_lock_message" nolabel="1" readonly="1"/>
+                        </div>
+                        <field name="microfinance_selected_product_id" string="Produit"
+                            invisible="microfinance_product_policy != 'independent'"
+                            domain="[('is_progressive_step', '=', False), ('company_id', '=', company_id)]"
+                            readonly="microfinance_product_change_locked"
+                            placeholder="Rechercher un produit de crédit indépendant..."/>
+                        <field name="microfinance_selected_product_id" string="Produit"
+                            invisible="microfinance_product_policy != 'progressive'"
+                            domain="[('id', 'in', microfinance_progressive_eligible_product_ids)]"
+                            readonly="microfinance_product_change_locked"
+                            placeholder="Aucun produit progressif accessible actuellement"/>
+                        <field name="microfinance_current_loan_application_id" string="Dossier courant" readonly="1"/>
+                    </group>
+                    <group string="Épargne">
+                        <p class="text-muted">Module épargne en cours d'implémentation.</p>
+                    </group>
                 </group>
 
             </xpath>

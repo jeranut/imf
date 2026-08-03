@@ -233,32 +233,32 @@
     </record>
 
     <!-- ==================== MENUS ==================== -->
-    <menuitem id="menu_microfinance_geo_commune"
-              name="Communes"
-              parent="menu_microfinance_config"
-              action="action_microfinance_geo_commune"
-              groups="microfinance_loan_management.group_microfinance_manager"
-              sequence="8"/>
-
-    <menuitem id="menu_microfinance_geo_fokontany"
-              name="Fokontany"
-              parent="menu_microfinance_config"
-              action="action_microfinance_geo_fokontany"
-              groups="microfinance_loan_management.group_microfinance_manager"
-              sequence="9"/>
-
     <menuitem id="menu_microfinance_geo_region"
               name="Régions"
-              parent="menu_microfinance_config"
+              parent="menu_microfinance_config_geography"
               action="action_microfinance_geo_region"
               groups="microfinance_loan_management.group_microfinance_manager"
-              sequence="10"/>
+              sequence="1"/>
 
     <menuitem id="menu_microfinance_geo_district"
               name="Districts"
-              parent="menu_microfinance_config"
+              parent="menu_microfinance_config_geography"
               action="action_microfinance_geo_district"
               groups="microfinance_loan_management.group_microfinance_manager"
-              sequence="11"/>
+              sequence="2"/>
+
+    <menuitem id="menu_microfinance_geo_commune"
+              name="Communes"
+              parent="menu_microfinance_config_geography"
+              action="action_microfinance_geo_commune"
+              groups="microfinance_loan_management.group_microfinance_manager"
+              sequence="3"/>
+
+    <menuitem id="menu_microfinance_geo_fokontany"
+              name="Fokontany"
+              parent="menu_microfinance_config_geography"
+              action="action_microfinance_geo_fokontany"
+              groups="microfinance_loan_management.group_microfinance_manager"
+              sequence="4"/>
 
 </odoo>

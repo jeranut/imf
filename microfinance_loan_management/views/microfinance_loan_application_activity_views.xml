@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_activity_category_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.activity.category.tree</field>
+        <field name="model">microfinance.loan.application.activity.category</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="code"/>
+                <field name="name"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_application_activity_category_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.activity.category.form</field>
+        <field name="model">microfinance.loan.application.activity.category</field>
+        <field name="arch" type="xml">
+            <form string="Catégorie d'activité">
+                <sheet>
+                    <group>
+                        <field name="code"/>
+                        <field name="name"/>
+                    </group>
+                    <field name="activity_ids">
+                        <tree editable="bottom">
+                            <field name="code"/>
+                            <field name="name"/>
+                        </tree>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_loan_application_activity_category" model="ir.actions.act_window">
+        <field name="name">Catégories d'activité</field>
+        <field name="res_model">microfinance.loan.application.activity.category</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+
+    <record id="view_microfinance_loan_application_activity_tree" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.activity.tree</field>
+        <field name="model">microfinance.loan.application.activity</field>
+        <field name="arch" type="xml">
+            <tree>
+                <field name="code"/>
+                <field name="name"/>
+                <field name="category_id"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_application_activity_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.activity.form</field>
+        <field name="model">microfinance.loan.application.activity</field>
+        <field name="arch" type="xml">
+            <form string="Activité">
+                <sheet>
+                    <group>
+                        <field name="code"/>
+                        <field name="name"/>
+                        <field name="category_id" options="{'no_create': True, 'no_create_edit': True}"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_loan_application_activity" model="ir.actions.act_window">
+        <field name="name">Activités</field>
+        <field name="res_model">microfinance.loan.application.activity</field>
+        <field name="view_mode">tree,form</field>
+    </record>
+</odoo>

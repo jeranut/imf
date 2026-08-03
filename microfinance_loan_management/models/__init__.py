@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from . import res_company
 from . import microfinance_profession
+from . import microfinance_financial_designation
 from . import microfinance_repayment_frequency
 from . import microfinance_loan_product
 from . import microfinance_loan_progressive_program
@@ -8,6 +9,7 @@ from . import microfinance_scoring
 from . import microfinance_provision_rule
 from . import microfinance_loan
 from . import microfinance_social_category_level
+from . import microfinance_loan_application_activity
 from . import microfinance_loan_application
 from . import microfinance_loan_guarantee
 from . import microfinance_loan_reschedule_history
@@ -28,3 +30,4 @@ from . import microfinance_fond_credit
 from . import microfinance_fond_contribution
 from . import microfinance_caisse_fiche_journee
 from . import res_partner
+from . import res_config_settings
