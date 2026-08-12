@@ -59,7 +59,7 @@
         <field name="name">microfinance.loan.form</field>
         <field name="model">microfinance.loan</field>
         <field name="arch" type="xml">
-            <form string="Crédit">
+            <form string="Crédit" js_class="microfinance_loan_form">
                 <header>
                     <button name="action_submit" string="Soumettre" type="object" class="btn-primary" invisible="state != 'draft'"/>
                     <button name="action_manager_validate" string="Valider manager" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'submitted'"/>
