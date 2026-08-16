@@ -42,8 +42,8 @@ class TestApplicationPartnerWizardCeforFields(MicrofinanceCommon):
         # une fois le dossier hors instruction. Ce test vérifie juste que l'écriture ORM directe
         # continue de fonctionner (pas de régression de blocage côté modèle).
         application = self._create_application()
-        application.action_start_field_survey()
-        application.action_start_analysis()
+        application.action_start_visite()
+        application.action_start_contre_visite()
         application.write({'partner_nickname': 'Écrit après gel'})
         self.assertEqual(application.partner_nickname, 'Écrit après gel')
 

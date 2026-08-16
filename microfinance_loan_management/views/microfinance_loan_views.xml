@@ -61,11 +61,11 @@
         <field name="arch" type="xml">
             <form string="Crédit" js_class="microfinance_loan_form">
                 <header>
-                    <button name="action_submit" string="Soumettre" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_manager_validate" string="Valider manager" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'submitted'"/>
-                    <button name="action_finance_validate" string="Valider finance" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'manager_validated'"/>
-                    <button name="action_approve" string="Approuver" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'finance_validated'"/>
-                    <button name="action_generate_schedule" string="Générer échéancier" type="object" invisible="state not in ('draft','submitted','manager_validated','finance_validated','approved')"/>
+                    <button name="action_start_enquete" string="Démarrer l'enquête" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_ca_review" string="Avis CA" type="object" groups="microfinance_loan_management.group_microfinance_credit_committee" invisible="state != 'enquete'"/>
+                    <button name="action_cdag_review" string="Avis CDAG" type="object" groups="microfinance_loan_management.group_microfinance_credit_committee" invisible="state != 'avis_ca'"/>
+                    <button name="action_approve" string="Approuver" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'avis_cdag'"/>
+                    <button name="action_generate_schedule" string="Générer échéancier" type="object" invisible="state not in ('draft','enquete','avis_ca','avis_cdag','approved')"/>
                     <button name="action_charge_fee" string="Encaisser les frais de dossier" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved' or fee_paid or fee_amount_due &lt;= 0"/>
                     <button name="action_disburse" string="Activer / Décaisser" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
                     <button name="action_open_payment_wizard" string="Enregistrer remboursement" type="object" class="btn-primary" invisible="state not in ('active','defaulted')"/>
@@ -73,10 +73,10 @@
                     <button name="action_mark_default" string="Marquer en défaut" type="object" invisible="state != 'active'"/>
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
                     <button name="action_write_off" string="Radier" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state not in ('active','defaulted')"/>
-                    <button name="%(action_report_microfinance_loan_disbursement_receipt)d" string="Imprimer le reçu" type="action" invisible="state in ('draft','submitted','manager_validated','finance_validated','approved','cancelled')"/>
+                    <button name="%(action_report_microfinance_loan_disbursement_receipt)d" string="Imprimer le reçu" type="action" invisible="state in ('draft','enquete','avis_ca','avis_cdag','approved','cancelled')"/>
                     <button name="action_print_repayment_schedule" string="Imprimer le calendrier de remboursement" type="object" invisible="installment_count == 0"/>
                     <button name="action_recompute_risk" string="Recalculer le score" type="object"/>
-                    <field name="state" widget="statusbar" statusbar_visible="draft,submitted,manager_validated,finance_validated,approved,active,closed,defaulted,written_off"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,enquete,avis_ca,avis_cdag,approved,active,closed,defaulted,written_off"/>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
@@ -84,6 +84,9 @@
                         <button name="action_view_payments" type="object" class="oe_stat_button" icon="fa-money"><field name="payment_count" widget="statinfo" string="Paiements"/></button>
                         <button name="action_view_visits" type="object" class="oe_stat_button" icon="fa-map-marker"><field name="visit_count" widget="statinfo" string="Visites"/></button>
                         <button name="action_view_moves" type="object" class="oe_stat_button" icon="fa-book"><field name="move_count" widget="statinfo" string="Écritures"/></button>
+                        <button name="action_view_applications" type="object" class="oe_stat_button" icon="fa-search" invisible="state == 'draft'">
+                            <field name="application_count" widget="statinfo" string="Enquête"/>
+                        </button>
                     </div>
                     <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
                     <group>
@@ -181,58 +184,15 @@
             </form>
         </field>
     </record>
-    <!-- Vues dédiées au menu "Crédits" (consultation seule) : la création d'un crédit ne
-         doit plus se faire que depuis le dossier d'instruction (wizard
-         microfinance.loan.application.create.loan.wizard, verrouillé côté serveur sur
-         microfinance.loan.create()). mode="primary" plutôt qu'une duplication d'arch à la
-         main : ces vues héritent de tout le contenu des vues génériques (y compris les
-         ajouts du module scoring sur le formulaire), sans jamais s'appliquer aux fetches
-         des vues génériques elles-mêmes (action_view_loan depuis le dossier, wizards de
-         remboursement/rééchelonnement/radiation gardent leur comportement normal,
-         create compris). Seule la création est concernée ici, edit/delete inchangés. -->
-    <record id="view_microfinance_loan_kanban_readonly_create" model="ir.ui.view">
-        <field name="name">microfinance.loan.kanban.readonly.create</field>
-        <field name="model">microfinance.loan</field>
-        <field name="mode">primary</field>
-        <field name="inherit_id" ref="view_microfinance_loan_kanban"/>
-        <field name="arch" type="xml">
-            <xpath expr="//kanban" position="attributes">
-                <attribute name="create">0</attribute>
-            </xpath>
-        </field>
-    </record>
-    <record id="view_microfinance_loan_tree_readonly_create" model="ir.ui.view">
-        <field name="name">microfinance.loan.tree.readonly.create</field>
-        <field name="model">microfinance.loan</field>
-        <field name="mode">primary</field>
-        <field name="inherit_id" ref="view_microfinance_loan_tree"/>
-        <field name="arch" type="xml">
-            <xpath expr="//tree" position="attributes">
-                <attribute name="create">0</attribute>
-            </xpath>
-        </field>
-    </record>
-    <record id="view_microfinance_loan_form_readonly_create" model="ir.ui.view">
-        <field name="name">microfinance.loan.form.readonly.create</field>
-        <field name="model">microfinance.loan</field>
-        <field name="mode">primary</field>
-        <field name="inherit_id" ref="view_microfinance_loan_form"/>
-        <field name="arch" type="xml">
-            <xpath expr="//form" position="attributes">
-                <attribute name="create">0</attribute>
-            </xpath>
-        </field>
-    </record>
     <record id="action_microfinance_loan" model="ir.actions.act_window">
         <field name="name">Crédits</field>
         <field name="res_model">microfinance.loan</field>
         <field name="view_mode">kanban,tree,form</field>
         <field name="context">{'search_default_active': 1}</field>
-        <field name="view_ids" eval="[
-            (5, 0, 0),
-            (0, 0, {'view_mode': 'kanban', 'view_id': ref('view_microfinance_loan_kanban_readonly_create')}),
-            (0, 0, {'view_mode': 'tree', 'view_id': ref('view_microfinance_loan_tree_readonly_create')}),
-            (0, 0, {'view_mode': 'form', 'view_id': ref('view_microfinance_loan_form_readonly_create')}),
-        ]"/>
+        <!-- Efface explicitement les view_ids des vues readonly.create retirées (Lot 2,
+             réversion du point d'entrée unique) : omettre le champ ne suffit pas à vider un
+             one2many déjà peuplé sur une instance existante lors d'un -u, Odoo ne touche que
+             les champs présents dans la définition. -->
+        <field name="view_ids" eval="[(5, 0, 0)]"/>
     </record>
 </odoo>

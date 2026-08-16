@@ -28,12 +28,14 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
         self.assertEqual(wizard.state, 'done')
         self.assertNotIn('ERREUR', wizard.log)
         self.assertIn('0 microfinance.loan supprimés', wizard.log)
+        self.assertIn('0 microfinance.loan.account supprimés', wizard.log)
+        self.assertIn('0 microfinance.loan.application supprimés', wizard.log)
         self.assertIn('0 microfinance.loan.payment supprimés', wizard.log)
         self.assertIn('0 microfinance.savings.account supprimés', wizard.log)
 
     # 2. Dry-run avec données : rollback effectif, rien n'est supprimé.
     def test_dry_run_with_data_rolls_back(self):
-        loan, payment, visit, account = self._create_full_dataset(
+        loan, payment, visit, account, application, loan_account = self._create_full_dataset(
             partner=self.partner, product=self.product,
             savings_product=self.savings_product, payment_journal=self.payment_journal,
         )
@@ -49,19 +51,25 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
         self.assertTrue(payment.exists())
         self.assertTrue(visit.exists())
         self.assertTrue(account.exists())
+        self.assertTrue(application.exists())
+        self.assertTrue(loan_account.exists())
         self.assertEqual(len(self.env['account.move'].browse(move_ids).exists()), len(move_ids))
         self.assertIn('1 microfinance.loan supprimés', wizard.log)
+        self.assertIn('1 microfinance.loan.account supprimés', wizard.log)
+        self.assertIn('1 microfinance.loan.application supprimés', wizard.log)
         self.assertIn('1 microfinance.loan.payment supprimés', wizard.log)
         self.assertIn('1 microfinance.savings.account supprimés', wizard.log)
 
     # 3. Exécution réelle : aucun blocage FK/état, écritures comptables liées supprimées.
     def test_execute_real_respects_fk_order(self):
-        loan, payment, visit, account = self._create_full_dataset(
+        loan, payment, visit, account, application, loan_account = self._create_full_dataset(
             partner=self.partner, product=self.product,
             savings_product=self.savings_product, payment_journal=self.payment_journal,
         )
         move_ids = (loan.move_ids | payment.move_id).ids
         self.assertTrue(move_ids)
+        document_lines = application.document_line_ids
+        self.assertTrue(document_lines)
 
         wizard = self._make_wizard(self.company, i_confirm=True, confirm_text='SUPPRIMER')
         wizard.action_start_execute()
@@ -73,17 +81,20 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
         self.assertFalse(payment.exists())
         self.assertFalse(visit.exists())
         self.assertFalse(account.exists())
+        self.assertFalse(application.exists())
+        self.assertFalse(loan_account.exists())
+        self.assertFalse(document_lines.exists())
         self.assertFalse(self.env['account.move'].sudo().browse(move_ids).exists())
 
     # 4. Isolation multi-agence : RAZ scopé sur A n'affecte jamais B.
     def test_multi_company_isolation(self):
         company_b, product_b, savings_product_b, payment_journal_b, partner_b = \
             self._setup_second_company('T2')
-        loan_a, payment_a, visit_a, account_a = self._create_full_dataset(
+        loan_a, payment_a, visit_a, account_a, application_a, loan_account_a = self._create_full_dataset(
             partner=self.partner, product=self.product,
             savings_product=self.savings_product, payment_journal=self.payment_journal,
         )
-        loan_b, payment_b, visit_b, account_b = self._create_full_dataset(
+        loan_b, payment_b, visit_b, account_b, application_b, loan_account_b = self._create_full_dataset(
             partner=partner_b, product=product_b, savings_product=savings_product_b,
             payment_journal=payment_journal_b,
         )
@@ -98,15 +109,19 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
         self.assertFalse(payment_a.exists())
         self.assertFalse(visit_a.exists())
         self.assertFalse(account_a.exists())
+        self.assertFalse(application_a.exists())
+        self.assertFalse(loan_account_a.exists())
         # Agence B jamais sélectionnée : tout doit rester intact.
         self.assertTrue(loan_b.exists())
         self.assertTrue(payment_b.exists())
         self.assertTrue(visit_b.exists())
         self.assertTrue(account_b.exists())
+        self.assertTrue(application_b.exists())
+        self.assertTrue(loan_account_b.exists())
 
     # 5. Isolation res.partner : le client survit à la RAZ complète de son agence.
     def test_partner_survives_full_reset(self):
-        loan, payment, visit, account = self._create_full_dataset(
+        loan, payment, visit, account, application, loan_account = self._create_full_dataset(
             partner=self.partner, product=self.product,
             savings_product=self.savings_product, payment_journal=self.payment_journal,
         )
@@ -118,6 +133,7 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
 
         self.assertEqual(wizard.state, 'done')
         self.assertFalse(loan.exists())
+        self.assertFalse(loan_account.exists())
         self.assertTrue(partner.exists())
 
     # 6. Isolation EAT/MIIA : une société sans agency_code (contournement direct en
@@ -143,7 +159,7 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
 
     # 7. Confirmation renforcée : sans le mot exact "SUPPRIMER", aucune suppression.
     def test_confirm_text_required(self):
-        loan, payment, visit, account = self._create_full_dataset(
+        loan, payment, visit, account, application, loan_account = self._create_full_dataset(
             partner=self.partner, product=self.product,
             savings_product=self.savings_product, payment_journal=self.payment_journal,
         )
@@ -173,7 +189,7 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
     # n'empêche pas de reprendre au prochain "étape suivante", sans dupliquer les
     # suppressions déjà commitées.
     def test_resume_after_interruption(self):
-        loan, payment, visit, account = self._create_full_dataset(
+        loan, payment, visit, account, application, loan_account = self._create_full_dataset(
             partner=self.partner, product=self.product,
             savings_product=self.savings_product, payment_journal=self.payment_journal,
         )
@@ -209,3 +225,5 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
         self.assertFalse(payment.exists())
         self.assertFalse(visit.exists())
         self.assertFalse(account.exists())
+        self.assertFalse(application.exists())
+        self.assertFalse(loan_account.exists())

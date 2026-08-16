@@ -107,14 +107,14 @@ class TestRepaymentAccounting(MicrofinanceCommon):
             'account_penalites_id': penalty_account_b.id,
         })
         partner_b = self.env['res.partner'].create({'name': 'Client B (compta remboursement)'})
-        loan_b = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
+        loan_b = self.env['microfinance.loan'].create({
             'partner_id': partner_b.id, 'product_id': product_b.id, 'company_id': company_b.id,
             'loan_amount': 900.0, 'term': 3,
         })
         loan_b.action_generate_schedule()
-        loan_b.action_submit()
-        loan_b.action_manager_validate()
-        loan_b.action_finance_validate()
+        loan_b.action_start_enquete()
+        loan_b.action_ca_review()
+        loan_b.action_cdag_review()
         loan_b.action_approve()
         loan_b.action_disburse()
 

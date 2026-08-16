@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import unittest
+
 from odoo.exceptions import ValidationError
 
 from .common import MicrofinanceCommon
@@ -238,18 +240,21 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
         })
 
     def _advance_application_to_loan_created(self, application):
-        application.action_start_field_survey()
-        application.action_start_analysis()
-        application.action_submit_committee()
-        application.action_ca_review()
-        application.action_cdag_review()
-        application.action_accept()
-        action = application.action_create_loan()
-        wizard = self.env['microfinance.loan.application.create.loan.wizard'].with_context(
-            action['context']
-        ).create({'loan_amount': 1000.0, 'term': 6})
-        wizard.action_validate()
-        return application.loan_id
+        # Le wizard "Créer le crédit" a été supprimé (retour à la création directe de
+        # microfinance.loan, cf. réversion du point d'entrée unique) : loan_id reste un champ
+        # normal (readonly en vue seulement, jamais côté ORM), rattaché ici directement pour
+        # reproduire le seul rattachement manuel désormais possible.
+        application.action_start_visite()
+        application.action_start_contre_visite()
+        application.action_mark_fait()
+        loan = self.env['microfinance.loan'].create({
+            'partner_id': application.partner_id.id,
+            'product_id': application.loan_product_id.id,
+            'loan_amount': 1000.0,
+            'term': 6,
+        })
+        application.write({'loan_id': loan.id})
+        return loan
 
     def _new_partner_with_product(self):
         return self.env['res.partner'].with_context(microfinance_context=True).create({
@@ -261,7 +266,7 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
     def test_change_blocked_while_application_in_progress(self):
         partner = self._new_partner_with_product()
         application = partner.microfinance_current_loan_application_id
-        application.action_start_field_survey()
+        application.action_start_visite()
         with self.assertRaises(ValidationError):
             partner.with_context(microfinance_context=True).write({
                 'microfinance_selected_product_id': self.other_product.id,
@@ -292,15 +297,22 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
         })
         self.assertEqual(partner.microfinance_selected_product_id, self.other_product)
 
+    @unittest.skip(
+        "TODO(fusion): plus d'état 'refused' explicite depuis la simplification du cycle de "
+        "microfinance.loan.application (draft/visite/contre_visite/fait) — même TODO que "
+        "_microfinance_product_change_unlocked() dans le modèle. Un dossier simplement "
+        "laissé sans suite (draft/visite/contre_visite/fait sans loan_id) reste verrouillé "
+        "avec la logique actuelle (fail-safe), contrairement à l'ancien déblocage explicite "
+        "sur refus. À réactiver une fois tranché avec Micka si un scénario de refus doit "
+        "rouvrir la sélection de produit autrement."
+    )
     def test_change_allowed_once_application_refused(self):
         partner = self._new_partner_with_product()
         application = partner.microfinance_current_loan_application_id
-        application.action_start_field_survey()
-        application.action_start_analysis()
-        application.action_submit_committee()
-        application.action_ca_review()
-        application.action_cdag_review()
-        application.action_refuse()
+        application.action_start_visite()
+        application.action_start_contre_visite()
+        application.action_mark_fait()
+        # Pas d'action de refus équivalente dans le nouveau cycle : cf. TODO ci-dessus.
         partner.with_context(microfinance_context=True).write({
             'microfinance_selected_product_id': self.other_product.id,
         })

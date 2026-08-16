@@ -46,23 +46,23 @@ class TestApplicationSurveyPagination(MicrofinanceCommon):
 
     def test_navigation_never_changes_state(self):
         application = self._create_application()
-        application.action_start_field_survey()
-        self.assertEqual(application.state, 'field_survey')
+        application.action_start_visite()
+        self.assertEqual(application.state, 'visite')
         application.action_survey_next_page()
         application.action_survey_next_page()
-        self.assertEqual(application.state, 'field_survey')
+        self.assertEqual(application.state, 'visite')
         application.action_survey_previous_page()
         application.action_survey_previous_page()
-        self.assertEqual(application.state, 'field_survey')
+        self.assertEqual(application.state, 'visite')
 
     def test_navigation_available_regardless_of_workflow_state(self):
         # Navigable librement même sur un dossier avancé dans le workflow (indépendant de state).
         application = self._create_application()
-        application.action_start_field_survey()
-        application.action_start_analysis()
+        application.action_start_visite()
+        application.action_start_contre_visite()
         application.action_survey_next_page()
         self.assertEqual(application.survey_page, 'guarantor_documents_activity')
-        self.assertEqual(application.state, 'analysis')
+        self.assertEqual(application.state, 'contre_visite')
 
     def test_page_two_guarantor_fields_still_save_and_update_summary(self):
         # Aucune section de la Page 2 n'a été modifiée par la pagination (uniquement la vue) :

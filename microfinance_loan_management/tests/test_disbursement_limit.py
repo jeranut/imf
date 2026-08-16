@@ -12,9 +12,9 @@ class TestDisbursementLimit(MicrofinanceCommon):
     def _approve_loan(self, **kwargs):
         loan = self._create_loan(**kwargs)
         loan.action_generate_schedule()
-        loan.action_submit()
-        loan.action_manager_validate()
-        loan.action_finance_validate()
+        loan.action_start_enquete()
+        loan.action_ca_review()
+        loan.action_cdag_review()
         loan.action_approve()
         return loan
 

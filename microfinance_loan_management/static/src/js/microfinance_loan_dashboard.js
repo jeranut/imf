@@ -181,15 +181,10 @@ export class MicrofinanceLoanDashboard extends Component {
     }
 
     openNewLoan() {
-        // Le dossier d'instruction (microfinance.loan.application) est le seul point
-        // d'entrée de création d'un crédit : microfinance.loan.create() est verrouillé
-        // côté serveur (contexte microfinance_loan_creation_allowed, cf.
-        // action_create_loan()/le wizard dédié) et ne doit plus être créable directement
-        // depuis le tableau de bord.
         this.actionService.doAction({
             type: "ir.actions.act_window",
-            res_model: "microfinance.loan.application",
-            name: "Nouveau dossier",
+            res_model: "microfinance.loan",
+            name: "Nouveau prêt",
             views: [[false, "form"]],
             target: "current",
         });

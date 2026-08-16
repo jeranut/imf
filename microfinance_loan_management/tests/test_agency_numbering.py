@@ -32,3 +32,39 @@ class TestAgencyNumbering(MicrofinanceCommon):
         self._create_loan(company_id=self.company_isotry.id)
         loan_other = self._create_loan(company_id=self.company_ambanidia.id)
         self.assertEqual(loan_other.name, 'YB/000001')
+
+
+class TestLoanPaymentAgencyNumbering(MicrofinanceCommon):
+    """Numérotation AGENCE/NNNNNN pour microfinance.loan.payment (remboursement), alignée sur
+    microfinance.loan (cf. correctif numérotation Sous-lot 3) : séquence dédiée par société
+    (microfinance.loan.payment), remplace l'ancienne séquence globale PAY/%(year)s/NNNNN
+    partagée entre toutes les agences."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.company_isotry = cls.env['res.company'].create({'name': 'CEFOR Isotry Remb (test)', 'agency_code': 'ZI'})
+        cls.company_ambanidia = cls.env['res.company'].create({'name': 'CEFOR Ambanidia Remb (test)', 'agency_code': 'ZB'})
+
+    def _pay(self, loan, amount):
+        payment = self.env['microfinance.loan.payment'].create({
+            'loan_id': loan.id,
+            'amount': amount,
+            'journal_id': self.payment_journal.id,
+        })
+        payment.action_post()
+        return payment
+
+    def test_payment_numbering_per_agency(self):
+        loan = self._activate_loan(company_id=self.company_isotry.id)
+        payment1 = self._pay(loan, 50.0)
+        payment2 = self._pay(loan, 50.0)
+        self.assertEqual(payment1.name, 'ZI/000001')
+        self.assertEqual(payment2.name, 'ZI/000002')
+
+    def test_payment_numbering_independent_per_agency(self):
+        loan_isotry = self._activate_loan(company_id=self.company_isotry.id)
+        loan_ambanidia = self._activate_loan(company_id=self.company_ambanidia.id)
+        self._pay(loan_isotry, 50.0)
+        payment_other = self._pay(loan_ambanidia, 50.0)
+        self.assertEqual(payment_other.name, 'ZB/000001')

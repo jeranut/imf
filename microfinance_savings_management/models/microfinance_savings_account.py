@@ -32,6 +32,7 @@ class MicrofinanceSavingsAccount(models.Model):
     )
     transaction_ids = fields.One2many('microfinance.savings.transaction', 'account_id', string='Transactions')
     transaction_count = fields.Integer(string='Nombre de transactions', compute='_compute_counts')
+    loan_count = fields.Integer(compute='_compute_loan_count')
     last_transaction_date = fields.Date(string='Dernière transaction', compute='_compute_last_transaction_date', store=True)
     is_dormant = fields.Boolean(compute='_compute_is_dormant', string='Éligible dormance')
     closure_reason_type = fields.Selection([
@@ -41,17 +42,19 @@ class MicrofinanceSavingsAccount(models.Model):
     ], string='Motif de clôture')
     closure_reason_note = fields.Text(string='Note de clôture')
 
-    # Code de type de compte (convention LPF AGENCE/TYPE/SÉRIE) : dérivé du type de client
-    # (individuel/groupe/entreprise), sauf pour un produit à terme qui a toujours le code T,
-    # quel que soit le titulaire. CEFOR n'utilise aujourd'hui que Individuel/Entreprise (Groupe
-    # non activé), mais les 4 codes sont implémentés pour rester fidèle à la convention et
-    # couvrir une éventuelle activation future du type Groupe.
-    _CLIENT_TYPE_CODE = {'individual': 'I', 'group': 'G', 'company': 'E'}
+    # Code de type de compte (convention LPF AGENCE/TYPE/SÉRIE) : dérivé de la catégorie du
+    # produit (product_type), jamais du titulaire — un compte classique reçoit I quel que soit
+    # le client (individuel ou entreprise), une épargne de garantie liée à un crédit reçoit G,
+    # un dépôt à terme reçoit T. Avant ce correctif, la lettre dépendait du type de client
+    # (individuel/groupe/entreprise) : un compte classique et un compte de garantie du même
+    # client individuel étaient alors indiscernables (tous deux 'I'), et 'G' n'était jamais
+    # atteignable (microfinance_client_type n'a plus la valeur 'group' depuis la suppression de
+    # ce type de client). Décision validée par Micka : la lettre E disparaît (plus de distinction
+    # par titulaire dans le numéro de compte).
+    _PRODUCT_TYPE_CODE = {'voluntary': 'I', 'compulsory': 'G', 'term_deposit': 'T'}
 
-    def _get_account_type_code(self, partner, product):
-        if product.product_type == 'term_deposit':
-            return 'T'
-        return self._CLIENT_TYPE_CODE.get(partner.microfinance_client_type, 'I')
+    def _get_account_type_code(self, product):
+        return self._PRODUCT_TYPE_CODE.get(product.product_type, 'I')
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -62,7 +65,7 @@ class MicrofinanceSavingsAccount(models.Model):
                 company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
                 partner = self.env['res.partner'].browse(vals.get('partner_id'))
                 product = self.env['microfinance.savings.product'].browse(vals.get('product_id'))
-                type_code = self._get_account_type_code(partner, product)
+                type_code = self._get_account_type_code(product)
                 vals['name'] = self._get_savings_account_name(company, partner, type_code)
         return super().create(vals_list)
 
@@ -75,15 +78,31 @@ class MicrofinanceSavingsAccount(models.Model):
         obligatoire liée à un crédit en parallèle d'une épargne volontaire, ou plusieurs
         comptes volontaires) ne peut pas reprendre ce même numéro sans collision : il garde
         l'ancienne numérotation par séquence indépendante, propre à ce type, pour rester
-        unique."""
+        unique.
+
+        Les deux mécanismes (dérivation directe et séquence indépendante) partagent le même
+        espace de numéros AGENCE/TYPE/NNNNNN sans se coordonner entre eux : sans vérification,
+        rien n'empêche qu'un numéro déjà pris par l'un soit retiré par l'autre (dans les deux
+        sens, pas seulement à la toute première utilisation) — cf. bug détecté par
+        test_second_account_same_type_falls_back_to_independent_sequence. D'où la vérification
+        d'unicité explicite ci-dessous avant de retenir un candidat, avec repli sur la séquence
+        indépendante (en boucle si besoin) tant que le nom dérivé est déjà pris."""
         existing_same_type = self.search([('partner_id', '=', partner.id)]).filtered(
-            lambda a: self._get_account_type_code(a.partner_id, a.product_id) == type_code
+            lambda a: self._get_account_type_code(a.product_id) == type_code
         )
         if not existing_same_type and partner.microfinance_account_number:
             agency, suffix = partner.microfinance_account_number.split('/', 1)
-            return '%s/%s/%s' % (agency, type_code, suffix)
-        number = company._get_or_create_numbering_sequence('microfinance.savings.account.%s' % type_code)
-        return '%s/%s/%s' % (company.agency_code, type_code, number)
+            candidate = '%s/%s/%s' % (agency, type_code, suffix)
+            if not self.search_count([('name', '=', candidate)]):
+                return candidate
+        return self._get_next_available_savings_account_name(company, type_code)
+
+    def _get_next_available_savings_account_name(self, company, type_code):
+        while True:
+            number = company._get_or_create_numbering_sequence('microfinance.savings.account.%s' % type_code)
+            candidate = '%s/%s/%s' % (company.agency_code, type_code, number)
+            if not self.search_count([('name', '=', candidate)]):
+                return candidate
 
     @api.depends('transaction_ids.amount', 'transaction_ids.transaction_type', 'transaction_ids.state')
     def _compute_balance(self):
@@ -121,6 +140,22 @@ class MicrofinanceSavingsAccount(models.Model):
     def _compute_counts(self):
         for account in self:
             account.transaction_count = len(account.transaction_ids)
+
+    @api.depends('partner_id.microfinance_loan_ids')
+    def _compute_loan_count(self):
+        for account in self:
+            account.loan_count = len(account.partner_id.microfinance_loan_ids)
+
+    def action_view_loans(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Crédits'),
+            'res_model': 'microfinance.loan',
+            'view_mode': 'tree,form',
+            'domain': [('partner_id', '=', self.partner_id.id)],
+            'context': {'default_partner_id': self.partner_id.id},
+        }
 
     def _create_transaction(self, transaction_type, amount, note=None, bypass_min_balance=False,
                              bypass_withdrawal_limit=False, bypass_cash_balance=False,

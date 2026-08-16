@@ -102,9 +102,9 @@ class MicrofinanceDashboardController(http.Controller):
         state_badge = {
             'active': ('success', 'En cours'),
             'draft': ('warning', 'En attente'),
-            'submitted': ('warning', 'En attente'),
-            'manager_validated': ('warning', 'En attente'),
-            'finance_validated': ('warning', 'En attente'),
+            'enquete': ('warning', 'En attente'),
+            'avis_ca': ('warning', 'En attente'),
+            'avis_cdag': ('warning', 'En attente'),
             'approved': ('warning', 'En attente'),
             'closed': ('success', state_selection.get('closed', 'Clôturé')),
             'defaulted': ('danger', state_selection.get('defaulted', 'Défaut')),

@@ -2,12 +2,11 @@ workflow: dossier_precredit
 name: Workflow Dossier précrédit
 version: "17.0"
 description: >
-  Instruction et qualification du dossier crédit avant décaissement : cycle du dossier
-  d'instruction (microfinance.loan.application, de draft à accepted via l'enquête
-  terrain, l'analyse, le comité, l'avis CA et l'avis CDAG), création du crédit depuis un
-  dossier accepté (wizard, seul point d'entrée — microfinance.loan.create() est
-  verrouillé côté serveur en dehors de ce chemin), puis cycle microfinance.loan de draft
-  à approved (soumission, validation manager, validation finance, approbation), et
+  Instruction et qualification du dossier crédit avant décaissement : création directe
+  du crédit (microfinance.loan, menu Crédits, sans dossier ni wizard préalable) et son
+  cycle propre de draft à approved (enquête, avis CA, avis CDAG, approbation) ; suivi
+  terrain indépendant du dossier d'instruction (microfinance.loan.application, de draft
+  à fait via la visite et la contre-visite, sans lien de création vers le crédit) ; et
   qualification du client (catégories, liste noire, représentants/membres de groupe)
   gérée depuis la fiche partenaire. Ne couvre pas le décaissement, les remboursements, la
   comptabilité, le recouvrement des impayés ni les garanties/scoring.
@@ -22,16 +21,17 @@ categories:
     sequence: 20
 articles:
   - id: dossier_precredit-001
-    title: Créer et instruire un dossier de crédit
+    title: Créer et suivre un dossier d'instruction (visite / contre-visite)
     category: Instruction du dossier crédit
-    difficulty: intermediate
+    difficulty: beginner
     roles:
       - agent_credit
     suggested: true
     priority: 100
     questions:
       - Comment créer un nouveau dossier de crédit ?
-      - Où passe-t-on par l'enquête terrain, le comité, l'avis CA et l'avis CDAG ?
+      - Le dossier d'instruction est-il obligatoire pour créer un crédit ?
+      - À quoi sert le dossier d'instruction maintenant qu'il ne conditionne plus la création du crédit ?
     menu: >
       Microfinance > Crédits > Dossiers d'instruction (menu_credits_root >
       menu_microfinance_loan_applications, action action_microfinance_loan_application).
@@ -39,43 +39,39 @@ articles:
     prerequisites:
       - Le client (partner_id) et le produit de prêt visé (loan_product_id) doivent être renseignés dès la création du dossier.
     steps:
-      - Ouvrir Microfinance > Crédits > Dossiers d'instruction et créer un nouveau dossier (état initial draft), en renseignant partner_id et loan_product_id.
-      - Cliquer sur Démarrer l'enquête terrain (field_survey), puis Passer en analyse (analysis) une fois l'enquête complétée.
-      - Cliquer sur Soumettre au comité (committee), puis Avis CA (ca_review, réservé au groupe Membre CA) et Avis CDAG (cdag_review, réservé au groupe Membre CDAG).
-      - Depuis l'état cdag_review, cliquer sur Accepter, Accepter sous condition, ou Refuser.
+      - Ouvrir Microfinance > Crédits > Dossiers d'instruction et créer un nouveau dossier (état initial draft), en renseignant partner_id et loan_product_id — ou reprise automatique du dossier créé depuis la fiche client si un produit y est sélectionné.
+      - Cliquer sur Démarrer la visite (action_start_visite, état visite), puis Démarrer la contre-visite (action_start_contre_visite, état contre_visite). Le bouton Repasser en brouillon reste disponible depuis l'état visite.
+      - Cliquer sur Marquer fait (action_mark_fait, état fait) une fois la contre-visite complétée.
     tips: >
-      Un dossier accepté ne crée pas automatiquement le crédit : il faut ensuite cliquer
-      sur Créer le crédit pour ouvrir le wizard de création (voir
-      dossier_precredit-007) — microfinance.loan ne peut plus être créé autrement
-      (ni par le menu Crédits, ni par API/import), un verrou serveur bloque toute
-      création directe.
+      Depuis la réversion du "point d'entrée unique" (2026-08-16), le dossier d'instruction
+      ne conditionne plus la création ni la validation du crédit : ce sont deux volets
+      indépendants (voir dossier_precredit-007 pour la création directe du crédit). Un
+      crédit peut être rattaché a posteriori à un dossier via son champ loan_id (lecture
+      seule), mais aucun mécanisme automatique ne le fait plus.
     errors: >
       « Transition invalide : impossible de passer de "X" à "Y". » si l'on tente de
-      sauter une étape du cycle de vie. « Vous n'avez pas le rôle requis pour amener un
-      dossier à l'étape "X". » si l'utilisateur n'a pas le groupe correspondant à
-      l'étape visée (Enquêteur, Membre CA, Membre CDAG).
+      sauter une étape du cycle de vie (draft → visite → contre_visite → fait). Aucun
+      contrôle de rôle sur ces transitions, uniquement les droits d'accès standards du
+      modèle.
     answer: >
-      <p>Un dossier de crédit se crée depuis <strong>Microfinance &gt; Crédits &gt;
+      <p>Un dossier d'instruction se crée depuis <strong>Microfinance &gt; Crédits &gt;
       Dossiers d'instruction</strong> (état initial <em>brouillon</em>), en renseignant le
-      client et le produit visé. Il passe ensuite par les étapes
-      <em>enquête terrain</em> → <em>analyse</em> → <em>soumis comité</em> →
-      <em>avis CA</em> → <em>avis CDAG</em>, chacune réservée au rôle correspondant, avant
-      d'être <em>accepté</em> (avec ou sans condition) ou <em>refusé</em>. Un dossier
-      accepté ne crée pas le crédit automatiquement : il faut ensuite utiliser le bouton
-      <strong>Créer le crédit</strong> (voir la fiche dédiée).</p>
+      client et le produit visé. Il passe ensuite par deux étapes de terrain,
+      <em>visite</em> puis <em>contre-visite</em>, avant d'être marqué <em>fait</em>. Ce
+      cycle est un simple suivi : il ne conditionne plus la création ni la validation d'un
+      crédit, qui se crée désormais directement depuis le menu Crédits (voir la fiche
+      dédiée).</p>
     keywords:
       - dossier d'instruction
-      - enquête terrain
-      - comité
-      - avis CA
-      - avis CDAG
+      - visite
+      - contre-visite
     source_reference: microfinance_loan_management
     see_also:
       - dossier_precredit-007
       - dossier_precredit-002
 
   - id: dossier_precredit-002
-    title: Valider et approuver un dossier de crédit (manager, finance, approbation)
+    title: Valider et approuver un crédit (avis CA, avis CDAG, approbation)
     category: Instruction du dossier crédit
     difficulty: intermediate
     roles:
@@ -83,45 +79,45 @@ articles:
     suggested: true
     priority: 90
     questions:
-      - Qui valide un crédit après l'agent, le manager ou la finance en premier ?
+      - Qui donne son avis sur un crédit après l'agent, le comité de crédit ou le manager en premier ?
       - Quelles sont les étapes de validation d'un crédit chez MOWGLI, de la création au décaissement ?
-      - Que signifie chaque état de la barre de statut d'un crédit (brouillon, soumis, validé manager...) ?
+      - Que signifie chaque état de la barre de statut d'un crédit (brouillon, enquête, avis CA, avis CDAG...) ?
     menu: >
       Microfinance > Crédits > Crédits (menu_credits_root >
-      menu_microfinance_loans, action action_microfinance_loan) — consultation du crédit
-      déjà créé depuis le dossier d'instruction (voir dossier_precredit-007) ; ce menu ne
-      permet plus de créer un crédit directement.
+      menu_microfinance_loans, action action_microfinance_loan) — création directe et
+      suivi complet du cycle du crédit, indépendamment de tout dossier d'instruction (voir
+      dossier_precredit-007).
     model: microfinance.loan
     prerequisites:
-      - Le dossier doit être passé par Soumettre (état submitted) avant toute validation.
+      - Le crédit doit être passé par Démarrer l'enquête (état enquete) avant tout avis.
     steps:
-      - Le manager clique sur Valider manager (action_manager_validate) : état manager_validated, le champ manager_id est renseigné à l'utilisateur courant.
-      - L'utilisateur finance clique sur Valider finance (action_finance_validate) : état finance_validated, le champ finance_user_id est renseigné.
+      - Le comité de crédit clique sur Avis CA (action_ca_review) : état avis_ca, le champ manager_id est renseigné à l'utilisateur courant.
+      - Le comité de crédit clique sur Avis CDAG (action_cdag_review) : état avis_cdag, le champ finance_user_id est renseigné.
       - Le manager clique sur Approuver (action_approve) : état approved, le champ approval_date est renseigné à la date du jour.
       - Le crédit approuvé est ensuite prêt pour l'encaissement des frais de dossier et le décaissement (action_charge_fee, action_disburse), qui font passer l'état à active — hors périmètre de ce workflow, voir le workflow comptabilite.
     tips: >
       Le Gestionnaire hérite à la fois du groupe Manager crédit et du groupe Finance
-      microfinance : il cumule donc les capacités de validation manager et de validation
-      finance, et peut réaliser lui-même l'ensemble de la chaîne Valider manager > Valider
-      finance > Approuver.
+      microfinance, mais pas du groupe Comité de crédit (group_microfinance_credit_committee,
+      requis pour les avis CA/CDAG) : il ne peut donc pas réaliser seul l'ensemble de la
+      chaîne, contrairement à l'approbation et au décaissement qu'il peut cumuler.
     errors: >
-      Les boutons Valider manager, Valider finance et Approuver ne sont visibles que si
-      l'état du crédit correspond exactement à l'étape attendue (submitted,
-      manager_validated, finance_validated) et si l'utilisateur dispose du groupe requis ;
-      ils restent masqués sinon.
+      Les boutons Avis CA, Avis CDAG et Approuver ne sont visibles que si l'état du crédit
+      correspond exactement à l'étape attendue (enquete, avis_ca, avis_cdag) et si
+      l'utilisateur dispose du groupe requis (group_microfinance_credit_committee pour les
+      avis, group_microfinance_manager pour l'approbation) ; ils restent masqués sinon.
     answer: >
-      <p>Après la soumission, un dossier de crédit suit une barre de statut à plusieurs
-      étapes : <em>brouillon</em> (draft) → <em>soumis</em> (submitted) →
-      <em>validé manager</em> (manager_validated, via Valider manager) →
-      <em>validé finance</em> (finance_validated, via Valider finance) →
+      <p>Après l'enquête, un crédit suit une barre de statut à plusieurs étapes :
+      <em>brouillon</em> (draft) → <em>enquête</em> (enquete) →
+      <em>avis CA</em> (avis_ca, via Avis CA) →
+      <em>avis CDAG</em> (avis_cdag, via Avis CDAG) →
       <em>approuvé</em> (approved, via Approuver, avec la date d'approbation renseignée).
       L'étape suivante, le décaissement (état actif), appartient au workflow comptabilité.
-      Le Gestionnaire peut effectuer seul l'ensemble des validations manager et finance
-      ainsi que l'approbation, car il hérite des deux groupes correspondants.</p>
+      Les avis CA et CDAG sont réservés au groupe Comité de crédit ; l'approbation, au
+      groupe Manager crédit.</p>
     keywords:
       - validation
-      - manager
-      - finance
+      - avis CA
+      - avis CDAG
       - approbation
       - état du crédit
     source_reference: microfinance_loan_management
@@ -147,28 +143,27 @@ articles:
       - Comment générer l'échéancier prévisionnel d'un crédit avant de le soumettre ?
     menu: >
       Microfinance > Crédits > Crédits, bouton Générer échéancier dans l'en-tête de la
-      fiche crédit (crédit déjà créé depuis le dossier d'instruction, voir
-      dossier_precredit-007).
+      fiche crédit (crédit créé directement depuis ce menu, voir dossier_precredit-007).
     model: microfinance.loan
     prerequisites:
       - Une périodicité de remboursement (repayment_frequency_id) doit être choisie avant de pouvoir générer l'échéancier.
     steps:
       - Depuis la fiche crédit, cliquer sur le bouton Générer échéancier (action_generate_schedule).
-      - Le bouton reste disponible tant que l'état est draft, submitted, manager_validated, finance_validated ou approved (avant activation).
+      - Le bouton reste disponible tant que l'état est draft, enquete, avis_ca, avis_cdag ou approved (avant activation).
     errors: >
       « Choisissez une périodicité de remboursement avant de générer l'échéancier. » si
       repayment_frequency_id n'est pas renseigné. « Échéancier autorisé avant activation
       seulement. » si l'état du crédit est en dehors de draft à approved.
     tips: >
-      Générer l'échéancier prévisionnel avant soumission permet de visualiser l'impact
-      réel de la durée (term) et de la périodicité (repayment_frequency_id) choisies,
-      plutôt que de le découvrir après approbation.
+      Générer l'échéancier prévisionnel avant de démarrer l'enquête permet de visualiser
+      l'impact réel de la durée (term) et de la périodicité (repayment_frequency_id)
+      choisies, plutôt que de le découvrir après approbation.
     answer: >
       <p>Le bouton <strong>Générer échéancier</strong> sur la fiche crédit calcule un
       échéancier prévisionnel à partir du montant, de la durée et de la périodicité de
       remboursement choisis. Il reste disponible à toutes les étapes du cycle avant
-      l'activation (brouillon, soumis, validé manager, validé finance, approuvé), ce qui
-      permet de le régénérer si les paramètres du crédit changent.</p>
+      l'activation (brouillon, enquête, avis CA, avis CDAG, approuvé), ce qui permet de le
+      régénérer si les paramètres du crédit changent.</p>
     keywords:
       - échéancier
       - action_generate_schedule
@@ -179,7 +174,7 @@ articles:
       - dossier_precredit-007
 
   - id: dossier_precredit-007
-    title: Créer le crédit depuis un dossier accepté (wizard) et le soumettre
+    title: Créer un crédit directement et démarrer l'enquête
     category: Instruction du dossier crédit
     difficulty: intermediate
     roles:
@@ -187,59 +182,47 @@ articles:
     suggested: true
     priority: 95
     questions:
-      - Comment transformer un dossier accepté en crédit ?
-      - Pourquoi je ne peux pas créer de crédit directement depuis le menu Crédits ?
-      - Pourquoi je ne peux pas soumettre un crédit pour ce client ?
+      - Comment créer un nouveau crédit ?
+      - Le dossier d'instruction est-il obligatoire pour créer un crédit ?
+      - Pourquoi je ne peux pas démarrer l'enquête d'un crédit pour ce client ?
     menu: >
-      Microfinance > Crédits > Dossiers d'instruction (dossier à l'état accepted ou
-      accepted_condition), bouton Créer le crédit ; le wizard ouvert est
-      microfinance.loan.application.create.loan.wizard. Le menu Microfinance > Crédits >
-      Crédits (action_microfinance_loan) ne permet plus de créer un crédit directement —
-      microfinance.loan.create() est verrouillé côté serveur (contexte
-      microfinance_loan_creation_allowed) et rejette toute création hors de ce chemin,
-      quel que soit le rôle de l'utilisateur.
+      Microfinance > Crédits > Crédits (action_microfinance_loan). Depuis la réversion du
+      "point d'entrée unique" (2026-08-16), un crédit se crée directement depuis ce menu,
+      sans dossier d'instruction ni wizard préalable — les droits d'accès standards par
+      groupe (ir.model.access.csv) sont la seule condition de création.
     model: microfinance.loan
     prerequisites:
-      - Le dossier (microfinance.loan.application) doit être à l'état accepted ou accepted_condition.
       - Le client (partner_id) doit respecter l'ancienneté minimale du produit si min_membership_days est défini.
       - Le client ne doit pas déjà avoir de crédit actif dans la société, sauf si le produit autorise un second crédit (allow_second_loan).
       - Si block_second_if_arrears est activé, le client ne doit pas avoir de crédit actif en arriérés.
       - Le co-emprunteur (co_borrower_id), s'il y en a un, ne doit pas avoir lui-même de crédit actif en cours dans la société.
       - Si le produit exige une garantie (guarantee_required), au moins une garantie validée doit couvrir le ratio minimum requis (min_guarantee_ratio).
     steps:
-      - Depuis un dossier accepté, cliquer sur Créer le crédit (action_create_loan) : ouvre un wizard avec le produit du dossier (loan_product_id) pré-rempli, modifiable.
-      - Renseigner le montant du crédit et la durée (nombre d'échéances) dans le wizard.
-      - Cliquer sur Créer le crédit dans le wizard (action_validate) : crée le crédit (microfinance.loan, état initial draft), le relie au dossier (loan_id), et fait passer le dossier à l'état loan_created.
-      - Cliquer sur Soumettre (action_submit) sur la fiche crédit : exécute le contrôle d'éligibilité (_check_eligibility) puis calcule automatiquement le score interne (action_calculate_scoring, silencieux), et passe l'état à submitted.
+      - Ouvrir Microfinance > Crédits > Crédits et créer un nouveau crédit (état initial draft) : renseigner partner_id, product_id, loan_amount, term.
+      - Cliquer sur Démarrer l'enquête (action_start_enquete) sur la fiche crédit : exécute le contrôle d'éligibilité (_check_eligibility) puis calcule automatiquement le score interne (action_calculate_scoring, silencieux), et passe l'état à enquete.
     tips: >
-      Le wizard reste volontairement minimal (produit, montant, durée) : garanties,
-      périodicité, comptes et fonds bailleur se renseignent directement sur la fiche
-      crédit après sa création, jamais dans le wizard.
+      Un crédit peut être rattaché a posteriori à un dossier d'instruction via le champ
+      loan_id de ce dernier (lecture seule, aucune automatisation UI à ce jour) si un
+      suivi terrain existe pour ce client (voir dossier_precredit-001) — ce n'est jamais
+      une étape obligatoire.
     errors: >
-      « Un crédit ne peut être créé que depuis un dossier d'instruction accepté (menu
-      Dossiers d'instruction → Créer le crédit). » — toute tentative de création directe
-      de microfinance.loan hors de ce wizard (menu Crédits, API, import). « Ancienneté
-      client insuffisante pour ce produit : il manque X jour(s)... » — client trop récent
-      pour le produit choisi. « Ce client a déjà un crédit actif. Ce produit n'autorise
-      pas de second crédit en parallèle. » « Ce client a déjà un crédit actif en
+      « Ancienneté client insuffisante pour ce produit : il manque X jour(s)... » — client
+      trop récent pour le produit choisi. « Ce client a déjà un crédit actif. Ce produit
+      n'autorise pas de second crédit en parallèle. » « Ce client a déjà un crédit actif en
       arriérés. Un second crédit ne peut pas être soumis. » « Le co-emprunteur a déjà un
       crédit actif en cours. » « Ce produit exige une garantie validée avant soumission. »
       « Garanties insuffisantes : il manque X pour atteindre le ratio minimum requis... »
     answer: >
-      <p>Depuis un dossier <em>accepté</em> (ou <em>accepté sous condition</em>), cliquez
-      sur <strong>Créer le crédit</strong> : un wizard s'ouvre avec le produit du dossier
-      pré-rempli, dans lequel vous saisissez le montant et la durée. En validant, le
-      crédit est créé (état <em>brouillon</em>) et relié au dossier. Il faut ensuite
-      cliquer sur <strong>Soumettre</strong> sur la fiche crédit : le système vérifie
-      l'éligibilité (ancienneté client, absence de crédit actif conflictuel, garanties
-      requises le cas échéant) avant de calculer un score interne et de passer le crédit à
-      l'état <em>soumis</em>. Un crédit ne peut jamais être créé autrement — ni depuis le
-      menu Crédits (consultation seule), ni par API ou import.</p>
+      <p>Un crédit se crée directement depuis <strong>Microfinance &gt; Crédits &gt;
+      Crédits</strong> (état initial <em>brouillon</em>), en renseignant le client, le
+      produit, le montant et la durée — aucun dossier d'instruction ni wizard n'est
+      requis. Il faut ensuite cliquer sur <strong>Démarrer l'enquête</strong> sur la fiche
+      crédit : le système vérifie l'éligibilité (ancienneté client, absence de crédit actif
+      conflictuel, garanties requises le cas échéant) avant de calculer un score interne et
+      de passer le crédit à l'état <em>enquête</em>.</p>
     keywords:
-      - créer le crédit
-      - wizard
-      - action_create_loan
-      - action_submit
+      - créer un crédit
+      - action_start_enquete
       - éligibilité
     source_reference: microfinance_loan_management
     see_also:

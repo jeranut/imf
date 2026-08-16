@@ -1,4 +1,13 @@
 # Statut dev — point_entree_unique_credit
+
+> **⚠️ ANNULÉ le 2026-08-16.** Décision de Micka : ce chantier est abandonné, le crédit
+> redevient créable directement en Brouillon depuis le menu "Crédits", sans dossier
+> d'instruction ni wizard. Le wizard `microfinance.loan.application.create.loan.wizard` a
+> été supprimé. Voir `docs_dev/creation_credit_directe/STATUS.md` pour le détail de la
+> réversion (lots 1 à 6). Le contenu ci-dessous décrit l'état tel qu'implémenté entre le
+> 2026-07-18 et le 2026-08-16 — conservé pour l'historique, ne reflète plus le
+> comportement actuel.
+
 Dernière inspection : 2026-07-18
 
 Suite à l'audit `docs/audit_menu_credits_duplication.md` : le dossier d'instruction

@@ -45,9 +45,9 @@ class TestFondBailleurCommon(MicrofinanceCommon):
     def _approve_loan(self, **kwargs):
         loan = self._create_loan(**kwargs)
         loan.action_generate_schedule()
-        loan.action_submit()
-        loan.action_manager_validate()
-        loan.action_finance_validate()
+        loan.action_start_enquete()
+        loan.action_ca_review()
+        loan.action_cdag_review()
         loan.action_approve()
         return loan
 
@@ -306,7 +306,7 @@ class TestFondMultiCompany(TestFondBailleurCommon):
         self._create_contribution(fond, amount=5000.0, saisie_company_id=self.env.company.id).action_post()
 
         # Décaissement d'un crédit rattaché à l'agence B.
-        loan_b = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
+        loan_b = self.env['microfinance.loan'].create({
             'partner_id': self.partner_b.id,
             'product_id': self.product_b.id,
             'company_id': self.company_b.id,

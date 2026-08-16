@@ -36,6 +36,23 @@ class MicrofinanceLoan(models.Model):
     guarantee_savings_verified = fields.Boolean(
         compute='_compute_guarantee_savings_verified', string='Épargne garantie vérifiée',
     )
+    savings_account_count = fields.Integer(compute='_compute_savings_account_count')
+
+    @api.depends('partner_id.microfinance_savings_account_ids')
+    def _compute_savings_account_count(self):
+        for loan in self:
+            loan.savings_account_count = len(loan.partner_id.microfinance_savings_account_ids)
+
+    def action_view_savings_accounts(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Épargne'),
+            'res_model': 'microfinance.savings.account',
+            'view_mode': 'tree,form',
+            'domain': [('partner_id', '=', self.partner_id.id)],
+            'context': {'default_partner_id': self.partner_id.id},
+        }
 
     @api.depends('loan_amount', 'product_id.savings_requirement_type', 'product_id.savings_target_ratio')
     def _compute_savings_target_amount(self):

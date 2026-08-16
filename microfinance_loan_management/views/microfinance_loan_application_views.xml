@@ -4,7 +4,7 @@
         <field name="name">microfinance.loan.application.tree</field>
         <field name="model">microfinance.loan.application</field>
         <field name="arch" type="xml">
-            <tree decoration-success="state in ('accepted','accepted_condition','loan_created')" decoration-danger="state == 'refused'">
+            <tree decoration-success="state == 'fait'">
                 <field name="name"/>
                 <field name="application_date"/>
                 <field name="partner_id"/>
@@ -60,21 +60,21 @@
         <field name="arch" type="xml">
             <form string="Dossier d'instruction de crédit" class="o_microfinance_loan_application_form">
                 <header>
-                    <button name="action_start_field_survey" string="Démarrer l'enquête terrain" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_reset_to_draft" string="Repasser en brouillon" type="object" invisible="state != 'field_survey'"/>
-                    <button name="action_start_analysis" string="Passer en analyse" type="object" class="btn-primary" invisible="state != 'field_survey'"/>
-                    <button name="action_submit_committee" string="Soumettre au comité" type="object" class="btn-primary" invisible="state != 'analysis'"/>
-                    <button name="action_ca_review" string="Avis CA" type="object" class="btn-primary" invisible="state != 'committee'"/>
-                    <button name="action_cdag_review" string="Avis CDAG" type="object" class="btn-primary" invisible="state != 'ca_review'"/>
-                    <button name="action_accept" string="Accepter" type="object" class="btn-primary" invisible="state != 'cdag_review'"/>
-                    <button name="action_accept_condition" string="Accepter sous condition" type="object" invisible="state != 'cdag_review'"/>
-                    <button name="action_refuse" string="Refuser" type="object" invisible="state != 'cdag_review'"/>
-                    <button name="action_create_loan" string="Créer le crédit" type="object" class="btn-primary" invisible="state not in ('accepted','accepted_condition') or loan_id"/>
-                    <button name="action_view_loan" string="Voir le crédit" type="object" invisible="not loan_id"/>
+                    <button name="action_start_visite" string="Démarrer la visite" type="object" class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_reset_to_draft" string="Repasser en brouillon" type="object" invisible="state != 'visite'"/>
+                    <button name="action_start_contre_visite" string="Démarrer la contre-visite" type="object" class="btn-primary" invisible="state != 'visite'"/>
+                    <button name="action_mark_fait" string="Marquer fait" type="object" class="btn-primary" invisible="state != 'contre_visite'"/>
                     <button name="action_sync_partner" string="Synchroniser vers la fiche contact" type="object"/>
-                    <field name="state" widget="statusbar" statusbar_visible="draft,field_survey,analysis,committee,ca_review,cdag_review,accepted,loan_created"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,visite,contre_visite,fait"/>
                 </header>
                 <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_loan" type="object" class="oe_stat_button" icon="fa-money" invisible="not loan_id">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Crédit</span>
+                            </div>
+                        </button>
+                    </div>
                     <field name="survey_page" invisible="1"/>
                     <div class="o_microfinance_survey_header" invisible="survey_page != 'partner_identification'">
                         <div class="o_microfinance_survey_header_top">
@@ -130,72 +130,72 @@
                     </group>
                     <div invisible="survey_page != 'partner_identification'">
                     <group string="I — Identification du partenaire"/>
-                    <div class="alert alert-info" role="alert" invisible="state in ('draft', 'field_survey')">
+                    <div class="alert alert-info" role="alert" invisible="state in ('draft', 'visite')">
                         Dossier hors instruction : ces informations sont figées pour l'audit (synchronisées
                         automatiquement depuis la fiche client tant que le dossier était en Brouillon ou en
-                        Enquête terrain). Seules l'adresse actuelle et le téléphone restent modifiables.
+                        Visite). Seules l'adresse actuelle et le téléphone restent modifiables.
                     </div>
                     <group string="1. Partenaire">
                         <group>
-                            <field name="partner_surname" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_surname" readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_nickname" placeholder="Surnom usuel, le cas échéant"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_id_card_number" placeholder="N° CIN"
-                                readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="partner_id_card_issue_date" readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
+                            <field name="partner_id_card_issue_date" readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_id_card_issue_place" placeholder="Ex: Antananarivo"
-                                readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="partner_id_card_duplicate_date" readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
+                            <field name="partner_id_card_duplicate_date" readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_id_card_duplicate_place" placeholder="Ex: Antananarivo"
-                                readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="partner_birth_date" readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
+                            <field name="partner_birth_date" readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_birth_place" placeholder="Ex: Antananarivo"
-                                readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="partner_marital_status" readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
+                            <field name="partner_marital_status" readonly="state not in ('draft', 'visite')"/>
                         </group>
                         <group>
-                            <field name="partner_address_changed" readonly="state not in ('draft', 'field_survey')"/>
+                            <field name="partner_address_changed" readonly="state not in ('draft', 'visite')"/>
                             <!-- partner_current_address/partner_phone : jamais gelés, même hors Brouillon/Enquête
                                  terrain (cf. docstring du modèle) — toujours modifiables. -->
                             <field name="partner_current_address" placeholder="Adresse complète actuelle"/>
                             <field name="partner_fokontany" placeholder="Fokontany"
-                                readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="partner_address_since" readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="partner_housing_status" readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
+                            <field name="partner_address_since" readonly="state not in ('draft', 'visite')"/>
+                            <field name="partner_housing_status" readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_agency_distance_km" placeholder="Ex: 12"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_phone" placeholder="Ex: 034 12 345 67"/>
                             <field name="partner_phone_type"/>
                             <field name="partner_phone_type_detail" placeholder="Précisez" invisible="partner_phone_type != 'other'"/>
                             <field name="partner_reference_contact_name" placeholder="Nom de la personne de référence"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_reference_contact_phone" placeholder="Ex: 034 12 345 67"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                         </group>
                     </group>
                     <group string="2. Conjoint(e)" invisible="partner_marital_status != 'married'">
                         <group>
                             <field name="spouse_name" placeholder="Nom et prénom du conjoint"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="spouse_id_card_number" placeholder="N° CIN du conjoint"
-                                readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="spouse_id_card_issue_date" readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
+                            <field name="spouse_id_card_issue_date" readonly="state not in ('draft', 'visite')"/>
                             <field name="spouse_id_card_issue_place" placeholder="Ex: Antananarivo"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="spouse_address" placeholder="Adresse du conjoint"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="spouse_fokontany" placeholder="Fokontany du conjoint"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                         </group>
                         <group>
                             <field name="spouse_profession" placeholder="Profession du conjoint"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="spouse_employer" placeholder="Nom de l'employeur, le cas échéant"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="spouse_phone" placeholder="Ex: 034 12 345 67"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="union_duration" placeholder="Ex: 5 ans"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                         </group>
                     </group>
                     <group string="3. Enfants et personnes à charge">
@@ -231,27 +231,27 @@
                         <group string="Identité">
                             <field name="guarantor_partner_id" placeholder="Rechercher ou créer le garant..."/>
                             <field name="guarantor_id_card_number" placeholder="N° CIN" widget="microfinance_grouped_digits"
-                                readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="guarantor_id_card_issue_date" readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
+                            <field name="guarantor_id_card_issue_date" readonly="state not in ('draft', 'visite')"/>
                             <field name="guarantor_id_card_issue_place" placeholder="Ex: Antananarivo"
-                                readonly="state not in ('draft', 'field_survey')"/>
-                            <field name="guarantor_id_card_duplicate_date" readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
+                            <field name="guarantor_id_card_duplicate_date" readonly="state not in ('draft', 'visite')"/>
                             <field name="guarantor_id_card_duplicate_place" placeholder="Ex: Antananarivo"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                         </group>
                         <group string="Adresse et contact">
                             <field name="guarantor_address" placeholder="Adresse complète"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="guarantor_fokontany" placeholder="Fokontany"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="guarantor_profession" placeholder="Profession du garant"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <field name="guarantor_employer" placeholder="Nom de l'employeur, le cas échéant"
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                             <!-- guarantor_phone : jamais gelé, comme partner_phone sur le Bloc A. -->
                             <field name="guarantor_phone" placeholder="Ex: 034 12 345 67"/>
                             <field name="guarantor_relationship_with_borrower" placeholder="Ex: Frère, voisin, collègue..."
-                                readonly="state not in ('draft', 'field_survey')"/>
+                                readonly="state not in ('draft', 'visite')"/>
                         </group>
                     </group>
                     <field name="guarantor_surveyor_comment" placeholder="Commentaire de l'enquêteur..."/>
@@ -593,7 +593,7 @@
     </record>
 
     <record id="action_microfinance_loan_application" model="ir.actions.act_window">
-        <field name="name">Dossiers d'instruction de crédit</field>
+        <field name="name">Enquêtes</field>
         <field name="res_model">microfinance.loan.application</field>
         <field name="view_mode">kanban,tree,form</field>
     </record>

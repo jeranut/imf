@@ -4,12 +4,14 @@
     'version': '17.0.1.0.0',
     'category': 'Tools',
     'summary': "Assistant de remise à zéro des données transactionnelles microfinance "
-               "(crédits, épargne, comptabilité) par agence.",
+               "(dossiers d'instruction, crédits, épargne, comptabilité) par agence.",
     'description': """
 Assistant de RAZ des données transactionnelles microfinance, agence par agence.
 
-Vide, pour les agences (res.company) sélectionnées : les crédits et leur
-échéancier, les remboursements, les visites de recouvrement, les garanties et
+Vide, pour les agences (res.company) sélectionnées : les dossiers d'instruction
+et leurs sous-lignes (visites terrain, section financière, documents, garant),
+les crédits et leur échéancier, les comptes crédit conteneurs (historique par
+client), les remboursements, les visites de recouvrement, les garanties et
 lignes de scoring liées, l'historique de rééchelonnement, les comptes et
 transactions d'épargne, ainsi que les écritures comptables (account.move)
 générées par ces opérations (décaissement, remboursement, frais, radiation,

@@ -14,6 +14,10 @@
                     invisible="not context.get('microfinance_context')">
                     <field name="microfinance_loan_count" widget="statinfo" string="Crédit"/>
                 </button>
+                <button class="oe_stat_button" type="object" name="action_view_microfinance_loan_account" icon="fa-folder-open"
+                    invisible="not context.get('microfinance_context')">
+                    <field name="microfinance_loan_account_loan_count" widget="statinfo" string="Compte crédit"/>
+                </button>
             </xpath>
 
             <!-- Radio 2 boutons (Particulier/Société) en remplacement du radio natif. microfinance_partner_type

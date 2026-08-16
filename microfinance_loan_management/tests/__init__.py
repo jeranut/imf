@@ -43,7 +43,6 @@ from . import test_social_category_grid
 from . import test_field_visit
 from . import test_application_workflow
 from . import test_loan_progressive_program
-from . import test_loan_creation_lock
 from . import test_partner_credit_selection
 from . import test_partner_account_number
 from . import test_application_kyc_sync
@@ -52,3 +51,4 @@ from . import test_application_survey_pagination
 from . import test_application_guarantor_document_wizards
 from . import test_application_activity
 from . import test_application_financial_section
+from . import test_loan_account

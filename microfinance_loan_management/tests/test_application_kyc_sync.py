@@ -5,7 +5,7 @@ from .common import MicrofinanceCommon
 class TestApplicationKycSync(MicrofinanceCommon):
     """Synchronisation du Bloc A (fiche d'enquête, microfinance.loan.application) avec
     res.partner (client + conjoint) : synchronisé tant que le dossier est en cours
-    (draft/field_survey), gelé au-delà — sauf partner_current_address/partner_phone, toujours
+    (draft/visite), gelé au-delà — sauf partner_current_address/partner_phone, toujours
     modifiables (cf. prompt correctif synchronisation du Bloc A)."""
 
     @classmethod
@@ -41,6 +41,7 @@ class TestApplicationKycSync(MicrofinanceCommon):
             'microfinance_next_of_kin_name': 'Contact Urgence',
             'microfinance_next_of_kin_phone': '0341112233',
             'microfinance_spouse_id': cls.spouse.id,
+            'microfinance_spouse_phone': '0340009988',
             'street': 'Rue du client',
             'phone': '0340001122',
         })
@@ -84,9 +85,9 @@ class TestApplicationKycSync(MicrofinanceCommon):
 
     def test_partner_change_after_analysis_does_not_resync(self):
         application = self._create_application()
-        application.action_start_field_survey()
-        application.action_start_analysis()
-        self.assertEqual(application.state, 'analysis')
+        application.action_start_visite()
+        application.action_start_contre_visite()
+        self.assertEqual(application.state, 'contre_visite')
         frozen_profession = application.spouse_profession
         new_profession = self.env['microfinance.profession'].create({'name': 'Profession Après Gel'})
         self.client_partner.write({'microfinance_spouse_profession': new_profession.id})
@@ -96,15 +97,15 @@ class TestApplicationKycSync(MicrofinanceCommon):
 
     def test_manual_edit_preserved_in_progress_without_partner_change(self):
         application = self._create_application()
-        application.action_start_field_survey()
+        application.action_start_visite()
         application.write({'partner_birth_place': 'Correction Enquêteur'})
         application.invalidate_recordset(['partner_birth_place'])
         self.assertEqual(application.partner_birth_place, 'Correction Enquêteur')
 
     def test_address_and_phone_remain_editable_after_freeze(self):
         application = self._create_application()
-        application.action_start_field_survey()
-        application.action_start_analysis()
+        application.action_start_visite()
+        application.action_start_contre_visite()
         application.write({
             'partner_current_address': 'Nouvelle adresse saisie après gel',
             'partner_phone': '0349998877',

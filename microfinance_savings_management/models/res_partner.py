@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import api, fields, models
+from odoo import _, api, fields, models
 
 
 class ResPartner(models.Model):
@@ -14,26 +14,41 @@ class ResPartner(models.Model):
         for partner in self:
             partner.microfinance_savings_count = len(partner.microfinance_savings_account_ids)
 
-    def _get_or_create_loan_application(self):
-        # Cette logique reste dans microfinance_savings_management (qui dépend de
-        # microfinance_loan_management), jamais l'inverse : on étend ici la méthode définie
-        # dans le module crédit plutôt que d'y ajouter une dépendance vers l'épargne.
-        application = super()._get_or_create_loan_application()
-        if application:
-            self._get_or_create_microfinance_savings_principal_account()
-        return application
+    @api.model_create_multi
+    def create(self, vals_list):
+        # Ouverture du compte épargne principal dès la création du contact client — seul
+        # déclencheur désormais (cf. correctif numérotation, décision validée par Micka :
+        # l'ancien déclencheur au 1er dossier de crédit, _get_or_create_loan_application, est
+        # supprimé). Un client déjà en base avant ce correctif et qui n'a pas encore de compte
+        # épargne n'en obtiendra plus automatiquement, même en visant un crédit plus tard —
+        # nécessiterait un script de rattrapage séparé, non demandé à ce stade.
+        # super().create() remonte jusqu'à res_partner.py (microfinance_loan_management), qui
+        # attribue microfinance_account_number avant de revenir ici — condition nécessaire pour
+        # que la dérivation du numéro de compte épargne (AGENCE/TYPE/NNNNNN) fonctionne.
+        partners = super().create(vals_list)
+        if self.env.context.get('microfinance_context'):
+            for partner in partners:
+                if partner.microfinance_partner_type == 'client':
+                    partner._get_or_create_microfinance_savings_principal_account()
+        return partners
 
     def _get_or_create_microfinance_savings_principal_account(self):
         """Ouvre (ou réutilise) le compte d'épargne principal du client sur le produit
         d'épargne par défaut de son agence (res.company.microfinance_savings_default_product_id),
-        à la création de son premier dossier d'instruction de crédit. Sans effet si l'agence n'a
-        pas encore configuré de produit d'épargne par défaut (pas une erreur : simple absence de
-        configuration) ni si un compte sur ce produit existe déjà pour ce client (idempotent,
-        comme _get_or_create_loan_application)."""
+        appelée depuis create() ci-dessus. Idempotent : sans effet si un compte sur ce produit
+        existe déjà pour ce client.
+
+        Sans effet non plus si l'agence n'a pas encore configuré de produit d'épargne par défaut
+        — choix délibéré, pas une erreur : Micka n'a pas demandé de bloquer la création du client
+        dans ce cas, le comportement reste best-effort, jamais bloquant. En revanche une
+        notification alerte l'utilisateur dans ce cas précis (demande explicite de Micka,
+        2026-08-15) : silencieux en base ne doit pas dire invisible côté agent, sinon l'absence
+        de compte épargne passe inaperçue jusqu'à ce qu'un agent la découvre par hasard."""
         self.ensure_one()
         company = self.company_id or self.env.company
         product = company.microfinance_savings_default_product_id
         if not product:
+            self._notify_microfinance_savings_default_product_missing(company)
             return False
         Account = self.env['microfinance.savings.account']
         existing = Account.search([
@@ -45,6 +60,24 @@ class ResPartner(models.Model):
             'partner_id': self.id,
             'product_id': product.id,
             'company_id': company.id,
+        })
+
+    def _notify_microfinance_savings_default_product_missing(self, company):
+        self.ensure_one()
+        message = _(
+            "Aucun compte épargne n'a été ouvert pour %(partner)s : l'agence « %(company)s » "
+            "n'a pas encore de produit d'épargne par défaut configuré.\n\n"
+            "Pour corriger : Réglages → Utilisateurs & Sociétés → Sociétés → %(company)s, "
+            "renseigner le champ « Produit d'épargne par défaut » (accès manager crédit "
+            "requis). Les prochains clients de cette agence auront alors leur compte ouvert "
+            "automatiquement — ce client-ci devra être traité manuellement si un compte est "
+            "nécessaire dès maintenant."
+        ) % {'partner': self.name, 'company': company.name}
+        self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
+            'type': 'warning',
+            'title': _('Compte épargne non ouvert'),
+            'message': message,
+            'sticky': True,
         })
 
     def action_view_microfinance_savings(self):

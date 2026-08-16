@@ -20,6 +20,13 @@
         <field name="groups" eval="[]"/>
     </record>
 
+    <record id="microfinance_loan_account_company_rule" model="ir.rule">
+        <field name="name">Microfinance compte crédit : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_loan_account"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
     <!-- microfinance.loan.application (dossier d'instruction) n'est pas encore câblé dans le
          module (absent de models/__init__.py, d'ir.model.access.csv et de toute vue) : le
          modèle n'existe pas dans le registre Odoo tant que cet import manque. Règle omise ici

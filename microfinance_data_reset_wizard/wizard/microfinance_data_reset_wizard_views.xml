@@ -9,9 +9,10 @@
                 <div class="alert alert-danger" role="alert">
                     <strong>⚠️ Action irréversible.</strong>
                     Ce module supprime définitivement des données microfinance
-                    (crédits, échéanciers, remboursements, garanties, scoring, visites
-                    de recouvrement, comptes et transactions d'épargne, écritures
-                    comptables liées) pour les agences sélectionnées.
+                    (crédits, comptes crédit conteneurs, dossiers d'instruction, échéanciers,
+                    remboursements, garanties, scoring, visites de recouvrement, comptes et
+                    transactions d'épargne, écritures comptables liées) pour les agences
+                    sélectionnées.
                     Les clients (res.partner), les produits de crédit/épargne, les
                     profils de scoring, le plan comptable et la configuration des
                     sociétés ne sont jamais touchés.
@@ -31,6 +32,8 @@
                        invisible="state != 'draft'">
                     <group>
                         <field name="do_loans"/>
+                        <field name="do_loan_accounts"/>
+                        <field name="do_loan_applications"/>
                         <field name="do_loan_installments"/>
                         <field name="do_loan_payments"/>
                         <field name="do_loan_guarantees"/>

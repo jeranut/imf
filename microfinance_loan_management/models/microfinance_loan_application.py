@@ -39,34 +39,14 @@ class MicrofinanceLoanApplication(models.Model):
     _order = 'id desc'
 
     # Transitions autorisées du cycle de vie (un pas en avant, ou retour d'un pas pour
-    # correction). Le passage vers loan_created n'est possible que via action_create_loan().
+    # correction). Cycle recentré sur son vrai rôle (visite/contre-visite) depuis la
+    # restructuration du workflow de microfinance.loan : l'instruction (analyse, comité,
+    # avis CA/CDAG, acceptation) vit désormais sur le crédit lui-même.
     ALLOWED_TRANSITIONS = {
-        'draft': {'field_survey'},
-        'field_survey': {'draft', 'analysis'},
-        'analysis': {'field_survey', 'committee'},
-        'committee': {'analysis', 'ca_review'},
-        'ca_review': {'committee', 'cdag_review'},
-        'cdag_review': {'ca_review', 'accepted', 'accepted_condition', 'refused'},
-        'accepted': {'cdag_review', 'loan_created'},
-        'accepted_condition': {'cdag_review', 'loan_created'},
-        'refused': {'cdag_review'},
-        'loan_created': set(),
-    }
-
-    # Rôle minimum requis pour amener un dossier vers chaque état (double contrôle : ordre
-    # du cycle de vie ET rôle). Le manager crédit passe outre le contrôle de rôle (mais
-    # jamais celui de l'ordre).
-    STATE_TARGET_GROUP = {
-        'draft': 'microfinance_loan_management.group_application_surveyor',
-        'field_survey': 'microfinance_loan_management.group_application_surveyor',
-        'analysis': 'microfinance_loan_management.group_application_surveyor',
-        'committee': 'microfinance_loan_management.group_application_surveyor',
-        'ca_review': 'microfinance_loan_management.group_application_ca',
-        'cdag_review': 'microfinance_loan_management.group_application_cdag',
-        'accepted': 'microfinance_loan_management.group_application_cdag',
-        'accepted_condition': 'microfinance_loan_management.group_application_cdag',
-        'refused': 'microfinance_loan_management.group_application_cdag',
-        'loan_created': 'microfinance_loan_management.group_application_cdag',
+        'draft': {'visite'},
+        'visite': {'draft', 'contre_visite'},
+        'contre_visite': {'visite', 'fait'},
+        'fait': {'contre_visite'},
     }
 
     # ------------------------------------------------------------------
@@ -98,15 +78,9 @@ class MicrofinanceLoanApplication(models.Model):
     partner_id = fields.Many2one('res.partner', string='Client / Emprunteur potentiel', required=True, tracking=True)
     state = fields.Selection([
         ('draft', 'Brouillon'),
-        ('field_survey', 'Enquête terrain'),
-        ('analysis', 'Analyse'),
-        ('committee', 'Soumis comité'),
-        ('ca_review', 'Avis CA'),
-        ('cdag_review', 'Avis CDAG'),
-        ('accepted', 'Accepté'),
-        ('accepted_condition', 'Accepté sous condition'),
-        ('refused', 'Refusé'),
-        ('loan_created', 'Transformé en crédit'),
+        ('visite', 'Visite'),
+        ('contre_visite', 'Contre-Visite'),
+        ('fait', 'Fait'),
     ], string='État', default='draft', tracking=True, index=True, group_expand=True)
     kanban_color = fields.Integer(string='Couleur kanban', compute='_compute_kanban_color')
     # Pagination de la fiche d'enquête (3 pages, cf. _SURVEY_PAGES ci-dessous pour l'ordre de
@@ -149,8 +123,8 @@ class MicrofinanceLoanApplication(models.Model):
     # Bloc A — Identité complète (KYC, figée au moment de l'enquête)
     # ------------------------------------------------------------------
     # Synchronisé depuis res.partner (client + conjoint) tant que le dossier est en cours
-    # (draft/field_survey) : cf. _compute_kyc_from_partner (section Calculs ci-dessous). Gelé
-    # dès le passage en analysis et au-delà (plus aucune resynchronisation, valeurs figées pour
+    # (draft/visite) : cf. _compute_kyc_from_partner (section Calculs ci-dessous). Gelé dès le
+    # passage en contre-visite et au-delà (plus aucune resynchronisation, valeurs figées pour
     # l'audit) — sauf partner_current_address et partner_phone, volontairement en dehors de ce
     # mécanisme (toujours éditables, jamais recalculés ni gelés, simple pré-remplissage à la
     # création, cf. create()/_onchange_partner_id_prefill_contact_fields ci-dessous).
@@ -280,7 +254,7 @@ class MicrofinanceLoanApplication(models.Model):
     # enregistrement — abandon de l'architecture wizard/modèle-ligne (cf. STATUS.md, décision du
     # 2026-07-18). guarantor_partner_id n'est jamais gelé (identité du garant, comme partner_id
     # lui-même) ; guarantor_address/guarantor_profession suivent le même gel que le Bloc A
-    # (compute/store/readonly=False, figés hors draft/field_survey) ; guarantor_phone reste
+    # (compute/store/readonly=False, figés hors draft/visite) ; guarantor_phone reste
     # toujours modifiable (même exception que partner_phone) ; les autres champs sont saisis à
     # la main (aucun équivalent sur res.partner) et gelés uniquement via la vue (comme
     # partner_nickname).
@@ -578,9 +552,10 @@ class MicrofinanceLoanApplication(models.Model):
     # Calculs
     # ------------------------------------------------------------------
     # États considérés "en cours" pour la synchronisation du Bloc A : cohérents avec les seuls
-    # états antérieurs à la transformation effective du dossier (cf. STATE_TARGET_GROUP/
-    # ALLOWED_TRANSITIONS ci-dessus) — confirmé avec Micka lors du correctif de synchronisation.
-    _KYC_IN_PROGRESS_STATES = ('draft', 'field_survey')
+    # états antérieurs à la contre-visite (cf. ALLOWED_TRANSITIONS ci-dessus) — confirmé avec
+    # Micka lors du correctif de synchronisation d'origine, adapté au cycle à 4 états
+    # (draft/visite/contre_visite/fait) lors de la simplification du workflow.
+    _KYC_IN_PROGRESS_STATES = ('draft', 'visite')
 
     # (nom du champ dossier, fonction extrayant la valeur source depuis res.partner) — le
     # conjoint est lu via partner.microfinance_spouse_id (contact complet, jamais dupliqué sur
@@ -627,7 +602,7 @@ class MicrofinanceLoanApplication(models.Model):
     )
     def _compute_kyc_from_partner(self):
         """Bloc A synchronisé depuis res.partner (client + conjoint) tant que le dossier est en
-        cours (draft/field_survey). Dès qu'il en sort (analysis et au-delà), les champs listés
+        cours (draft/visite). Dès qu'il en sort (contre-visite et au-delà), les champs listés
         dans _KYC_FIELD_SOURCES sont gelés : on les réaffecte explicitement à leur propre
         valeur (un compute readonly=False stocké doit fixer une valeur pour chaque champ à
         chaque appel, sous peine d'être vidé par l'ORM) plutôt que de les recalculer depuis la
@@ -822,9 +797,7 @@ class MicrofinanceLoanApplication(models.Model):
     @api.depends('state')
     def _compute_kanban_color(self):
         color_by_state = {
-            'draft': 0, 'field_survey': 4, 'analysis': 5, 'committee': 3,
-            'ca_review': 2, 'cdag_review': 6, 'accepted': 10,
-            'accepted_condition': 8, 'refused': 1, 'loan_created': 7,
+            'draft': 0, 'visite': 4, 'contre_visite': 5, 'fait': 10,
         }
         for application in self:
             application.kanban_color = color_by_state.get(application.state, 0)
@@ -891,7 +864,7 @@ class MicrofinanceLoanApplication(models.Model):
 
     # États du dossier considérés "en cours" pour la synchronisation garant — mêmes valeurs que
     # _KYC_IN_PROGRESS_STATES (Bloc A), pas de dépendance directe entre les deux constantes.
-    _GUARANTOR_SYNC_IN_PROGRESS_STATES = ('draft', 'field_survey')
+    _GUARANTOR_SYNC_IN_PROGRESS_STATES = ('draft', 'visite')
     _GUARANTOR_KYC_FIELD_SOURCES = (
         ('guarantor_address', lambda partner: ', '.join(filter(None, [partner.street, partner.street2]))),
         ('guarantor_profession', lambda partner: partner.microfinance_profession.name),
@@ -904,7 +877,7 @@ class MicrofinanceLoanApplication(models.Model):
     def _compute_guarantor_kyc_from_partner(self):
         """Adresse/profession du garant : même patron de gel que le Bloc A
         (_compute_kyc_from_partner) — synchronisées depuis guarantor_partner_id tant que le
-        dossier est en cours (draft/field_survey), figées au-delà."""
+        dossier est en cours (draft/visite), figées au-delà."""
         for application in self:
             if application.state not in self._GUARANTOR_SYNC_IN_PROGRESS_STATES:
                 for field_name, _source in self._GUARANTOR_KYC_FIELD_SOURCES:
@@ -1098,17 +1071,13 @@ class MicrofinanceLoanApplication(models.Model):
                 'new': state_labels.get(new, new),
                 'allowed': ', '.join(state_labels[state] for state in self.ALLOWED_TRANSITIONS.get(current, set())) or _('aucune'),
             })
-        if new == 'loan_created' and not self.env.context.get('application_create_loan'):
-            raise UserError(_('Le passage à "Transformé en crédit" se fait uniquement via le bouton "Créer le crédit".'))
-        if not self.env.is_superuser() and not self.env.user.has_group('microfinance_loan_management.group_microfinance_manager'):
-            required_group = self.STATE_TARGET_GROUP.get(new)
-            if required_group and not self.env.user.has_group(required_group):
-                raise UserError(_(
-                    'Vous n\'avez pas le rôle requis pour amener un dossier à l\'étape "%s".'
-                ) % state_labels.get(new, new))
-        if new == 'committee':
-            self._check_committee_eligibility()
-
+    # TODO(fusion): _check_committee_eligibility() n'a plus de point d'accroche dans ce
+    # cycle à 4 états (draft/visite/contre_visite/fait) depuis la restructuration du
+    # workflow de microfinance.loan — orpheline, plus jamais appelée depuis
+    # _check_state_transition ci-dessus. Elle doit être rattachée à une étape du workflow
+    # de microfinance.loan (probablement action_ca_review), à trancher avec Micka. Ne pas
+    # supprimer la méthode ni son test (test_application_workflow.py) : ils doivent rester
+    # visibles comme "à refaire", pas disparaître silencieusement.
     def _check_committee_eligibility(self):
         """Contrôle d'éligibilité avant soumission au comité. Sans objet pour un premier
         prêt (loan_sequence_number == 1) ; pour un rang supérieur, le contrôle §3bis.4
@@ -1167,6 +1136,13 @@ class MicrofinanceLoanApplication(models.Model):
         Application = self.env['microfinance.loan.application']
         if self.loan_sequence_number <= 1 or not self.partner_id:
             return Application
+        # TODO(fusion): 'loan_created' n'existe plus dans le cycle à 4 états (cf. TODO sur
+        # _check_committee_eligibility ci-dessus) — ce filtre ne correspondra donc plus
+        # jamais à rien. Seul appelant : _check_previous_loan_requirements(), lui-même
+        # orphelin (uniquement atteint depuis _check_committee_eligibility, plus jamais
+        # appelée). Laissé tel quel intentionnellement : à corriger (probablement
+        # ('loan_id', '!=', False)) en même temps que le rattachement du contrôle
+        # d'éligibilité, pas séparément.
         prior_applications = Application.search([
             ('company_id', '=', self.company_id.id),
             ('partner_id', '=', self.partner_id.id),
@@ -1177,30 +1153,15 @@ class MicrofinanceLoanApplication(models.Model):
             return prior_applications[index]
         return Application
 
-    # Boutons d'étape du formulaire — la validation (ordre + rôle) est portée par write().
-    def action_start_field_survey(self):
-        self.write({'state': 'field_survey'})
+    # Boutons d'étape du formulaire — la validation (ordre) est portée par write().
+    def action_start_visite(self):
+        self.write({'state': 'visite'})
 
-    def action_start_analysis(self):
-        self.write({'state': 'analysis'})
+    def action_start_contre_visite(self):
+        self.write({'state': 'contre_visite'})
 
-    def action_submit_committee(self):
-        self.write({'state': 'committee'})
-
-    def action_ca_review(self):
-        self.write({'state': 'ca_review', 'ca_responsible_id': self.env.user.id})
-
-    def action_cdag_review(self):
-        self.write({'state': 'cdag_review'})
-
-    def action_accept(self):
-        self.write({'state': 'accepted'})
-
-    def action_accept_condition(self):
-        self.write({'state': 'accepted_condition'})
-
-    def action_refuse(self):
-        self.write({'state': 'refused'})
+    def action_mark_fait(self):
+        self.write({'state': 'fait'})
 
     def action_reset_to_draft(self):
         self.write({'state': 'draft'})
@@ -1227,24 +1188,6 @@ class MicrofinanceLoanApplication(models.Model):
                 'Données d\'identité synchronisées vers la fiche contact %s (téléphone, adresse, fokontany).'
             ) % application.partner_id.display_name)
         return True
-
-    def action_create_loan(self):
-        """Ouvre le wizard de transformation en crédit. Le produit est choisi manuellement
-        par l'agent à cette étape (jamais deviné automatiquement) ; toute la logique
-        d'approbation/décaissement reste sur microfinance.loan."""
-        self.ensure_one()
-        if self.state not in ('accepted', 'accepted_condition'):
-            raise UserError(_('Le crédit ne peut être créé que pour un dossier accepté (avec ou sans condition).'))
-        if self.loan_id:
-            raise UserError(_('Un crédit a déjà été créé pour ce dossier : %s.') % self.loan_id.name)
-        return {
-            'type': 'ir.actions.act_window',
-            'name': _('Créer le crédit'),
-            'res_model': 'microfinance.loan.application.create.loan.wizard',
-            'view_mode': 'form',
-            'target': 'new',
-            'context': {'default_application_id': self.id},
-        }
 
     def action_view_loan(self):
         self.ensure_one()

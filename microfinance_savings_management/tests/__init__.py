@@ -12,3 +12,4 @@ from . import test_product_code_sequence
 from . import test_agency_numbering
 from . import test_cheque_workflow
 from . import test_savings_account_number_derivation
+from . import test_savings_principal_account_on_create

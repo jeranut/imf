@@ -58,4 +58,4 @@ class TestGuaranteeValuation(MicrofinanceCommon):
         })
         self.assertAlmostEqual(loan.guarantee_total, 400.0, places=2)
         with self.assertRaises(UserError):
-            loan.action_submit()
+            loan.action_start_enquete()

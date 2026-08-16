@@ -2,6 +2,13 @@
 
 Audit uniquement, aucune modification de code/vue/menu/donnée effectuée.
 
+> **⚠️ Conclusion reversée le 2026-08-16.** L'Option A mise en œuvre le 2026-07-18 (voir note
+> ci-dessous) a été annulée sur décision de Micka : le crédit est redevenu créable
+> directement depuis le menu "Crédits", sans dossier d'instruction ni wizard. Voir
+> `docs_dev/creation_credit_directe/STATUS.md` pour le détail de la réversion. Ce document et
+> la note de mise en œuvre ci-dessous restent tels quels comme trace historique de l'analyse
+> ayant motivé la décision d'origine — leur recommandation ne s'applique plus.
+
 > **Mise en œuvre (2026-07-18)** : l'Option A (section 6) a été implémentée — voir
 > `docs_dev/point_entree_unique_credit/STATUS.md` pour le détail des 4 lots (verrou serveur
 > sur `microfinance.loan.create()`, menu "Demande de crédit" renommé "Crédits" en

@@ -139,8 +139,8 @@ class TestApplicationGuarantorForm(MicrofinanceCommon):
             'name': 'RAKOTO Jean', 'phone': '0341234567',
         })
         application.guarantor_partner_id = guarantor_contact
-        application.action_start_field_survey()
-        application.action_start_analysis()
+        application.action_start_visite()
+        application.action_start_contre_visite()
         guarantor_contact.phone = '0349999999'
         application.invalidate_recordset(['guarantor_phone'])
         self.assertEqual(application.guarantor_phone, '0349999999')
@@ -161,8 +161,8 @@ class TestApplicationGuarantorForm(MicrofinanceCommon):
         })
         application = self._create_application()
         application.guarantor_partner_id = guarantor_contact
-        application.action_start_field_survey()
-        application.action_start_analysis()
+        application.action_start_visite()
+        application.action_start_contre_visite()
         frozen_value = application.guarantor_profession
         new_profession = self.env['microfinance.profession'].create({'name': 'Nouvelle Profession Garant'})
         guarantor_contact.microfinance_profession = new_profession.id

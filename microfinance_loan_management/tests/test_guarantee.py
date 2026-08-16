@@ -20,7 +20,7 @@ class TestGuarantee(MicrofinanceCommon):
         self.product.guarantee_required = True
         loan = self._create_loan()
         with self.assertRaises(UserError):
-            loan.action_submit()
+            loan.action_start_enquete()
 
     def test_submit_allowed_once_guarantee_validated(self):
         self.product.guarantee_required = True
@@ -32,8 +32,8 @@ class TestGuarantee(MicrofinanceCommon):
             'estimated_value': 5000.0,
             'state': 'validated',
         })
-        loan.action_submit()
-        self.assertEqual(loan.state, 'submitted')
+        loan.action_start_enquete()
+        self.assertEqual(loan.state, 'enquete')
 
     def test_submit_blocked_when_guarantee_ratio_not_met(self):
         self.product.min_guarantee_ratio = 50.0
@@ -46,7 +46,7 @@ class TestGuarantee(MicrofinanceCommon):
             'state': 'validated',
         })
         with self.assertRaises(UserError):
-            loan.action_submit()
+            loan.action_start_enquete()
 
     def test_submit_allowed_when_guarantee_ratio_met(self):
         self.product.min_guarantee_ratio = 50.0
@@ -58,8 +58,8 @@ class TestGuarantee(MicrofinanceCommon):
             'estimated_value': 600.0,
             'state': 'validated',
         })
-        loan.action_submit()
-        self.assertEqual(loan.state, 'submitted')
+        loan.action_start_enquete()
+        self.assertEqual(loan.state, 'enquete')
 
     def test_guarantees_released_on_close(self):
         loan = self._activate_loan(loan_amount=300.0, term=1)

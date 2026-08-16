@@ -140,7 +140,7 @@ class TestRepaymentScheduleReport(MicrofinanceCommon):
             'company_id': company.id,
         })
         partner = self.env['res.partner'].create({'name': 'Client Agence %s' % label})
-        loan = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
+        loan = self.env['microfinance.loan'].create({
             'partner_id': partner.id,
             'product_id': product.id,
             'company_id': company.id,

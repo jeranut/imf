@@ -80,9 +80,9 @@ maturity_date (Datetime)             # Date d'échéance théorique
 
 ```
 draft                                # Brouillon
-submitted                            # Soumis
-manager_validated                    # Validé manager
-finance_validated                    # Validé finance
+enquete                              # Enquête
+avis_ca                              # Avis CA
+avis_cdag                            # Avis CDAG
 approved                             # Approuvé
 active                               # Actif (décaissé)
 closed                               # Clôturé (remboursé)
@@ -107,10 +107,10 @@ risk_score (Float)                   # Score de risque 0-100
 #### Méthodes clés
 
 **Workflow actions** :
-- `action_submit()` : Brouillon → Soumis
-- `action_manager_validate()` : Soumis → Manager Validated
-- `action_finance_validate()` : Manager Validated → Finance Validated
-- `action_approve()` : Finance Validated → Approved
+- `action_start_enquete()` : Brouillon → Enquête
+- `action_ca_review()` : Enquête → Avis CA
+- `action_cdag_review()` : Avis CA → Avis CDAG
+- `action_approve()` : Avis CDAG → Approved
 - `action_disburse()` : Approved → Active (crée l'écriture comptable)
 - `action_close()` : Active → Closed
 - `action_mark_default()` : Active → Defaulted

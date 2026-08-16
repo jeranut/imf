@@ -76,6 +76,27 @@ class MicrofinanceDataResetWizard(models.TransientModel):
              "restrict). Les écritures de décaissement/frais/radiation sont traitées par "
              "le bloc comptable ci-dessous, pas ici.",
     )
+    do_loan_accounts = fields.Boolean(
+        string="Comptes crédit conteneurs (microfinance.loan.account)", default=True,
+        help="Conteneur regroupant l'historique des crédits d'un client par société (cf. "
+             "correctif numérotation). microfinance.loan.loan_account_id est en "
+             "ondelete='set null', pas 'restrict' : aucune contrainte d'ordre réelle avec le "
+             "bloc Crédits ci-dessus, mais traité juste après par lisibilité narrative "
+             "(conteneur vidé après son contenu). Sans ce bloc, un conteneur vidé de tous ses "
+             "crédits reste orphelin en base après une RAZ — jamais supprimé par le bloc "
+             "Crédits lui-même, qui ne touche que microfinance.loan.",
+    )
+    do_loan_applications = fields.Boolean(
+        string="Dossiers d'instruction (microfinance.loan.application)", default=True,
+        help="Bloc indépendant du bloc Crédits ci-dessus : loan_id (crédit transformé) "
+             "est en ondelete='set null' dans les deux sens (res_partner."
+             "microfinance_current_loan_application_id également), donc aucune contrainte "
+             "d'ordre entre les deux, qu'un dossier ait ou non déjà été transformé en "
+             "crédit. Les sous-lignes (visites terrain, lignes financières, documents, "
+             "garant/dépendants) sont en ondelete='cascade' vers application_id au niveau "
+             "base de données : disparaissent automatiquement, jamais traitées "
+             "séparément ici.",
+    )
     do_savings_transactions = fields.Boolean(
         string="Transactions d'épargne (microfinance.savings.transaction)", default=True,
         help="account_id est en ondelete='restrict' : doivent être supprimées avant le "
@@ -205,12 +226,16 @@ class MicrofinanceDataResetWizard(models.TransientModel):
             n_payments = self.env['microfinance.loan.payment'].sudo().search_count([('company_id', '=', cid)])
             n_installments = self.env['microfinance.loan.installment'].sudo().search_count([('company_id', '=', cid)])
             n_loans = self.env['microfinance.loan'].sudo().search_count([('company_id', '=', cid)])
+            n_loan_accounts = self.env['microfinance.loan.account'].sudo().search_count([('company_id', '=', cid)])
+            n_applications = self.env['microfinance.loan.application'].sudo().search_count([('company_id', '=', cid)])
             n_sav_txn = self.env['microfinance.savings.transaction'].sudo().search_count([('company_id', '=', cid)])
             n_sav_acc = self.env['microfinance.savings.account'].sudo().search_count([('company_id', '=', cid)])
             n_moves = Move.search_count(self._accounting_domain(cid))
             lines.append(
                 f"[{cid}] {company.name} : "
-                f"{n_loans} crédits, {n_installments} échéances, {n_payments} remboursements, "
+                f"{n_loans} crédits, {n_loan_accounts} comptes crédit conteneurs, "
+                f"{n_applications} dossiers d'instruction, "
+                f"{n_installments} échéances, {n_payments} remboursements, "
                 f"{n_guarantees} garanties, {n_scoring} lignes de scoring, "
                 f"{n_reschedule} historiques de rééchelonnement, {n_visits} visites de recouvrement, "
                 f"{n_sav_acc} comptes épargne, {n_sav_txn} transactions épargne, "
@@ -391,6 +416,10 @@ class MicrofinanceDataResetWizard(models.TransientModel):
     # Les blocs purement cascade (collection_visit, guarantee, scoring_line,
     # reschedule_history) sont traités en premier, explicitement, pour un journal
     # détaillé — leur ordre entre eux n'a pas d'impact fonctionnel.
+    # loan_application est un bloc à part, sans contrainte d'ordre avec le reste (cf.
+    # docstring de do_loan_applications ci-dessus) : sa position dans cette méthode
+    # n'a pas d'impact fonctionnel non plus, placé après loans par lisibilité
+    # narrative (dossier → crédit) uniquement.
     # ------------------------------------------------------------------
     def _process_company(self, cid, company_name, dry_run, stats):
         lines = []
@@ -466,6 +495,20 @@ class MicrofinanceDataResetWizard(models.TransientModel):
                 "crédits", cid, company_name, dry_run, stats,
             )
             lines.append(f"  - {n} microfinance.loan supprimés (par lots de {self._BATCH_SIZE})")
+
+        if self.do_loan_accounts:
+            n = self._batch_unlink(
+                'microfinance.loan.account', [('company_id', '=', cid)],
+                "comptes crédit conteneurs", cid, company_name, dry_run, stats,
+            )
+            lines.append(f"  - {n} microfinance.loan.account supprimés (par lots de {self._BATCH_SIZE})")
+
+        if self.do_loan_applications:
+            n = self._batch_unlink(
+                'microfinance.loan.application', [('company_id', '=', cid)],
+                "dossiers d'instruction", cid, company_name, dry_run, stats,
+            )
+            lines.append(f"  - {n} microfinance.loan.application supprimés (par lots de {self._BATCH_SIZE}, sous-lignes en cascade)")
 
         if self.do_savings_transactions:
             n = self._batch_unlink(

@@ -3,8 +3,9 @@ from .common import SavingsCommon
 
 
 class TestAgencyNumbering(SavingsCommon):
-    """Numérotation AGENCE/TYPE/SÉRIE pour microfinance.savings.account, TYPE dérivé du type de
-    client (I individuel / G groupe / E entreprise) sauf pour un produit à terme, toujours T."""
+    """Numérotation AGENCE/TYPE/SÉRIE pour microfinance.savings.account, TYPE dérivé de la
+    catégorie du produit (I volontaire/classique, G obligatoire/garantie, T à terme) —
+    jamais du titulaire du compte."""
 
     @classmethod
     def setUpClass(cls):
@@ -34,6 +35,13 @@ class TestAgencyNumbering(SavingsCommon):
             'account_epargne_groupe_id': cls.account_isotry.id,
             'account_epargne_entreprise_id': cls.account_isotry.id,
         })
+        cls.company_product_guarantee_isotry = cls.env['microfinance.savings.product'].create({
+            'name': 'Épargne garantie Isotry (test)', 'code': 'SAVXIG', 'product_type': 'compulsory', 'company_id': cls.company_isotry.id,
+            'interest_rate': 0.0, 'balance_method': 'min_balance', 'capitalization_frequency': 'monthly',
+            'account_epargne_individuel_id': cls.account_isotry.id,
+            'account_epargne_groupe_id': cls.account_isotry.id,
+            'account_epargne_entreprise_id': cls.account_isotry.id,
+        })
         cls.partner_individual = cls.env['res.partner'].create({
             'name': 'Client individuel test (numérotation)', 'microfinance_client_type': 'individual',
         })
@@ -59,7 +67,7 @@ class TestAgencyNumbering(SavingsCommon):
         vals.update(kwargs)
         return vals
 
-    def test_individual_numbering_per_agency(self):
+    def test_voluntary_numbering_per_agency(self):
         acc1 = self.env['microfinance.savings.account'].create(
             self._account_vals(self.company_isotry, self.company_product_isotry))
         acc2 = self.env['microfinance.savings.account'].create(
@@ -67,20 +75,36 @@ class TestAgencyNumbering(SavingsCommon):
         self.assertEqual(acc1.name, 'XI/I/000001')
         self.assertEqual(acc2.name, 'XI/I/000002')
 
-    def test_individual_numbering_independent_per_agency(self):
+    def test_voluntary_numbering_independent_per_agency(self):
         self.env['microfinance.savings.account'].create(
             self._account_vals(self.company_isotry, self.company_product_isotry))
         acc_other = self.env['microfinance.savings.account'].create(
             self._account_vals(self.company_ambanidia, self.company_product_ambanidia))
         self.assertEqual(acc_other.name, 'XB/I/000001')
 
-    def test_individual_and_company_types_have_independent_series(self):
+    def test_individual_and_company_partners_share_the_same_letter_for_voluntary_product(self):
+        # La lettre dépend du produit (I = volontaire/classique), plus du titulaire : un client
+        # individuel et un client entreprise sur le même produit volontaire partagent la même
+        # lettre, mais restent sur des séries numériques indépendantes (suffixe dérivé de leur
+        # propre numéro de compte permanent).
         acc_individual = self.env['microfinance.savings.account'].create(
             self._account_vals(self.company_isotry, self.company_product_isotry, partner=self.partner_individual))
         acc_company = self.env['microfinance.savings.account'].create(
             self._account_vals(self.company_isotry, self.company_product_isotry, partner=self.partner_company))
         self.assertEqual(acc_individual.name, 'XI/I/000001')
-        self.assertEqual(acc_company.name, 'XI/E/000001')
+        self.assertTrue(acc_company.name.startswith('XI/I/'))
+        self.assertNotEqual(acc_individual.name, acc_company.name)
+
+    def test_voluntary_and_guarantee_products_have_independent_series_for_same_client(self):
+        # partner_individual n'a pas de microfinance_account_number (jamais marqué 'client') :
+        # les deux comptes retombent chacun sur leur propre séquence indépendante par type,
+        # ce qui suffit à démontrer que I (volontaire) et G (garantie) ne se chevauchent pas.
+        acc_voluntary = self.env['microfinance.savings.account'].create(
+            self._account_vals(self.company_isotry, self.company_product_isotry, partner=self.partner_individual))
+        acc_guarantee = self.env['microfinance.savings.account'].create(
+            self._account_vals(self.company_isotry, self.company_product_guarantee_isotry, partner=self.partner_individual))
+        self.assertEqual(acc_voluntary.name, 'XI/I/000001')
+        self.assertEqual(acc_guarantee.name, 'XI/G/000001')
 
     def test_term_deposit_uses_type_code_t_regardless_of_client_type(self):
         acc = self.env['microfinance.savings.account'].create(

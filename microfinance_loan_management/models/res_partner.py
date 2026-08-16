@@ -129,11 +129,47 @@ class ResPartner(models.Model):
     # --- Crédit ---
     microfinance_loan_ids = fields.One2many('microfinance.loan', 'partner_id', string='Crédits')
     microfinance_loan_count = fields.Integer(compute='_compute_microfinance_loan_count')
+    microfinance_loan_account_ids = fields.One2many(
+        'microfinance.loan.account', 'partner_id', string='Compte crédit')
+    microfinance_loan_account_loan_count = fields.Integer(
+        compute='_compute_microfinance_loan_account_loan_count')
 
     @api.depends('microfinance_loan_ids')
     def _compute_microfinance_loan_count(self):
         for partner in self:
             partner.microfinance_loan_count = len(partner.microfinance_loan_ids)
+
+    @api.depends('microfinance_loan_account_ids.loan_count')
+    def _compute_microfinance_loan_account_loan_count(self):
+        for partner in self:
+            partner.microfinance_loan_account_loan_count = sum(
+                partner.microfinance_loan_account_ids.mapped('loan_count'))
+
+    def _get_or_create_microfinance_loan_account(self):
+        """Ouvre (ou réutilise) le compte crédit conteneur de ce client pour sa société — pas de
+        logique métier dessus à ce stade (cf. microfinance_loan_account.py), uniquement pour
+        éviter une migration de données plus tard. Idempotent : sans effet si un compte existe
+        déjà pour ce client et cette société (contrainte SQL unique(partner_id, company_id))."""
+        self.ensure_one()
+        company = self.company_id or self.env.company
+        Account = self.env['microfinance.loan.account']
+        existing = Account.search([
+            ('partner_id', '=', self.id), ('company_id', '=', company.id),
+        ], limit=1)
+        if existing:
+            return existing
+        return Account.create({'partner_id': self.id, 'company_id': company.id})
+
+    def action_view_microfinance_loan_account(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': 'Compte crédit',
+            'res_model': 'microfinance.loan.account',
+            'view_mode': 'tree,form',
+            'domain': [('partner_id', '=', self.id)],
+            'context': {'default_partner_id': self.id},
+        }
 
     def action_view_microfinance_loans(self):
         self.ensure_one()
@@ -147,10 +183,11 @@ class ResPartner(models.Model):
         }
 
     # --- Crédit : sélection produit (indépendant / progressif) et dossier courant ---
-    # États du dossier considérés comme non terminaux pour la réutilisation : tout état sauf
-    # 'refused' (rejeté, un nouveau dossier peut être retenté) et 'loan_created' (dossier déjà
-    # transformé en crédit, cf. microfinance.loan.application.ALLOWED_TRANSITIONS).
-    _CREDIT_APPLICATION_TERMINAL_STATES = ('refused', 'loan_created')
+    # TODO(fusion): la réutilisation excluait auparavant aussi les dossiers 'refused' (rejeté,
+    # un nouveau dossier peut être retenté) — plus d'équivalent direct depuis la simplification
+    # du cycle de microfinance.loan.application (draft/visite/contre_visite/fait), même sujet
+    # que le TODO sur _microfinance_product_change_unlocked() ci-dessous. Seul le critère
+    # loan_id (dossier déjà transformé en crédit) reste appliqué pour l'instant.
 
     microfinance_product_policy = fields.Selection([
         ('independent', 'Produit indépendant'),
@@ -224,12 +261,18 @@ class ResPartner(models.Model):
             partner.microfinance_progressive_eligible_product_ids = eligible
 
     def _microfinance_product_change_unlocked(self, application):
+        # TODO(fusion): plus d'état 'refused' explicite depuis la simplification du cycle de
+        # microfinance.loan.application (draft/visite/contre_visite/fait) — l'ancien
+        # déblocage "dossier refusé" n'a plus de déclencheur direct. En l'état, un dossier
+        # sans loan_id reste verrouillé quel que soit son état (fail-safe : plus proche du
+        # comportement "en cours" que d'un déblocage inventé). Si un scénario de refus
+        # explicite doit rouvrir la sélection de produit, à rattacher ici une fois tranché
+        # avec Micka — même sujet que le TODO sur _check_committee_eligibility côté
+        # microfinance.loan.application.
         self.ensure_one()
         if not application:
             return True
-        if application.state == 'refused':
-            return True
-        if application.state == 'loan_created':
+        if application.loan_id:
             # Un crédit annulé n'a jamais été décaissé (cf. PRIOR_LOAN_STATES qui l'exclut déjà
             # des prêts antérieurs réalisés) : il ne doit pas bloquer un nouveau choix de produit.
             return application.loan_id.state in ('closed', 'cancelled')
@@ -301,7 +344,7 @@ class ResPartner(models.Model):
         application = Application.search([
             ('partner_id', '=', self.id),
             ('loan_product_id', '=', product.id),
-            ('state', 'not in', self._CREDIT_APPLICATION_TERMINAL_STATES),
+            ('loan_id', '=', False),
         ], limit=1)
         created = False
         if not application:
@@ -344,6 +387,11 @@ class ResPartner(models.Model):
             for partner in partners:
                 if partner.microfinance_selected_product_id:
                     partner._get_or_create_loan_application()
+                # Compte crédit conteneur ouvert au même moment que le compte épargne principal
+                # (cf. microfinance_savings_management.res_partner.create()), pour rester
+                # cohérent dans le cycle de vie du client — même déclencheur, même garde-fou.
+                if partner.microfinance_partner_type == 'client':
+                    partner._get_or_create_microfinance_loan_account()
         return partners
 
     def write(self, vals):

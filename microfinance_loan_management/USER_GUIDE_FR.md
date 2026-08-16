@@ -117,58 +117,53 @@ Les états possibles d'un dossier de crédit sont :
 
 | État | Signification |
 |------|---------------|
-| **Brouillon** | Créé, en attente de soumission |
-| **Soumis** | Soumis pour validation manager |
-| **Validé manager** | Approuvé par le manager |
-| **Validé finance** | Approuvé par le contrôleur financier |
+| **Brouillon** | Créé, pas encore en enquête |
+| **Enquête** | Éligibilité et scoring calculés |
+| **Avis CA** | Avis du comité d'agence |
+| **Avis CDAG** | Avis du comité de direction |
 | **Approuvé** | Prêt pour activation et décaissement |
 | **Actif** | Crédit décaissé, en phase de remboursement |
 | **Clôturé** | Entièrement remboursé |
 | **Défaut** | Crédit en défaut de paiement |
+| **Radié** | Passé en perte (irrécouvrable) |
 | **Annulé** | Crédit annulé |
 
 ---
 
 ## Workflow complet d'un crédit
 
-Un crédit ne se crée jamais directement : il naît toujours d'un **dossier d'instruction**
-(`microfinance.loan.application`) accepté. Voici le flux recommandé pour gérer un crédit du
-début à la fin :
+Un crédit se crée **directement** depuis le menu **Crédits**, indépendamment de tout dossier
+d'instruction. Voici le flux recommandé pour gérer un crédit du début à la fin :
 
 ```
 1. CRÉER le produit de crédit
    ↓
-2. CRÉER le dossier d'instruction (Brouillon)
+2. CRÉER le crédit (menu Crédits, formulaire vierge — Brouillon)
    ↓
-3. ENQUÊTE TERRAIN, ANALYSE, COMITÉ, AVIS CA, AVIS CDAG
+3. ENQUÊTE (éligibilité + scoring automatiques)
    ↓
-4. ACCEPTER le dossier (avec ou sans condition)
+4. AVIS CA
    ↓
-5. CRÉER LE CRÉDIT (wizard depuis le dossier accepté — crée le crédit en Brouillon)
+5. AVIS CDAG
    ↓
-6. SOUMETTRE le crédit
+6. APPROUVER le crédit (Approuvé)
    ↓
-7. VALIDER par le manager (Manager Validated)
+7. GÉNÉRER l'échéancier
    ↓
-8. VALIDER par la finance (Finance Validated)
+8. DÉCAISSER le crédit (Actif)
    ↓
-9. APPROUVER le crédit (Approved)
+9. ENREGISTRER les remboursements
    ↓
-10. GÉNÉRER l'échéancier
+10. GÉRER les pénalités (automatique via cron)
     ↓
-11. DÉCAISSER le crédit (Actif)
-    ↓
-12. ENREGISTRER les remboursements
-    ↓
-13. GÉRER les pénalités (automatique via cron)
-    ↓
-14. FERMER le crédit (Clôturé)
+11. FERMER le crédit (Clôturé)
 ```
 
-**Important** : depuis la refonte du point d'entrée de création, `microfinance.loan` ne peut
-plus être créé directement (ni depuis le menu **Crédits**, ni par API/import) — seule l'étape 5
-ci-dessus (wizard depuis le dossier accepté) crée un crédit. Toute autre tentative de création
-est bloquée par un message d'erreur explicite.
+**Important** : le crédit se crée directement depuis le menu **Crédits** — les droits d'accès
+standards par groupe sont la seule condition de création, indépendamment de tout dossier
+d'instruction. Le dossier d'instruction (`microfinance.loan.application`) est un suivi
+indépendant, recentré sur la visite et la contre-visite de terrain (voir section suivante) :
+il ne conditionne plus la création ni l'instruction du crédit.
 
 ---
 
@@ -242,11 +237,11 @@ est bloquée par un message d'erreur explicite.
 
 ## Gestion des dossiers de crédit
 
-Un crédit (`microfinance.loan`) ne peut plus être créé directement : il ne peut naître que
-depuis un **dossier d'instruction** (`microfinance.loan.application`) accepté, via le bouton
-**Créer le crédit**. Le menu **Microfinance > Crédits > Crédits** (anciennement "Demande de
-crédit") ne sert plus qu'à consulter et suivre les crédits déjà créés — il n'y a plus de bouton
-**Créer** dessus.
+Un crédit (`microfinance.loan`) se crée **directement** depuis le menu **Microfinance >
+Crédits > Crédits** (formulaire vierge, état initial *Brouillon*) — les droits d'accès
+standards par groupe sont la seule condition de création. Le **dossier d'instruction**
+(`microfinance.loan.application`) est un suivi indépendant, recentré sur la visite et la
+contre-visite de terrain : il ne conditionne plus la création ni l'instruction du crédit.
 
 ### Créer et instruire un dossier
 
@@ -287,82 +282,65 @@ Trois numéros différents apparaissent au fil du parcours d'un client, à ne pa
 Le bouton **Modifier** de la section "I — Identification du partenaire" ouvre un formulaire
 (identité, adresse, conjoint) qui n'est **pas** une simple saisie libre :
 
-- **Tant que le dossier est en Brouillon ou en Enquête terrain**, ces champs sont
-  pré-remplis et resynchronisés automatiquement depuis la fiche du client (et celle de son
-  conjoint, s'il est déjà renseigné). Une correction manuelle par l'enquêteur reste en place
-  tant que rien ne déclenche une nouvelle synchronisation (changement du client sur le dossier,
-  ou modification de la donnée d'origine sur la fiche contact).
-- **Dès que le dossier passe en Analyse** (ou au-delà), toutes ces informations se **figent
-  définitivement** : elles ne sont plus modifiables, pour préserver telle quelle la situation
-  constatée au moment de l'enquête — à l'exception de l'**adresse actuelle** et du
+- **Tant que le dossier est en Brouillon ou en Visite**, ces champs sont pré-remplis et
+  resynchronisés automatiquement depuis la fiche du client (et celle de son conjoint, s'il est
+  déjà renseigné). Une correction manuelle par l'enquêteur reste en place tant que rien ne
+  déclenche une nouvelle synchronisation (changement du client sur le dossier, ou modification
+  de la donnée d'origine sur la fiche contact).
+- **Dès que le dossier passe en Contre-visite** (ou au-delà), toutes ces informations se
+  **figent définitivement** : elles ne sont plus modifiables, pour préserver telle quelle la
+  situation constatée au moment de l'enquête — à l'exception de l'**adresse actuelle** et du
   **téléphone**, qui restent modifiables à tout moment (mais qui, eux, ne se resynchronisent
   jamais automatiquement depuis la fiche client, même avant le gel : ce sont des champs
   ordinaires).
 
 ### États du dossier et actions
 
-Le dossier passe par plusieurs états. À chaque étape, des boutons d'action apparaissent :
+Le dossier passe par 4 états, sans contrôle de rôle particulier (uniquement les droits d'accès
+standards sur le modèle) :
 
-#### Étape 1 : Démarrer l'enquête terrain (Brouillon → Enquête terrain)
-- Bouton : **Démarrer l'enquête terrain**
-- Rôle : Enquêteur
+#### Démarrer la visite (Brouillon → Visite)
+- Bouton : **Démarrer la visite**
 
-#### Étape 2 : Passer en analyse (Enquête terrain → Analyse)
-- Bouton : **Passer en analyse**
-- Rôle : Enquêteur
+#### Démarrer la contre-visite (Visite → Contre-visite)
+- Bouton : **Démarrer la contre-visite**
+- Le bouton **Repasser en brouillon** reste disponible depuis Visite, pour correction.
 
-#### Étape 3 : Soumettre au comité (Analyse → Soumis comité)
-- Bouton : **Soumettre au comité**
-- Rôle : Enquêteur
+#### Marquer fait (Contre-visite → Fait)
+- Bouton : **Marquer fait**
 
-#### Étape 4 : Avis CA (Soumis comité → Avis CA)
+Un crédit peut être rattaché a posteriori à un dossier via son champ **Crédit créé**
+(`loan_id`), affiché en lecture seule sur le dossier — mais aucun mécanisme automatique ne le
+fait plus à ce jour (le crédit se crée et s'instruit indépendamment, voir ci-dessous).
+
+### Le cycle du crédit
+
+Le crédit se crée directement (menu **Crédits**, état initial *Brouillon*) et suit son propre
+cycle de validation, entièrement indépendant du dossier d'instruction :
+
+#### Étape 1 : Démarrer l'enquête (Brouillon → Enquête)
+- Bouton : **Démarrer l'enquête**
+- Effet : vérifie automatiquement les règles d'éligibilité du produit et calcule le score de crédit.
+
+#### Étape 2 : Avis CA (Enquête → Avis CA)
 - Bouton : **Avis CA**
-- Rôle : Membre CA
+- Rôle : Comité de crédit
 
-#### Étape 5 : Avis CDAG (Avis CA → Avis CDAG)
+#### Étape 3 : Avis CDAG (Avis CA → Avis CDAG)
 - Bouton : **Avis CDAG**
-- Rôle : Membre CDAG
+- Rôle : Comité de crédit
 
-#### Étape 6 : Accepter, accepter sous condition, ou refuser (Avis CDAG → état final)
-- Boutons : **Accepter** / **Accepter sous condition** / **Refuser**
-- Rôle : Membre CDAG
-
-### Créer le crédit depuis un dossier accepté
-
-Une fois le dossier **Accepté** (ou **Accepté sous condition**) :
-
-1. Cliquer sur **Créer le crédit** : un wizard s'ouvre, avec le produit du dossier
-   pré-rempli (modifiable), le montant et la durée à saisir.
-2. Cliquer sur **Créer le crédit** dans le wizard : ceci crée le crédit
-   (`microfinance.loan`, état initial *Brouillon*), le relie au dossier, et fait passer le
-   dossier à l'état **Transformé en crédit**.
-3. Le crédit suit ensuite son propre cycle de validation, indépendant du dossier :
-
-#### Étape 7 : Soumettre le crédit (Brouillon → Soumis)
-- Bouton : **Soumettre**
-- Rôle : Agent de crédit
-
-#### Étape 8 : Valider manager (Soumis → Validé manager)
-- Bouton : **Valider par le manager**
+#### Étape 4 : Approuver (Avis CDAG → Approuvé)
+- Bouton : **Approuver**
 - Rôle : Manager d'agence
 
-#### Étape 9 : Valider finance (Validé manager → Validé finance)
-- Bouton : **Valider par la finance**
+#### Étape 5 : Générer l'échéancier (avant décaissement → État inchangé)
+- Bouton : **Générer échéancier**
+- Disponible de Brouillon jusqu'à Approuvé inclus. Peut être régénéré jusqu'au décaissement.
+
+#### Étape 6 : Décaisser (Approuvé → Actif)
+- Bouton : **Activer / Décaisser**
 - Rôle : Contrôleur financier
-
-#### Étape 10 : Approuver (Validé finance → Approuvé)
-- Bouton : **Approuver**
-- Rôle : Directeur ou Manager senior
-
-#### Étape 11 : Générer l'échéancier (Approuvé → État inchangé)
-- Bouton : **Générer l'échéancier**
-- Rôle : Agent de crédit ou manager
-
-**Important** : Ceci crée la liste des paiements futurs. Peut être régénéré jusqu'au décaissement.
-
-#### Étape 12 : Décaisser (Approuvé → Actif)
-- Bouton : **Décaisser**
-- Rôle : Agent de crédit
 - Effet : Crée une écriture comptable de décaissement
 
 ---
@@ -761,11 +739,11 @@ Vous pouvez aussi relancer manuellement via : **Microfinance** → **Actions** �
 3. Cliquer sur le menu ⋮ (trois points)
 4. Choisir **Exporter**
 
-### Q10 : Quelle est la différence entre "Validé finance" et "Approuvé" ?
+### Q10 : Quelle est la différence entre "Avis CDAG" et "Approuvé" ?
 
 **R** :
-- **Validé finance** : La demande a été vérifiée par le contrôle financier (montants, ratios, etc.)
-- **Approuvé** : L'autorité compétente (DG, Manager senior) a approuvé la demande
+- **Avis CDAG** : le comité de direction a donné son avis sur le dossier
+- **Approuvé** : le manager d'agence a validé le crédit sur la base de cet avis
 - Un crédit doit être en état **Approuvé** pour pouvoir être décaissé
 
 ---

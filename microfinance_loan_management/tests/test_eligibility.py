@@ -21,14 +21,14 @@ class TestEligibility(MicrofinanceCommon):
         self._set_partner_create_date(self.partner, 5)
         loan = self._create_loan()
         with self.assertRaises(UserError):
-            loan.action_submit()
+            loan.action_start_enquete()
 
     def test_membership_sufficient_allows_submit(self):
         self.product.min_membership_days = 30
         self._set_partner_create_date(self.partner, 40)
         loan = self._create_loan()
-        loan.action_submit()
-        self.assertEqual(loan.state, 'submitted')
+        loan.action_start_enquete()
+        self.assertEqual(loan.state, 'enquete')
 
     # -- Second crédit --
 
@@ -37,15 +37,15 @@ class TestEligibility(MicrofinanceCommon):
         self._activate_loan()
         second = self._create_loan()
         with self.assertRaises(UserError):
-            second.action_submit()
+            second.action_start_enquete()
 
     def test_second_loan_allowed_when_flag_true_and_no_arrears(self):
         self.product.allow_second_loan = True
         self.product.block_second_if_arrears = True
         self._activate_loan()
         second = self._create_loan()
-        second.action_submit()
-        self.assertEqual(second.state, 'submitted')
+        second.action_start_enquete()
+        self.assertEqual(second.state, 'enquete')
 
     def test_second_loan_blocked_when_first_has_arrears(self):
         self.product.allow_second_loan = True
@@ -56,7 +56,7 @@ class TestEligibility(MicrofinanceCommon):
         self.assertEqual(first.overdue_installment_count, 1)
         second = self._create_loan()
         with self.assertRaises(UserError):
-            second.action_submit()
+            second.action_start_enquete()
 
     def test_second_loan_allowed_despite_arrears_when_flag_false(self):
         self.product.allow_second_loan = True
@@ -65,8 +65,8 @@ class TestEligibility(MicrofinanceCommon):
         first_installment = first.installment_ids.sorted('sequence')[0]
         first_installment.due_date = fields.Date.subtract(fields.Date.context_today(first), days=5)
         second = self._create_loan()
-        second.action_submit()
-        self.assertEqual(second.state, 'submitted')
+        second.action_start_enquete()
+        self.assertEqual(second.state, 'enquete')
 
     # -- Co-emprunteur --
 
@@ -75,10 +75,10 @@ class TestEligibility(MicrofinanceCommon):
         self._activate_loan(partner_id=co_borrower.id)
         loan = self._create_loan(co_borrower_id=co_borrower.id)
         with self.assertRaises(UserError):
-            loan.action_submit()
+            loan.action_start_enquete()
 
     def test_co_borrower_without_active_loan_allows(self):
         co_borrower = self.env['res.partner'].create({'name': 'Co-emprunteur libre'})
         loan = self._create_loan(co_borrower_id=co_borrower.id)
-        loan.action_submit()
-        self.assertEqual(loan.state, 'submitted')
+        loan.action_start_enquete()
+        self.assertEqual(loan.state, 'enquete')

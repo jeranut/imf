@@ -55,7 +55,18 @@ class MicrofinanceLoanPayment(models.Model):
     def create(self, vals_list):
         for vals in vals_list:
             if vals.get('name', 'Nouveau') == 'Nouveau':
-                vals['name'] = self.env['ir.sequence'].next_by_code('microfinance.loan.payment') or 'Nouveau'
+                # Séquence par société (format AGENCE/NNNNNN), alignée sur microfinance.loan et
+                # microfinance.partner.account (cf. correctif numérotation Sous-lot 3) — remplace
+                # l'ancienne séquence globale PAY/%(year)s/NNNNN, partagée entre toutes les
+                # agences. Les remboursements déjà enregistrés gardent leur ancien numéro tel
+                # quel : name n'est jamais régénéré après création (readonly, cf. déclaration du
+                # champ), seuls les nouveaux remboursements utilisent ce format.
+                # agency_code est obligatoire sur res.company (NOT NULL) : loan_id est required
+                # sur ce modèle, sa société est donc toujours résolue ici.
+                loan = self.env['microfinance.loan'].browse(vals.get('loan_id'))
+                company = loan.company_id or self.env.company
+                number = company._get_or_create_numbering_sequence('microfinance.loan.payment')
+                vals['name'] = '%s/%s' % (company.agency_code, number)
         return super().create(vals_list)
 
     @api.constrains('amount')

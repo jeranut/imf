@@ -6,26 +6,31 @@
         <field name="inherit_id" ref="base.view_company_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='name']" position="after">
-                <field name="agency_code" placeholder="ex. IS"/>
                 <field name="loan_product_code_locked" invisible="1"/>
-                <field name="loan_product_code_prefix" readonly="loan_product_code_locked"/>
+            </xpath>
+            <!-- Champs déplacés dans des groupes labellisés (au lieu de champs nus après le nom
+                 de société, sans étiquette ni bordure visible, difficiles à identifier — cf.
+                 retour Micka du 2026-08-15, même correctif que microfinance_savings_management). -->
+            <xpath expr="//group[@name='social_media']" position="before">
+                <group string="Identification agence (microfinance)">
+                    <field name="agency_code" placeholder="ex. IS"/>
+                    <field name="loan_product_code_prefix" readonly="loan_product_code_locked"/>
+                </group>
                 <!-- groups ici uniquement (pas de groups= au niveau champ Python) : réservé à
                      group_microfinance_manager, cohérent avec le menu Configuration déjà réservé
                      à ce groupe, sans bloquer la lecture par l'onchange de pré-remplissage côté
                      microfinance.loan pour un simple agent créant un crédit. -->
-                <field name="microfinance_fond_credit_default_id"
-                       groups="microfinance_loan_management.group_microfinance_manager"/>
-                <field name="microfinance_social_grid_include_savings"
-                       groups="microfinance_loan_management.group_microfinance_manager"/>
-                <field name="microfinance_social_grid_include_administrative"
-                       groups="microfinance_loan_management.group_microfinance_manager"/>
-                <field name="microfinance_social_grid_include_impression_in_total"
-                       groups="microfinance_loan_management.group_microfinance_manager"/>
-                <field name="microfinance_social_grid_include_impression_next_loan"
-                       groups="microfinance_loan_management.group_microfinance_manager"/>
-                <field name="microfinance_social_grid_impression_next_loan_min_score"
-                       invisible="not microfinance_social_grid_include_impression_next_loan"
-                       groups="microfinance_loan_management.group_microfinance_manager"/>
+                <group string="Crédit (microfinance)" groups="microfinance_loan_management.group_microfinance_manager">
+                    <field name="microfinance_fond_credit_default_id"/>
+                </group>
+                <group string="Grille sociale (microfinance)" groups="microfinance_loan_management.group_microfinance_manager">
+                    <field name="microfinance_social_grid_include_savings"/>
+                    <field name="microfinance_social_grid_include_administrative"/>
+                    <field name="microfinance_social_grid_include_impression_in_total"/>
+                    <field name="microfinance_social_grid_include_impression_next_loan"/>
+                    <field name="microfinance_social_grid_impression_next_loan_min_score"
+                           invisible="not microfinance_social_grid_include_impression_next_loan"/>
+                </group>
             </xpath>
         </field>
     </record>

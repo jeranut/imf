@@ -7,6 +7,7 @@ from . import microfinance_loan_product
 from . import microfinance_loan_progressive_program
 from . import microfinance_scoring
 from . import microfinance_provision_rule
+from . import microfinance_loan_account
 from . import microfinance_loan
 from . import microfinance_social_category_level
 from . import microfinance_loan_application_activity

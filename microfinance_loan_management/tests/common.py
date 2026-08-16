@@ -106,14 +106,14 @@ class MicrofinanceCommon(TransactionCase):
             'term': 6,
         }
         vals.update(kwargs)
-        return self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create(vals)
+        return self.env['microfinance.loan'].create(vals)
 
     def _activate_loan(self, **kwargs):
         loan = self._create_loan(**kwargs)
         loan.action_generate_schedule()
-        loan.action_submit()
-        loan.action_manager_validate()
-        loan.action_finance_validate()
+        loan.action_start_enquete()
+        loan.action_ca_review()
+        loan.action_cdag_review()
         loan.action_approve()
         loan.action_disburse()
         return loan

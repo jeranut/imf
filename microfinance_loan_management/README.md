@@ -59,13 +59,18 @@ défaut sur chacun).
 
 ## Le parcours d'un dossier de crédit
 
-Un crédit (`microfinance.loan`) ne se crée **jamais directement** : il ne peut naître que
-depuis un **dossier d'instruction** (`microfinance.loan.application`, menu **Microfinance >
-Crédits > Dossiers d'instruction**) accepté, via le bouton **Créer le crédit**. Toute tentative
-de création directe (API, import, ORM) sans passer par ce chemin est bloquée par un verrou
-serveur (`microfinance.loan.create()`), quel que soit le rôle de l'utilisateur — le menu
-**Crédits** ne sert plus qu'à consulter/suivre les crédits déjà créés (aucun bouton de
-création).
+Un crédit (`microfinance.loan`) se crée **directement** depuis le menu **Microfinance >
+Crédits > Crédits** (état initial *Brouillon*), sans passer par un dossier d'instruction ni
+par un wizard — les droits d'accès standards par groupe (`ir.model.access.csv`) sont la seule
+gate de création.
+
+Le **dossier d'instruction** (`microfinance.loan.application`, menu **Microfinance > Crédits >
+Dossiers d'instruction**) est un suivi indépendant, recentré sur la visite et la contre-visite
+de terrain (VAD/VAV) — il ne conditionne plus la création du crédit et n'a plus vocation à en
+porter l'instruction (analyse, comité, avis CA/CDAG, acceptation), qui vit désormais
+directement sur le cycle du crédit lui-même (section 2 ci-dessous). Un crédit peut être
+rattaché a posteriori à un dossier via son champ `loan_id`, mais aucun mécanisme automatique
+ne le fait plus à ce jour.
 
 ### 0. Point d'entrée : sélection du produit depuis la fiche client
 
@@ -92,41 +97,38 @@ dossiers suivent le nouveau réglage. Le champ produit reste optionnel : un clie
 
 Le champ produit reste modifiable librement tant qu'aucun crédit n'est encore décaissé sur le
 produit actuellement sélectionné ; une fois le crédit issu de ce dossier actif, il devient en
-lecture seule (message explicatif affiché) jusqu'à son remboursement intégral, ou jusqu'au
-rejet du dossier / à l'annulation du crédit.
+lecture seule (message explicatif affiché) jusqu'à son remboursement intégral.
 
-### 1. Instruction du dossier
+### 1. Suivi du dossier d'instruction (visite / contre-visite)
 
 1. **Création du dossier** : sélection du client, du produit visé (`loan_product_id`), et
    des informations d'enquête (date, enquêteur, agence…) — ou reprise automatique du dossier
    créé depuis la fiche client (étape 0 ci-dessus).
-2. **Enquête terrain**, **Analyse**, **Soumission au comité**, **Avis CA**, **Avis CDAG** :
-   le dossier passe par ces étapes successives, chacune réservée au rôle correspondant
-   (enquêteur, membre du comité, membre CA, membre CDAG).
-3. **Acceptation** (avec ou sans condition) ou **Refus** par le CDAG.
+2. **Visite**, puis **Contre-visite** : le dossier passe par ces deux étapes de terrain
+   (VAD/VAV), sans contrôle de rôle particulier.
+3. **Fait** : le dossier est marqué comme instruit. Cet état ne conditionne rien côté crédit —
+   c'est uniquement un suivi de l'avancement de la visite/contre-visite.
 
 **Section I — Identification du partenaire (Bloc A)** : tant que le dossier est en
-**Brouillon** ou en **Enquête terrain**, ces champs (identité, adresse, conjoint) sont
-synchronisés automatiquement depuis la fiche du client (et celle de son conjoint) —
-l'enquêteur peut corriger une valeur à la main, sa correction reste tant que rien ne déclenche
-une resynchronisation (changement de client sur le dossier, ou modification de la donnée
-source sur la fiche contact). Dès que le dossier passe en **Analyse** (et au-delà), ce bloc se
+**Brouillon** ou en **Visite**, ces champs (identité, adresse, conjoint) sont synchronisés
+automatiquement depuis la fiche du client (et celle de son conjoint) — l'enquêteur peut
+corriger une valeur à la main, sa correction reste tant que rien ne déclenche une
+resynchronisation (changement de client sur le dossier, ou modification de la donnée source
+sur la fiche contact). Dès que le dossier passe en **Contre-visite** (et au-delà), ce bloc se
 **fige définitivement** pour préserver l'historique de l'enquête, à l'exception de l'adresse
 actuelle et du téléphone qui restent modifiables à tout moment (mais ne se resynchronisent
 jamais automatiquement, même avant le gel).
 
 ### 2. Création et validation du crédit
 
-4. **Créer le crédit** : depuis un dossier accepté, ce bouton ouvre un wizard minimal
-   (produit pré-rempli depuis le dossier, montant, durée) qui crée le crédit
-   (`microfinance.loan`, état initial *brouillon*) et le relie au dossier.
-5. **Soumission** du crédit : le système vérifie automatiquement les règles d'éligibilité du
-   produit (ancienneté, second crédit, arriérés du co-emprunteur…) et calcule le score de
-   crédit.
-6. **Validation manager**, puis **validation finance**.
+4. **Création** : depuis le menu **Crédits**, formulaire vierge — client, produit, montant,
+   durée. État initial *Brouillon*.
+5. **Enquête** : le système vérifie automatiquement les règles d'éligibilité du produit
+   (ancienneté, second crédit, arriérés du co-emprunteur…) et calcule le score de crédit.
+6. **Avis CA**, puis **Avis CDAG**.
 7. **Approbation**.
-8. **Génération de l'échéancier** et **décaissement** : si des frais de dossier sont dus et
-   exigés avant décaissement, ils doivent d'abord être encaissés.
+8. **Génération de l'échéancier** et **décaissement** (état *Actif*) : si des frais de
+   dossier sont dus et exigés avant décaissement, ils doivent d'abord être encaissés.
 9. **Remboursements** : à la sélection du crédit (formulaire ou assistant), le montant et le
    journal se préremplissent automatiquement — montant dû (échéances déjà en retard cumulées,
    ou à défaut la prochaine échéance), journal configuré sur le produit — librement modifiables
@@ -158,8 +160,8 @@ volontairement différents et à ne pas confondre :
    compte client : même suffixe numérique, avec un segment de type inséré
    (`IS/000001` → `IS/I/000001`). Aucune séquence propre, toujours synchronisé avec le numéro
    client. Voir le README du module épargne pour le cas d'un client ayant plusieurs comptes.
-3. **Numéro crédit** (`microfinance.loan.name`) — généré à l'attribution effective du crédit
-   (création du `microfinance.loan` via le wizard), sur une séquence **indépendante**, partagée
+3. **Numéro crédit** (`microfinance.loan.name`) — généré à la création directe du
+   `microfinance.loan` (menu Crédits), sur une séquence **indépendante**, partagée
    entre tous les clients d'une même agence. Change à chaque nouveau crédit accordé, sans
    aucun lien avec le numéro de compte client ni avec le numéro du dossier d'instruction : un
    client peut avoir plusieurs crédits au fil du temps, chacun avec son propre numéro crédit,

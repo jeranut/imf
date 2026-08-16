@@ -112,6 +112,16 @@ class TestMultiCompanyIsolation(MicrofinanceCommon):
             [('id', '=', self.product.id)])
         self.assertFalse(products_for_user_b)
 
+    def test_loan_account_not_visible_to_other_company_user(self):
+        loan_account = self.env['microfinance.loan.account'].create({
+            'partner_id': self.partner.id, 'company_id': self.env.company.id,
+        })
+        accounts_for_user_b = self.env['microfinance.loan.account'].with_user(self.user_b).search(
+            [('id', '=', loan_account.id)])
+        self.assertFalse(accounts_for_user_b)
+        with self.assertRaises(AccessError):
+            loan_account.with_user(self.user_b).read(['name'])
+
     # --- Point 3 : company_id requis sur res.partner en contexte microfinance ---
     def test_partner_company_required_in_microfinance_context(self):
         with self.assertRaises(ValidationError):

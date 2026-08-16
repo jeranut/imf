@@ -49,12 +49,18 @@ class MicrofinanceDataResetCommon(SavingsCommon):
 
     def _create_full_dataset(self, partner=None, product=None, savings_product=None, payment_journal=None):
         """Crée un jeu de données transactionnel complet pour un test RAZ : crédit actif
-        avec échéancier, un remboursement posté, une visite de recouvrement et un compte
-        d'épargne actif avec une transaction — un représentant de chaque bloc du wizard."""
+        avec échéancier (dont le compte crédit conteneur, microfinance.loan.account, ouvert
+        paresseusement en sous-produit - cf. microfinance.loan.create()), un remboursement
+        posté, une visite de recouvrement, un dossier d'instruction (avec ses sous-lignes
+        auto-générées par create(), cf. _ensure_default_document_lines/
+        _ensure_default_financial_lines) et un compte d'épargne actif avec une transaction —
+        un représentant de chaque bloc du wizard."""
         partner = partner or self.partner
         product = product or self.product
         payment_journal = payment_journal or self.payment_journal
         loan = self._activate_loan(partner_id=partner.id, product_id=product.id)
+        loan_account = loan.loan_account_id
+        self.assertTrue(loan_account)
         installment = loan.installment_ids.sorted('sequence')[0]
         payment = self.env['microfinance.loan.payment'].create({
             'loan_id': loan.id,
@@ -71,7 +77,12 @@ class MicrofinanceDataResetCommon(SavingsCommon):
             opening_amount=300.0, partner_id=partner.id,
             product_id=(savings_product or self.savings_product).id,
         )
-        return loan, payment, visit, account
+        application = self.env['microfinance.loan.application'].create({
+            'partner_id': partner.id,
+            'loan_product_id': product.id,
+            'company_id': product.company_id.id,
+        })
+        return loan, payment, visit, account, application, loan_account
 
     def _setup_second_company(self, code='Z1'):
         """Crée une deuxième agence CEFOR complète (comptes, journaux, produit crédit

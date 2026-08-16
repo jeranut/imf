@@ -35,6 +35,15 @@ class MicrofinanceLoan(models.Model):
              "_check_fond_disponibilite() ci-dessous, seul appelé depuis action_disburse().",
     )
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True, tracking=True)
+    loan_account_id = fields.Many2one(
+        'microfinance.loan.account', string='Compte crédit', index=True,
+        help="Conteneur regroupant l'historique des crédits de ce client (cf. correctif "
+             "numérotation) — pas de logique métier dessus à ce stade. Non required : les "
+             "crédits déjà en base avant l'introduction de ce modèle restent sans compte "
+             "associé, résolu paresseusement au prochain crédit du même client via "
+             "res.partner._get_or_create_microfinance_loan_account() plutôt qu'une migration "
+             "globale (volume négligeable à ce jour, décision validée par Micka).",
+    )
     currency_id = fields.Many2one('res.currency', string='Devise', default=lambda self: self.env.company.currency_id, required=True)
     loan_amount = fields.Monetary(string='Montant crédit', required=True, tracking=True)
     term = fields.Integer(string='Nombre échéances', required=True, default=1, tracking=True)
@@ -60,9 +69,9 @@ class MicrofinanceLoan(models.Model):
     )
     state = fields.Selection([
         ('draft', 'Brouillon'),
-        ('submitted', 'Soumis'),
-        ('manager_validated', 'Validé manager'),
-        ('finance_validated', 'Validé finance'),
+        ('enquete', 'Enquête'),
+        ('avis_ca', 'Avis CA'),
+        ('avis_cdag', 'Avis CDAG'),
         ('approved', 'Approuvé'),
         ('active', 'Actif'),
         ('closed', 'Clôturé'),
@@ -78,6 +87,7 @@ class MicrofinanceLoan(models.Model):
     payment_ids = fields.One2many('microfinance.loan.payment', 'loan_id', string='Remboursements')
     visit_ids = fields.One2many('microfinance.collection.visit', 'loan_id', string='Visites')
     move_ids = fields.One2many('account.move', 'microfinance_loan_id', string='Écritures comptables')
+    application_ids = fields.One2many('microfinance.loan.application', 'loan_id', string='Enquêtes')
     principal_total = fields.Monetary(string='Total capital', compute='_compute_totals', store=True)
     interest_total = fields.Monetary(string='Total intérêts', compute='_compute_totals', store=True)
     penalty_total = fields.Monetary(string='Total pénalités', compute='_compute_totals', store=True)
@@ -118,6 +128,7 @@ class MicrofinanceLoan(models.Model):
     payment_count = fields.Integer(string='Nombre de remboursements', compute='_compute_counts')
     visit_count = fields.Integer(string='Nombre de visites', compute='_compute_counts')
     move_count = fields.Integer(string="Nombre d'écritures", compute='_compute_counts')
+    application_count = fields.Integer(string="Nombre d'enquêtes", compute='_compute_counts')
     reschedule_count = fields.Integer(string='Nombre de rééchelonnements', default=0, copy=False, readonly=True, tracking=True)
     reschedule_history_ids = fields.One2many(
         'microfinance.loan.reschedule.history', 'loan_id', string='Historique de rééchelonnement', readonly=True,
@@ -149,11 +160,6 @@ class MicrofinanceLoan(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        if not self.env.context.get('microfinance_loan_creation_allowed'):
-            raise UserError(_(
-                "Un crédit ne peut être créé que depuis un dossier d'instruction accepté "
-                '(menu Dossiers d\'instruction → Créer le crédit).'
-            ))
         for vals in vals_list:
             if vals.get('name', 'Nouveau') == 'Nouveau':
                 # agency_code est obligatoire sur res.company (NOT NULL) : toute société valide
@@ -161,6 +167,13 @@ class MicrofinanceLoan(models.Model):
                 company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
                 number = company._get_or_create_numbering_sequence('microfinance.loan.agency')
                 vals['name'] = '%s/%s' % (company.agency_code, number)
+            if not vals.get('loan_account_id') and vals.get('partner_id'):
+                # Rattrapage paresseux (cf. correctif microfinance.loan.account) : couvre aussi
+                # bien un client déjà en base avant l'introduction de ce modèle qu'un client créé
+                # hors microfinance_context (où le déclencheur normal, res.partner.create(), ne
+                # s'exécute pas) — pas de script de migration global (volume négligeable).
+                partner = self.env['res.partner'].browse(vals['partner_id'])
+                vals['loan_account_id'] = partner._get_or_create_microfinance_loan_account().id
         return super().create(vals_list)
 
     @api.onchange('company_id')
@@ -355,6 +368,7 @@ class MicrofinanceLoan(models.Model):
             loan.visit_count = len(loan.visit_ids)
             loan.move_count = len(loan.move_ids)
             loan.scoring_line_count = len(loan.scoring_line_ids)
+            loan.application_count = len(loan.application_ids)
 
     def _get_scoring_profile(self):
         self.ensure_one()
@@ -523,16 +537,16 @@ class MicrofinanceLoan(models.Model):
                         '(%(ratio)s%% du montant du crédit, soit %(required).2f).'
                     ) % {'missing': missing, 'ratio': product.min_guarantee_ratio, 'required': required_guarantee})
 
-    def action_submit(self):
+    def action_start_enquete(self):
         self._check_eligibility()
         self.action_calculate_scoring(silent=True)
-        self.write({'state': 'submitted'})
+        self.write({'state': 'enquete'})
 
-    def action_manager_validate(self):
-        self.write({'state': 'manager_validated', 'manager_id': self.env.user.id})
+    def action_ca_review(self):
+        self.write({'state': 'avis_ca', 'manager_id': self.env.user.id})
 
-    def action_finance_validate(self):
-        self.write({'state': 'finance_validated', 'finance_user_id': self.env.user.id})
+    def action_cdag_review(self):
+        self.write({'state': 'avis_cdag', 'finance_user_id': self.env.user.id})
 
     def action_approve(self):
         self.write({'state': 'approved', 'approval_date': fields.Date.context_today(self)})
@@ -577,7 +591,7 @@ class MicrofinanceLoan(models.Model):
 
     def action_generate_schedule(self):
         for loan in self:
-            if loan.state not in ('draft', 'submitted', 'manager_validated', 'finance_validated', 'approved'):
+            if loan.state not in ('draft', 'enquete', 'avis_ca', 'avis_cdag', 'approved'):
                 raise UserError(_('Échéancier autorisé avant activation seulement.'))
             if not loan.repayment_frequency_id:
                 raise UserError(_(
@@ -1188,6 +1202,28 @@ class MicrofinanceLoan(models.Model):
     def action_view_moves(self):
         self.ensure_one()
         return {'type': 'ir.actions.act_window', 'name': _('Écritures'), 'res_model': 'account.move', 'view_mode': 'tree,form', 'domain': [('microfinance_loan_id', '=', self.id)]}
+
+    def action_view_applications(self):
+        """Ouvre l'enquête déjà rattachée à ce crédit (loan_id), ou en crée une (rattachée
+        directement via loan_id) s'il n'y en a encore aucune — le crédit et le dossier
+        d'instruction se créent désormais indépendamment (cf. réversion du point d'entrée
+        unique), ce bouton comble l'absence de tout mécanisme automatique de rattachement."""
+        self.ensure_one()
+        application = self.application_ids[:1]
+        if not application:
+            application = self.env['microfinance.loan.application'].create({
+                'partner_id': self.partner_id.id,
+                'loan_product_id': self.product_id.id,
+                'company_id': self.company_id.id,
+                'loan_id': self.id,
+            })
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Enquête'),
+            'res_model': 'microfinance.loan.application',
+            'view_mode': 'form',
+            'res_id': application.id,
+        }
 
     def action_view_scoring_lines(self):
         self.ensure_one()

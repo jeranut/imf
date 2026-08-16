@@ -21,12 +21,13 @@
     <menuitem id="menu_microfinance_caisse_fiche_journee" name="Fiches journalières" parent="menu_caisse_root"
         action="action_microfinance_caisse_fiche_journee" sequence="1"/>
     <menuitem id="menu_microfinance_dashboard" name="Tableau de bord" parent="menu_microfinance_root" action="action_microfinance_dashboard_client" sequence="1"/>
-    <menuitem id="menu_microfinance_loan_applications" name="Dossiers d'instruction" parent="menu_credits_root" action="action_microfinance_loan_application" sequence="0"/>
-    <menuitem id="menu_microfinance_loans" name="Crédits" parent="menu_credits_root" action="action_microfinance_loan" sequence="1"/>
-    <menuitem id="menu_microfinance_installments" name="Échéances" parent="menu_credits_root" action="action_microfinance_installment" sequence="2"/>
-    <menuitem id="menu_microfinance_payments" name="Remboursements" parent="menu_credits_root" action="action_microfinance_payment" sequence="3"/>
-    <menuitem id="menu_microfinance_guarantees" name="Garanties" parent="menu_credits_root" action="action_microfinance_guarantee" sequence="4"/>
-    <menuitem id="menu_microfinance_fond_contribution" name="Contributions bailleurs" parent="menu_credits_root" action="action_microfinance_fond_contribution" sequence="5"/>
+    <menuitem id="menu_microfinance_loan_accounts" name="Compte crédit" parent="menu_credits_root" action="action_microfinance_loan_account" sequence="0"/>
+    <menuitem id="menu_microfinance_loan_applications" name="Enquêtes" parent="menu_credits_root" action="action_microfinance_loan_application" sequence="1"/>
+    <menuitem id="menu_microfinance_loans" name="Crédits" parent="menu_credits_root" action="action_microfinance_loan" sequence="2"/>
+    <menuitem id="menu_microfinance_installments" name="Échéances" parent="menu_credits_root" action="action_microfinance_installment" sequence="3"/>
+    <menuitem id="menu_microfinance_payments" name="Remboursements" parent="menu_credits_root" action="action_microfinance_payment" sequence="4"/>
+    <menuitem id="menu_microfinance_guarantees" name="Garanties" parent="menu_credits_root" action="action_microfinance_guarantee" sequence="5"/>
+    <menuitem id="menu_microfinance_fond_contribution" name="Contributions bailleurs" parent="menu_credits_root" action="action_microfinance_fond_contribution" sequence="6"/>
     <menuitem id="menu_microfinance_collection" name="Visites" parent="menu_microfinance_root" sequence="20"/>
     <menuitem id="menu_microfinance_field_visits" name="Visites d'enquêtes" parent="menu_microfinance_collection" action="action_microfinance_loan_application_field_visit" sequence="1"/>
     <menuitem id="menu_microfinance_visits" name="Visites de recouvrement" parent="menu_microfinance_collection" action="action_microfinance_visit" sequence="2"/>

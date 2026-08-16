@@ -76,7 +76,7 @@ class TestFondDashboardMultiCompanyChart(TestFondBailleurCommon):
                                   verification_disponibilite='never')
         self._create_contribution(fond, amount=5000.0, saisie_company_id=self.env.company.id).action_post()
 
-        loan_b = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
+        loan_b = self.env['microfinance.loan'].create({
             'partner_id': self.partner_b.id,
             'product_id': self.product_b.id,
             'company_id': self.company_b.id,
@@ -177,7 +177,7 @@ class TestFondMatrix(TestFondBailleurCommon):
         cls.partner_b = cls.env['res.partner'].create({'name': 'Client Test Matrice Agence B'})
 
     def _disburse_loan_b(self, fond, amount=1000.0):
-        loan_b = self.env['microfinance.loan'].with_context(microfinance_loan_creation_allowed=True).create({
+        loan_b = self.env['microfinance.loan'].create({
             'partner_id': self.partner_b.id,
             'product_id': self.product_b.id,
             'company_id': self.company_b.id,
