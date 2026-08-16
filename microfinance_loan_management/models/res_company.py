@@ -81,16 +81,6 @@ class ResCompany(models.Model):
              "(microfinance_res_company_views.xml).",
     )
 
-    microfinance_social_grid_include_savings = fields.Boolean(
-        string="Grille sociale : inclure l'épargne dans le total",
-        help="Ajoute jusqu'à 4 points au maximum théorique du barème (32 → 36). "
-             'Pensez à ajuster vos niveaux (Microfinance > Configuration > Niveaux sociaux) '
-             'en conséquence après activation.',
-    )
-    microfinance_social_grid_include_administrative = fields.Boolean(
-        string="Grille sociale : inclure l'administratif dans le total",
-        help="Ajoute jusqu'à 4 points au maximum théorique. Ajustez vos niveaux en conséquence.",
-    )
     microfinance_social_grid_include_impression_in_total = fields.Boolean(
         string="Grille sociale : inclure l'impression de l'enquêteur dans le total du dossier",
         help="Ajoute jusqu'à 4 points au maximum théorique. Ajustez vos niveaux en conséquence.",

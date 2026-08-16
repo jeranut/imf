@@ -10,6 +10,7 @@ from . import microfinance_provision_rule
 from . import microfinance_loan_account
 from . import microfinance_loan
 from . import microfinance_social_category_level
+from . import microfinance_social_score_bracket
 from . import microfinance_loan_application_activity
 from . import microfinance_loan_application
 from . import microfinance_loan_guarantee
@@ -30,5 +31,6 @@ from . import microfinance_bailleur_fonds
 from . import microfinance_fond_credit
 from . import microfinance_fond_contribution
 from . import microfinance_caisse_fiche_journee
+from . import microfinance_caisse_session
 from . import res_partner
 from . import res_config_settings

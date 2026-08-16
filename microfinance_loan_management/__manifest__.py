@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Loan Management',
-    'version': '17.0.1.6.0',
+    'version': '17.0.1.7.0',
     'summary': 'Gestion des crédits clients pour institutions de microfinance',
     'description': 'Produits de crédit, demandes, approbations, échéanciers, remboursements, pénalités, recouvrement et risque.',
     'category': 'Accounting/Finance',
@@ -54,6 +54,7 @@
         'views/microfinance_partner_views.xml',
         'views/microfinance_client_blacklist_views.xml',
         'views/microfinance_caisse_fiche_journee_views.xml',
+        'views/microfinance_caisse_session_views.xml',
         'views/res_config_settings_views.xml',
         'views/microfinance_menus.xml',
         # Chargé après microfinance_menus.xml : ses <menuitem> référencent

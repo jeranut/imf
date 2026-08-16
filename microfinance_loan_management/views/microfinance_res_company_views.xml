@@ -24,8 +24,6 @@
                     <field name="microfinance_fond_credit_default_id"/>
                 </group>
                 <group string="Grille sociale (microfinance)" groups="microfinance_loan_management.group_microfinance_manager">
-                    <field name="microfinance_social_grid_include_savings"/>
-                    <field name="microfinance_social_grid_include_administrative"/>
                     <field name="microfinance_social_grid_include_impression_in_total"/>
                     <field name="microfinance_social_grid_include_impression_next_loan"/>
                     <field name="microfinance_social_grid_impression_next_loan_min_score"

@@ -727,3 +727,91 @@ def post_init_hook(env):
     _load_activity_reference_data(env)
     _load_financial_reference_data(env)
     _cleanup_existing_financial_lines(env)
+    _seed_social_score_brackets(env)
+
+
+# Valeurs par défaut des tranches de notation sociale (microfinance.social.score.bracket) :
+# (sequence, is_amount_based, threshold_amount, label). threshold_amount vaut 0 sur la
+# dernière tranche amount-based = pas de plafond ; label vaut None pour une tranche
+# amount-based (généré automatiquement par le modèle) et inversement.
+SOCIAL_SCORE_BRACKET_DEFAULTS = {
+    'assets': [
+        (1, True, 100000, None),
+        (2, True, 200000, None),
+        (3, True, 300000, None),
+        (4, True, 0, None),
+    ],
+    'food': [
+        (1, False, None, '1. 0 à 1 repas par jour'),
+        (2, False, None, '2. 2 repas par jour'),
+        (3, False, None, '3. 3 repas par jour'),
+        (4, False, None, '4. > 3 repas par jour (avec confort)'),
+    ],
+    'activity': [
+        (1, False, None, '1. Aucune'),
+        (2, False, None, '2. Informelle et irrégulière'),
+        (3, False, None, '3. Informelle et régulière'),
+        (4, False, None, '4. Formelle et régulière'),
+    ],
+    'health': [
+        (1, False, None, '1. Maladies chroniques et non traitées'),
+        (2, False, None, '2. Maladies non chroniques et non traitées'),
+        (3, False, None, '3. Maladies mal traitées ou irrégulièrement'),
+        (4, False, None, '4. Toutes maladies traitées'),
+    ],
+    'income': [
+        (1, True, 50000, None),
+        (2, True, 80000, None),
+        (3, True, 110000, None),
+        (4, True, 0, None),
+    ],
+    'housing_state': [
+        (0, False, None, '0. Mauvais état'),
+        (1, False, None, '1. Moyen état'),
+        (2, False, None, '2. Bon état'),
+    ],
+    'housing_surface': [
+        (1, False, None, '1. < 4 m² par membre du ménage'),
+        (2, False, None, '2. > 4 m² par membre du ménage'),
+    ],
+    'education_borrower': [
+        (0, False, None, '0. Sans éducation'),
+        (1, False, None, "1. Primaire (jusqu'au CEPE)"),
+        (2, False, None, '2. Secondaire (6ème au BEPC)'),
+        (3, False, None, '3. Seconde au Terminale'),
+        (4, False, None, '4. BAC et plus'),
+    ],
+    'education_children': [
+        (1, False, None, '1. Aucune'),
+        (2, False, None, '2. Certains enfants scolarisés'),
+        (3, False, None, '3. Tous les enfants scolarisés'),
+        (4, False, None,
+         '4. Tous les enfants scolarisés et dans le cycle correspondant à leur âge'),
+    ],
+}
+
+
+def _seed_social_score_brackets(env):
+    """Crée les tranches de notation sociale par défaut pour chaque société n'en ayant pas
+    encore (idempotent, vérifié par catégorie/société avant création — jamais de doublon).
+    Appelée depuis post_init_hook (installation neuve) ET depuis le script de migration
+    17.0.1.7.0 (mise à jour d'une instance déjà installée, où post_init_hook ne se
+    redéclenche pas — cf. odoo/modules/loading.py, post_init ne s'exécute que si
+    new_install)."""
+    Bracket = env['microfinance.social.score.bracket']
+    for company in env['res.company'].search([]):
+        for category, tranches in SOCIAL_SCORE_BRACKET_DEFAULTS.items():
+            if Bracket.search_count([('category', '=', category), ('company_id', '=', company.id)]):
+                continue
+            vals_list = []
+            for seq, is_amount, threshold, label in tranches:
+                vals = {
+                    'company_id': company.id, 'category': category, 'sequence': seq,
+                    'is_amount_based': is_amount,
+                }
+                if is_amount:
+                    vals['threshold_amount'] = threshold
+                else:
+                    vals['label'] = label
+                vals_list.append(vals)
+            Bracket.create(vals_list)

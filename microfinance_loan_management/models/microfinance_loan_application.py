@@ -259,17 +259,24 @@ class MicrofinanceLoanApplication(models.Model):
     # la main (aucun équivalent sur res.partner) et gelés uniquement via la vue (comme
     # partner_nickname).
     guarantor_partner_id = fields.Many2one('res.partner', string='Nom et prénom')
-    guarantor_id_card_number = fields.Char(string='N° CIN')
-    guarantor_id_card_issue_date = fields.Date(string='CIN délivrée le')
-    guarantor_id_card_issue_place = fields.Char(string='CIN délivrée à')
-    guarantor_id_card_duplicate_date = fields.Date(string='Duplicata délivré le')
-    guarantor_id_card_duplicate_place = fields.Char(string='Duplicata délivré à')
+    guarantor_id_card_number = fields.Char(
+        string='N° CIN', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
+    guarantor_id_card_issue_date = fields.Date(
+        string='CIN délivrée le', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
+    guarantor_id_card_issue_place = fields.Char(
+        string='CIN délivrée à', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
+    guarantor_id_card_duplicate_date = fields.Date(
+        string='Duplicata délivré le', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
+    guarantor_id_card_duplicate_place = fields.Char(
+        string='Duplicata délivré à', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
     guarantor_address = fields.Char(
         string='Adresse', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
-    guarantor_fokontany = fields.Char(string='Fokontany')
+    guarantor_fokontany = fields.Char(
+        string='Fokontany', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
     guarantor_profession = fields.Char(
         string='Profession', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
-    guarantor_employer = fields.Char(string='Employeur')
+    guarantor_employer = fields.Char(
+        string='Employeur', compute='_compute_guarantor_kyc_from_partner', store=True, readonly=False)
     guarantor_phone = fields.Char(
         string='Téléphone', compute='_compute_guarantor_phone', store=True, readonly=False)
     guarantor_relationship_with_borrower = fields.Char(string='Lien avec le partenaire')
@@ -474,6 +481,69 @@ class MicrofinanceLoanApplication(models.Model):
     field_visit_ids = fields.One2many('microfinance.loan.application.field.visit', 'application_id', string='Visites terrain (VAD/VAV)')
     field_visit_count = fields.Integer(string='Nombre de visites', compute='_compute_counts')
 
+    # --- Emplacements fixes (1 visite + 1 contre-visite par type) : pointeurs Many2one vers
+    # les 4 enregistrements field_visit_ids correspondants, garantis présents par
+    # _ensure_field_visit_slots() (appelée depuis create(), jamais depuis read() — même
+    # discipline que _ensure_default_document_lines ci-dessous). Permet d'exposer les champs
+    # de chaque visite directement sur le formulaire (via les related ci-après) en layout
+    # "carte" (label au-dessus/à côté de la valeur), plutôt qu'un tableau où le label
+    # n'existe qu'une fois dans l'en-tête de colonne — la mise en page demandée par Micka
+    # n'est atteignable qu'en sortant du rendu <tree>.
+    vad_visit_id = fields.Many2one(
+        'microfinance.loan.application.field.visit', string='Visite à domicile', readonly=True, copy=False)
+    contre_vad_visit_id = fields.Many2one(
+        'microfinance.loan.application.field.visit', string='Contre-visite à domicile', readonly=True, copy=False)
+    vav_visit_id = fields.Many2one(
+        'microfinance.loan.application.field.visit', string='Visite au lieu de vente', readonly=True, copy=False)
+    contre_vav_visit_id = fields.Many2one(
+        'microfinance.loan.application.field.visit', string='Contre-visite au lieu de vente', readonly=True, copy=False)
+
+    vad_agent_id = fields.Many2one(related='vad_visit_id.agent_id', string='Effectué par', readonly=False)
+    vad_visit_date = fields.Date(related='vad_visit_id.visit_date', string='Date', readonly=False)
+    vad_constats = fields.Text(related='vad_visit_id.constats', string='Constats', readonly=False)
+    vad_neighborhood_reputation = fields.Text(
+        related='vad_visit_id.neighborhood_reputation',
+        string='Réputation dans le quartier (recoupement moral)', readonly=False)
+
+    contre_vad_agent_id = fields.Many2one(
+        related='contre_vad_visit_id.agent_id', string='Effectué par', readonly=False)
+    contre_vad_visit_date = fields.Date(related='contre_vad_visit_id.visit_date', string='Date', readonly=False)
+    contre_vad_constats = fields.Text(related='contre_vad_visit_id.constats', string='Constats', readonly=False)
+    contre_vad_neighborhood_reputation = fields.Text(
+        related='contre_vad_visit_id.neighborhood_reputation',
+        string='Réputation dans le quartier (recoupement moral)', readonly=False)
+
+    vav_agent_id = fields.Many2one(related='vav_visit_id.agent_id', string='Effectué par', readonly=False)
+    vav_visit_date = fields.Date(related='vav_visit_id.visit_date', string='Date', readonly=False)
+    vav_project_exists = fields.Boolean(
+        related='vav_visit_id.project_exists', string='Existence du projet (lieu de vente)', readonly=False)
+    vav_potential_clients_level = fields.Selection(
+        related='vav_visit_id.potential_clients_level', string='Existence des clients potentiels', readonly=False)
+    vav_stock_value = fields.Monetary(related='vav_visit_id.stock_value', string='Valeur du stock', readonly=False)
+    vav_competition_level = fields.Selection(
+        related='vav_visit_id.competition_level', string='Concurrence', readonly=False)
+    vav_product_presentation = fields.Selection(
+        related='vav_visit_id.product_presentation', string='Présentation des produits', readonly=False)
+    vav_commercial_attitude = fields.Selection(
+        related='vav_visit_id.commercial_attitude', string='Attitude commerciale', readonly=False)
+
+    contre_vav_agent_id = fields.Many2one(
+        related='contre_vav_visit_id.agent_id', string='Effectué par', readonly=False)
+    contre_vav_visit_date = fields.Date(related='contre_vav_visit_id.visit_date', string='Date', readonly=False)
+    contre_vav_project_exists = fields.Boolean(
+        related='contre_vav_visit_id.project_exists', string='Existence du projet (lieu de vente)', readonly=False)
+    contre_vav_potential_clients_level = fields.Selection(
+        related='contre_vav_visit_id.potential_clients_level',
+        string='Existence des clients potentiels', readonly=False)
+    contre_vav_stock_value = fields.Monetary(
+        related='contre_vav_visit_id.stock_value', string='Valeur du stock', readonly=False)
+    contre_vav_competition_level = fields.Selection(
+        related='contre_vav_visit_id.competition_level', string='Concurrence', readonly=False)
+    contre_vav_product_presentation = fields.Selection(
+        related='contre_vav_visit_id.product_presentation', string='Présentation des produits', readonly=False)
+    contre_vav_commercial_attitude = fields.Selection(
+        related='contre_vav_visit_id.commercial_attitude', string='Attitude commerciale', readonly=False)
+
     # ------------------------------------------------------------------
     # Section VI (suite) — Fiche de catégorisation sociale : grille de points
     # ------------------------------------------------------------------
@@ -485,25 +555,99 @@ class MicrofinanceLoanApplication(models.Model):
         help='1 (1er adulte) + 0,5 × (membres > 14 ans restants) + 0,3 × (membres < 14 ans).',
     )
 
-    assets_score = fields.Integer(string='Actifs / Patrimoine (1-4)')
+    # Moteur générique de tranches (microfinance.social.score.bracket) : chaque catégorie
+    # notée de la grille sociale est un choix de tranche (radio), pas une saisie manuelle de
+    # note — la note (*_score) est dérivée de la tranche choisie, jamais saisie directement
+    # (décision confirmée avec Micka).
+    assets_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string='Actifs / Patrimoine (tranche)',
+        domain="[('category', '=', 'assets'), ('company_id', '=', company_id)]")
+    assets_score = fields.Integer(
+        string='Actifs / Patrimoine (1-4)', compute='_compute_scores', store=True)
+    assets_score_display = fields.Char(string='Note', compute='_compute_scores', store=True)
     assets_exact_amount = fields.Monetary(string='Actifs : montant exact')
-    activity_score = fields.Integer(string='Activité (1-4)')
-    income_score = fields.Integer(string='Revenus - bénéfice net du ménage (1-4)')
+
+    food_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string='Alimentation (tranche)',
+        domain="[('category', '=', 'food'), ('company_id', '=', company_id)]")
+    food_score = fields.Integer(string='Alimentation (1-4)', compute='_compute_scores', store=True)
+    food_score_display = fields.Char(string='Note', compute='_compute_scores', store=True)
+
+    activity_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string='Activité (tranche)',
+        domain="[('category', '=', 'activity'), ('company_id', '=', company_id)]")
+    activity_score = fields.Integer(string='Activité (1-4)', compute='_compute_scores', store=True)
+    activity_score_display = fields.Char(string='Note', compute='_compute_scores', store=True)
+
+    health_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string='Santé (tranche)',
+        domain="[('category', '=', 'health'), ('company_id', '=', company_id)]")
+    health_score = fields.Integer(string='Santé (1-4)', compute='_compute_scores', store=True)
+    health_score_display = fields.Char(string='Note', compute='_compute_scores', store=True)
+
+    income_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string='Revenus (tranche)',
+        domain="[('category', '=', 'income'), ('company_id', '=', company_id)]")
+    income_score = fields.Integer(
+        string='Revenus - bénéfice net du ménage (1-4)', compute='_compute_scores', store=True)
+    income_score_display = fields.Char(string='Note', compute='_compute_scores', store=True)
     income_net_benefit_amount = fields.Monetary(string='Revenus : montant BN')
-    food_score = fields.Integer(string='Alimentation (1-4)')
-    health_score = fields.Integer(string='Santé (1-4)')
-    housing_state_score = fields.Integer(string='Habitat : état du toit (0-2)')
-    housing_surface_score = fields.Integer(string='Habitat : surface par membre (0-2)')
+
+    education_borrower_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string="Éducation du candidat (tranche)",
+        domain="[('category', '=', 'education_borrower'), ('company_id', '=', company_id)]")
+    education_borrower_score = fields.Integer(
+        string="Niveau d'éducation du candidat emprunteur (0-4)",
+        compute='_compute_scores', store=True)
+    education_borrower_score_display = fields.Char(string='Note', compute='_compute_scores', store=True)
+
+    education_children_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string='Éducation des enfants (tranche)',
+        domain="[('category', '=', 'education_children'), ('company_id', '=', company_id)]")
+    education_children_score = fields.Integer(
+        string='Éducation des enfants (1-4)', compute='_compute_scores', store=True)
+    education_children_score_display = fields.Char(string='Note', compute='_compute_scores', store=True)
+
+    _SCORE_BRACKET_FIELDS = (
+        ('assets_score', 'assets_bracket_id'),
+        ('food_score', 'food_bracket_id'),
+        ('activity_score', 'activity_bracket_id'),
+        ('health_score', 'health_bracket_id'),
+        ('income_score', 'income_bracket_id'),
+        ('education_borrower_score', 'education_borrower_bracket_id'),
+        ('education_children_score', 'education_children_bracket_id'),
+    )
+
+    # Habitat : 2 tranches distinctes (état du toit + surface) sommées en 1 seule note/1 seul
+    # badge — pas de correspondance directe tranche → note comme les 7 catégories ci-dessus,
+    # donc champs + compute séparés (_compute_housing_score, pas fusionné avec _compute_scores).
+    housing_state_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string='Habitat — état du toit (tranche)',
+        domain="[('category', '=', 'housing_state'), ('company_id', '=', company_id)]")
+    housing_surface_bracket_id = fields.Many2one(
+        'microfinance.social.score.bracket', string='Habitat — surface (tranche)',
+        domain="[('category', '=', 'housing_surface'), ('company_id', '=', company_id)]")
+    housing_state_score = fields.Integer(
+        string='Habitat — état du toit (0-2)', compute='_compute_housing_score', store=True)
+    housing_surface_score = fields.Integer(
+        string='Habitat — surface (1-2)', compute='_compute_housing_score', store=True)
     housing_score = fields.Integer(
         string='Habitat total (0-4)', compute='_compute_housing_score', store=True,
         help='Somme état + surface, hypothèse de calcul à confirmer avec CEFOR si erronée.',
     )
-    education_borrower_score = fields.Integer(string="Niveau d'éducation du candidat (0-4)")
-    education_children_score = fields.Integer(string='Éducation des enfants (1-4)')
+    housing_score_display = fields.Char(string='Note', compute='_compute_housing_score', store=True)
+
+    # Purement informatif, pas de note/point attribué — aucun lien avec total_points.
+    administrative_situation = fields.Selection([
+        ('no_cin_no_request',
+         "Aucun membre n'a de copie ou de CIN et le ménage ne souhaite pas faire les démarches"),
+        ('no_cin_will_request',
+         "Aucun membre n'a de copie ou de CIN et le ménage souhaite faire la démarche"),
+        ('some_members_have_cin', 'Certains membres ont copies ou CIN'),
+        ('all_members_have_cin', 'Tous ont copies et des CIN'),
+    ], string='Administratif')
 
     savings_amount = fields.Monetary(string='Épargne (montant)')
-    savings_score = fields.Integer(string='Épargne (1-4, optionnel)')
-    administrative_score = fields.Integer(string='Administratif (1-4, optionnel)')
     surveyor_impression_score = fields.Integer(
         string="Impression personnelle de l'enquêteur",
         help="Note libre de 1 à 4, jamais recalculée. Hypothèse d'échelle par défaut "
@@ -527,7 +671,11 @@ class MicrofinanceLoanApplication(models.Model):
     # ------------------------------------------------------------------
     # Bloc E — Avis CA / CDAG
     # ------------------------------------------------------------------
-    requested_amount = fields.Monetary(string='Montant demandé', tracking=True)
+    requested_amount = fields.Monetary(
+        related='loan_id.loan_amount', string='Montant demandé', readonly=True, tracking=True,
+        help='Reprend automatiquement le montant du crédit lié — non modifiable depuis le '
+             'dossier, à ajuster sur le crédit (microfinance.loan) si besoin.',
+    )
     required_savings = fields.Monetary(string='Épargne exigée (demande)')
     repayment_amount = fields.Monetary(string='Remboursement (demande)')
     period = fields.Integer(string='Durée demandée (échéances)')
@@ -866,16 +1014,27 @@ class MicrofinanceLoanApplication(models.Model):
     # _KYC_IN_PROGRESS_STATES (Bloc A), pas de dépendance directe entre les deux constantes.
     _GUARANTOR_SYNC_IN_PROGRESS_STATES = ('draft', 'visite')
     _GUARANTOR_KYC_FIELD_SOURCES = (
+        ('guarantor_id_card_number', lambda partner: partner.microfinance_id_number),
+        ('guarantor_id_card_issue_date', lambda partner: partner.microfinance_id_issue_date),
+        ('guarantor_id_card_issue_place', lambda partner: partner.microfinance_id_issue_place),
+        ('guarantor_id_card_duplicate_date', lambda partner: partner.microfinance_id_duplicate_date),
+        ('guarantor_id_card_duplicate_place', lambda partner: partner.microfinance_id_duplicate_place),
         ('guarantor_address', lambda partner: ', '.join(filter(None, [partner.street, partner.street2]))),
+        ('guarantor_fokontany', lambda partner: partner.microfinance_fokontany_id.name),
         ('guarantor_profession', lambda partner: partner.microfinance_profession.name),
+        ('guarantor_employer', lambda partner: partner.microfinance_employer),
     )
 
     @api.depends(
+        'guarantor_partner_id.microfinance_id_number', 'guarantor_partner_id.microfinance_id_issue_date',
+        'guarantor_partner_id.microfinance_id_issue_place', 'guarantor_partner_id.microfinance_id_duplicate_date',
+        'guarantor_partner_id.microfinance_id_duplicate_place',
         'guarantor_partner_id.street', 'guarantor_partner_id.street2',
-        'guarantor_partner_id.microfinance_profession.name',
+        'guarantor_partner_id.microfinance_fokontany_id.name',
+        'guarantor_partner_id.microfinance_profession.name', 'guarantor_partner_id.microfinance_employer',
     )
     def _compute_guarantor_kyc_from_partner(self):
-        """Adresse/profession du garant : même patron de gel que le Bloc A
+        """Identité/adresse/profession du garant : même patron de gel que le Bloc A
         (_compute_kyc_from_partner) — synchronisées depuis guarantor_partner_id tant que le
         dossier est en cours (draft/visite), figées au-delà."""
         for application in self:
@@ -923,19 +1082,96 @@ class MicrofinanceLoanApplication(models.Model):
             under_14 = application.members_under_14 or 0
             application.consumption_units = 1 + 0.5 * max(over_14 - 1, 0) + 0.3 * under_14
 
-    @api.depends('housing_state_score', 'housing_surface_score')
-    def _compute_housing_score(self):
-        """Somme simple état du toit + surface par membre — hypothèse de calcul à
-        confirmer avec CEFOR si erronée."""
+    @api.constrains('household_size', 'members_over_14', 'members_under_14')
+    def _check_household_size_consistency(self):
         for application in self:
-            application.housing_score = (application.housing_state_score or 0) + (application.housing_surface_score or 0)
+            if application.household_size != application.members_over_14 + application.members_under_14:
+                raise ValidationError(_(
+                    "La taille du ménage (%(size)s) doit être égale à la somme des membres de "
+                    "plus de 14 ans (%(over)s) et de moins de 14 ans (%(under)s), soit %(sum)s.",
+                    size=application.household_size,
+                    over=application.members_over_14,
+                    under=application.members_under_14,
+                    sum=application.members_over_14 + application.members_under_14,
+                ))
+
+    @api.constrains('assets_bracket_id', 'assets_exact_amount')
+    def _check_assets_exact_amount_matches_bracket(self):
+        for application in self:
+            bracket = application.assets_bracket_id
+            if not bracket:
+                continue
+            amount = application.assets_exact_amount
+            previous = self.env['microfinance.social.score.bracket'].search([
+                ('category', '=', 'assets'),
+                ('company_id', '=', application.company_id.id),
+                ('sequence', '<', bracket.sequence),
+            ], order='sequence desc', limit=1)
+            lower_bound = previous.threshold_amount if previous else 0
+            upper_bound = bracket.threshold_amount
+            valid = amount > lower_bound and (not upper_bound or amount <= upper_bound)
+            if not valid:
+                raise ValidationError(_(
+                    "Le montant exact (%(amount)s) ne correspond pas à la tranche sélectionnée "
+                    "pour Actifs / Patrimoine. Vérifiez la tranche ou le montant saisi."
+                ) % {'amount': amount})
+
+    @api.constrains('income_bracket_id', 'income_net_benefit_amount', 'consumption_units')
+    def _check_income_net_benefit_matches_bracket(self):
+        for application in self:
+            bracket = application.income_bracket_id
+            if not bracket:
+                continue
+            uc = application.consumption_units or 1.0
+            amount_per_uc = application.income_net_benefit_amount / uc
+            previous = self.env['microfinance.social.score.bracket'].search([
+                ('category', '=', 'income'),
+                ('company_id', '=', application.company_id.id),
+                ('sequence', '<', bracket.sequence),
+            ], order='sequence desc', limit=1)
+            lower_bound = previous.threshold_amount if previous else 0
+            upper_bound = bracket.threshold_amount
+            valid = amount_per_uc > lower_bound and (not upper_bound or amount_per_uc <= upper_bound)
+            if not valid:
+                raise ValidationError(_(
+                    "Le montant BN par UC (%(amount)s) ne correspond pas à la tranche "
+                    "sélectionnée pour Revenus. Vérifiez la tranche ou le montant saisi."
+                ) % {'amount': round(amount_per_uc)})
+
+    @api.depends(
+        'assets_bracket_id.sequence', 'food_bracket_id.sequence', 'activity_bracket_id.sequence',
+        'health_bracket_id.sequence', 'income_bracket_id.sequence',
+        'education_borrower_bracket_id.sequence', 'education_children_bracket_id.sequence',
+    )
+    def _compute_scores(self):
+        for application in self:
+            for score_field, bracket_field in application._SCORE_BRACKET_FIELDS:
+                bracket = getattr(application, bracket_field)
+                seq = bracket.sequence if bracket else 0
+                setattr(application, score_field, seq)
+                setattr(application, f'{score_field}_display', f'{seq}/4')
+
+    @api.depends('housing_state_bracket_id.sequence', 'housing_surface_bracket_id.sequence')
+    def _compute_housing_score(self):
+        """Somme état du toit + surface par membre, chacune dérivée de sa propre tranche —
+        hypothèse de calcul à confirmer avec CEFOR si erronée. Une seule note/un seul badge
+        pour les deux tranches (pas de correspondance directe tranche → note comme les autres
+        catégories, donc pas fusionné avec _compute_scores)."""
+        for application in self:
+            state_bracket = application.housing_state_bracket_id
+            surface_bracket = application.housing_surface_bracket_id
+            state_seq = state_bracket.sequence if state_bracket else 0
+            surface_seq = surface_bracket.sequence if surface_bracket else 0
+            application.housing_state_score = state_seq
+            application.housing_surface_score = surface_seq
+            total = state_seq + surface_seq
+            application.housing_score = total
+            application.housing_score_display = f'{total}/4'
 
     @api.depends(
         'assets_score', 'activity_score', 'income_score', 'food_score', 'health_score',
         'housing_score', 'education_borrower_score', 'education_children_score',
-        'savings_score', 'administrative_score', 'surveyor_impression_score', 'company_id',
-        'company_id.microfinance_social_grid_include_savings',
-        'company_id.microfinance_social_grid_include_administrative',
+        'surveyor_impression_score', 'company_id',
         'company_id.microfinance_social_grid_include_impression_in_total',
     )
     def _compute_total_points(self):
@@ -948,10 +1184,6 @@ class MicrofinanceLoanApplication(models.Model):
                 + (application.health_score or 0) + (application.housing_score or 0)
                 + (application.education_borrower_score or 0) + (application.education_children_score or 0)
             )
-            if company.microfinance_social_grid_include_savings:
-                total += application.savings_score or 0
-            if company.microfinance_social_grid_include_administrative:
-                total += application.administrative_score or 0
             if company.microfinance_social_grid_include_impression_in_total:
                 total += application.surveyor_impression_score or 0
             application.total_points = total
@@ -997,6 +1229,7 @@ class MicrofinanceLoanApplication(models.Model):
         for application in applications:
             application._ensure_default_document_lines()
             application._ensure_default_financial_lines()
+            application._ensure_field_visit_slots()
         return applications
 
     # NE PAS réintroduire d'appel à _ensure_default_financial_lines() (ni équivalent) depuis
@@ -1019,6 +1252,46 @@ class MicrofinanceLoanApplication(models.Model):
         missing = [doc_type for doc_type in self._DEFAULT_DOCUMENT_TYPES if doc_type not in existing_types]
         if missing:
             self.document_line_ids = [(0, 0, {'name': doc_type}) for doc_type in missing]
+
+    # (champ slot, visit_type, is_counter_visit, champ slot source si contre-visite) — l'ordre
+    # (VAD avant Contre-VAD, VAV avant Contre-VAV) est significatif : la source doit déjà être
+    # résolue quand on traite la contre-visite correspondante.
+    _FIELD_VISIT_SLOTS = (
+        ('vad_visit_id', 'home', False, None),
+        ('contre_vad_visit_id', 'home', True, 'vad_visit_id'),
+        ('vav_visit_id', 'sales_point', False, None),
+        ('contre_vav_visit_id', 'sales_point', True, 'vav_visit_id'),
+    )
+
+    def _ensure_field_visit_slots(self):
+        """Garantit la présence des 4 emplacements de visite terrain (VAD/Contre-VAD/VAV/
+        Contre-VAV), même patron que _ensure_default_document_lines. Réutilise un
+        field.visit existant plutôt que d'en créer un second si le dossier a déjà des visites
+        (dossiers créés avant l'introduction de ce mécanisme — cf. avertissement ci-dessus sur
+        les scripts one-shot, cette méthode n'est appelée que depuis create(), jamais depuis
+        read()). agent_id/visit_date des enregistrements vides prennent leurs défauts habituels
+        (utilisateur connecté / jour actuel, cf. modèle field.visit) — with_context() désactive
+        temporairement _check_counter_visit_independent_agent, sans quoi la Contre-VAD/
+        Contre-VAV échouerait dès la création (même agent par défaut que la visite initiale) ;
+        le contrôle réel s'applique normalement dès que l'enquêteur modifie l'un des deux."""
+        self.ensure_one()
+        Visit = self.env['microfinance.loan.application.field.visit']
+        for slot_field, visit_type, is_counter, source_slot_field in self._FIELD_VISIT_SLOTS:
+            if self[slot_field]:
+                continue
+            existing = Visit.search([
+                ('application_id', '=', self.id),
+                ('visit_type', '=', visit_type),
+                ('is_counter_visit', '=', is_counter),
+            ], limit=1)
+            if existing:
+                self[slot_field] = existing
+                continue
+            values = {'application_id': self.id, 'visit_type': visit_type, 'is_counter_visit': is_counter}
+            if is_counter:
+                values['counter_visit_of_id'] = self[source_slot_field].id
+            self[slot_field] = Visit.with_context(
+                microfinance_bootstrap_field_visit_slots=True).create(values)
 
     # Catégorie -> (modèle du catalogue de désignations, champ Many2one correspondant sur
     # microfinance.loan.application.income.line) — un seul des 3 champs designation est rempli
@@ -1351,7 +1624,10 @@ class MicrofinanceLoanApplicationFieldVisit(models.Model):
              "initiale du même type que celle-ci contre-vérifie.",
     )
 
-    agent_id = fields.Many2one('res.users', string='Effectué par', required=True)
+    agent_id = fields.Many2one(
+        'res.users', string='Effectué par', required=True,
+        default=lambda self: self.env.user,
+    )
     visit_date = fields.Date(string='Date', required=True, default=fields.Date.context_today)
 
     # Champs spécifiques VAD
@@ -1391,6 +1667,12 @@ class MicrofinanceLoanApplicationFieldVisit(models.Model):
 
     @api.constrains('is_counter_visit', 'agent_id', 'counter_visit_of_id')
     def _check_counter_visit_independent_agent(self):
+        # Désactivé le temps de _ensure_field_visit_slots() (microfinance_loan_application.py) :
+        # les 4 emplacements sont créés en une fois avec le même agent par défaut (utilisateur
+        # connecté), le contrôle d'indépendance n'a de sens qu'une fois qu'un agent réel est
+        # saisi pour chaque visite.
+        if self.env.context.get('microfinance_bootstrap_field_visit_slots'):
+            return
         for visit in self:
             if (
                 visit.is_counter_visit

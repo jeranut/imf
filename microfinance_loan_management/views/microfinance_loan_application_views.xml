@@ -140,7 +140,7 @@
                             <field name="partner_surname" readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_nickname" placeholder="Surnom usuel, le cas échéant"
                                 readonly="state not in ('draft', 'visite')"/>
-                            <field name="partner_id_card_number" placeholder="N° CIN"
+                            <field name="partner_id_card_number" placeholder="N° CIN" widget="microfinance_grouped_digits"
                                 readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_id_card_issue_date" readonly="state not in ('draft', 'visite')"/>
                             <field name="partner_id_card_issue_place" placeholder="Ex: Antananarivo"
@@ -177,7 +177,7 @@
                         <group>
                             <field name="spouse_name" placeholder="Nom et prénom du conjoint"
                                 readonly="state not in ('draft', 'visite')"/>
-                            <field name="spouse_id_card_number" placeholder="N° CIN du conjoint"
+                            <field name="spouse_id_card_number" placeholder="N° CIN du conjoint" widget="microfinance_grouped_digits"
                                 readonly="state not in ('draft', 'visite')"/>
                             <field name="spouse_id_card_issue_date" readonly="state not in ('draft', 'visite')"/>
                             <field name="spouse_id_card_issue_place" placeholder="Ex: Antananarivo"
@@ -229,7 +229,13 @@
                     </group>
                     <group>
                         <group string="Identité">
-                            <field name="guarantor_partner_id" placeholder="Rechercher ou créer le garant..."/>
+                            <!-- microfinance_context propagé au formulaire "Créer et modifier" du garant :
+                                 sans ça, sa section Identité (CIN, fokontany...) resterait masquée sur sa
+                                 propre fiche puisqu'un garant n'est pas forcément microfinance_partner_type
+                                 = 'client'. Pas de préremplissage d'adresse (contrairement au conjoint) :
+                                 le garant a typiquement une adresse différente du client. -->
+                            <field name="guarantor_partner_id" placeholder="Rechercher ou créer le garant..."
+                                context="{'microfinance_context': True}"/>
                             <field name="guarantor_id_card_number" placeholder="N° CIN" widget="microfinance_grouped_digits"
                                 readonly="state not in ('draft', 'visite')"/>
                             <field name="guarantor_id_card_issue_date" readonly="state not in ('draft', 'visite')"/>
@@ -367,8 +373,8 @@
                         <field name="repayment_capacity_weekly_current" readonly="1"/>
                     </group>
 
-                    <group string="Accroissement du revenu">
-                        <field name="income_growth_occurred" widget="radio"/>
+                    <group string="Accroissement du revenu" class="o_microfinance_income_growth_group">
+                        <field name="income_growth_occurred" widget="radio" options="{'horizontal': True}"/>
                         <field name="income_growth_before" placeholder="Ex: 300 000" invisible="income_growth_occurred != 'yes'"/>
                         <field name="income_growth_after" placeholder="Ex: 450 000" invisible="income_growth_occurred != 'yes'"/>
                     </group>
@@ -447,105 +453,169 @@
                         </group>
                         <group/>
                     </group>
-                    <group string="Ménage">
+                    <group string="Ménage" col="6" class="o_microfinance_household_row">
                         <field name="household_size"/>
                         <field name="members_over_14"/>
                         <field name="members_under_14"/>
                     </group>
-                    <group>
-                        <group string="Actifs, épargne, activité, revenus">
-                            <field name="assets_score"/>
-                            <field name="assets_exact_amount"/>
-                            <field name="savings_amount"/>
-                            <field name="savings_score"/>
-                            <field name="activity_score"/>
-                            <field name="income_score"/>
-                            <field name="income_net_benefit_amount"/>
-                        </group>
-                        <group string="Alimentation, santé, habitat">
-                            <field name="food_score"/>
-                            <field name="health_score"/>
-                            <field name="housing_state_score"/>
-                            <field name="housing_surface_score"/>
-                        </group>
-                    </group>
-                    <group>
-                        <group string="Éducation">
-                            <field name="education_borrower_score"/>
-                            <field name="education_children_score"/>
-                        </group>
-                        <group string="Administratif">
-                            <field name="administrative_score"/>
-                        </group>
-                    </group>
+                    <div class="o_microfinance_score_grid">
+                        <div class="o_microfinance_score_card">
+                            <div class="o_microfinance_score_card__badge">
+                                <field name="assets_score_display" readonly="1" nolabel="1"/>
+                            </div>
+                            <label for="assets_bracket_id" string="Actifs / Patrimoine" class="o_microfinance_score_card__title"/>
+                            <field name="assets_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                            <div class="o_microfinance_score_card__divider"/>
+                            <div class="o_microfinance_score_card__inline_row">
+                                <span class="o_microfinance_score_card__inline_label">Montant exact</span>
+                                <span>:</span>
+                                <field name="assets_exact_amount" nolabel="1"/>
+                            </div>
+                            <div class="o_microfinance_score_card__divider"/>
+                            <div class="o_microfinance_score_card__inline_row">
+                                <span class="o_microfinance_score_card__inline_label">Épargne</span>
+                                <span>=</span>
+                                <field name="savings_amount" readonly="1" nolabel="1"/>
+                            </div>
+                        </div>
+
+                        <div class="o_microfinance_score_card o_microfinance_score_card--no-side">
+                            <div class="o_microfinance_score_card__badge">
+                                <field name="food_score_display" readonly="1" nolabel="1"/>
+                            </div>
+                            <label for="food_bracket_id" string="Alimentation" class="o_microfinance_score_card__title"/>
+                            <field name="food_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                        </div>
+
+                        <div class="o_microfinance_score_card o_microfinance_score_card--no-side">
+                            <div class="o_microfinance_score_card__badge">
+                                <field name="activity_score_display" readonly="1" nolabel="1"/>
+                            </div>
+                            <label for="activity_bracket_id" string="Activité" class="o_microfinance_score_card__title"/>
+                            <field name="activity_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                        </div>
+
+                        <div class="o_microfinance_score_card o_microfinance_score_card--no-side">
+                            <div class="o_microfinance_score_card__badge">
+                                <field name="health_score_display" readonly="1" nolabel="1"/>
+                            </div>
+                            <label for="health_bracket_id" string="Santé" class="o_microfinance_score_card__title"/>
+                            <field name="health_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                        </div>
+
+                        <div class="o_microfinance_score_card">
+                            <div class="o_microfinance_score_card__badge">
+                                <field name="income_score_display" readonly="1" nolabel="1"/>
+                            </div>
+                            <label for="income_bracket_id" string="Revenus (bénéfice net du ménage)" class="o_microfinance_score_card__title"/>
+                            <field name="income_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                            <div class="o_microfinance_score_card__divider"/>
+                            <div class="o_microfinance_score_card__inline_row">
+                                <span class="o_microfinance_score_card__inline_label">Montant BN</span>
+                                <span>:</span>
+                                <field name="income_net_benefit_amount" nolabel="1"/>
+                            </div>
+                            <div class="o_microfinance_score_card__divider"/>
+                            <div class="o_microfinance_score_card__inline_row">
+                                <span class="o_microfinance_score_card__inline_label">UC</span>
+                                <span>=</span>
+                                <field name="consumption_units" readonly="1" nolabel="1"/>
+                            </div>
+                        </div>
+
+                        <div class="o_microfinance_score_card">
+                            <div class="o_microfinance_score_card__badge">
+                                <field name="housing_score_display" readonly="1" nolabel="1"/>
+                            </div>
+                            <label for="housing_state_bracket_id" string="Habitat (toit)" class="o_microfinance_score_card__title"/>
+                            <field name="housing_state_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                            <div class="o_microfinance_score_card__divider"/>
+                            <field name="housing_surface_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                        </div>
+
+                        <div class="o_microfinance_score_card o_microfinance_score_card--no-side">
+                            <div class="o_microfinance_score_card__badge">
+                                <field name="education_borrower_score_display" readonly="1" nolabel="1"/>
+                            </div>
+                            <label for="education_borrower_bracket_id" string="Niveau d'éducation du candidat emprunteur" class="o_microfinance_score_card__title"/>
+                            <field name="education_borrower_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                        </div>
+
+                        <div class="o_microfinance_score_card o_microfinance_score_card--no-side">
+                            <div class="o_microfinance_score_card__badge">
+                                <field name="education_children_score_display" readonly="1" nolabel="1"/>
+                            </div>
+                            <label for="education_children_bracket_id" string="Éducation des enfants" class="o_microfinance_score_card__title"/>
+                            <field name="education_children_bracket_id" widget="radio" nolabel="1" options="{'no_create': True, 'no_open': True}"/>
+                        </div>
+
+                        <div class="o_microfinance_score_card o_microfinance_score_card--no-badge o_microfinance_score_card--full-width">
+                            <label for="administrative_situation" string="Administratif" class="o_microfinance_score_card__title"/>
+                            <field name="administrative_situation" widget="radio" nolabel="1"/>
+                        </div>
+                    </div>
+
                     <group string="Impression de l'enquêteur">
-                        <field name="surveyor_impression_score"/>
-                        <field name="surveyor_level_impression"/>
-                        <field name="is_eligible"/>
+                        <field name="is_eligible" widget="radio" options="{'horizontal': True}"/>
                     </group>
-                    <group string="Visite à domicile (VAD)">
-                        <field name="field_visit_ids" string="VAD" nolabel="1"
-                            context="{'default_visit_type': 'home', 'default_is_counter_visit': False}"
-                            domain="[('visit_type', '=', 'home'), ('is_counter_visit', '=', False)]">
-                            <tree editable="bottom">
-                                <field name="agent_id"/>
-                                <field name="visit_date"/>
-                                <field name="constats"/>
-                                <field name="neighborhood_reputation"/>
-                                <field name="visit_type" column_invisible="1"/>
-                                <field name="is_counter_visit" column_invisible="1"/>
-                            </tree>
-                        </field>
-                        <field name="field_visit_ids" string="Contre-VAD" nolabel="1"
-                            context="{'default_visit_type': 'home', 'default_is_counter_visit': True}"
-                            domain="[('visit_type', '=', 'home'), ('is_counter_visit', '=', True)]">
-                            <tree editable="bottom">
-                                <field name="agent_id"/>
-                                <field name="visit_date"/>
-                                <field name="counter_visit_of_id"/>
-                                <field name="constats"/>
-                                <field name="neighborhood_reputation"/>
-                                <field name="application_id" column_invisible="1"/>
-                                <field name="visit_type" column_invisible="1"/>
-                                <field name="is_counter_visit" column_invisible="1"/>
-                            </tree>
-                        </field>
+                    <!-- vad_visit_id/contre_vad_visit_id : emplacements fixes garantis par
+                         _ensure_field_visit_slots() (create()) — un seul enregistrement chacun,
+                         plus de tableau "Ajouter une ligne". Les champs vad_*/contre_vad_* sont
+                         des related vers ces deux visites (cf. modèle). -->
+                    <!-- Titre en groupe fermé (auto), contenu en groupe(s) frère(s) juste après :
+                         même patron que "VII — Avis du CA et du CDAG" ci-dessous. Un <group>/<div>
+                         placé COMME ENFANT d'un <group string="..."> non fermé hérite de sa grille
+                         2 colonnes par défaut et se retrouve compressé à la moitié/au quart de la
+                         largeur — d'où le rendu très étroit constaté à l'écran. -->
+                    <group string="Visite à domicile (VAD)"/>
+                    <group>
+                        <group string="VAD" style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;">
+                            <field name="vad_agent_id"/>
+                            <field name="vad_visit_date"/>
+                        </group>
+                        <group string="Contre-VAD" style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;">
+                            <field name="contre_vad_agent_id"/>
+                            <field name="contre_vad_visit_date"/>
+                        </group>
                     </group>
-                    <group string="Visite au lieu de vente (VAV)">
-                        <field name="field_visit_ids" string="VAV" nolabel="1"
-                            context="{'default_visit_type': 'sales_point', 'default_is_counter_visit': False}"
-                            domain="[('visit_type', '=', 'sales_point'), ('is_counter_visit', '=', False)]">
-                            <tree editable="bottom">
-                                <field name="agent_id"/>
-                                <field name="visit_date"/>
-                                <field name="project_exists"/>
-                                <field name="potential_clients_level"/>
-                                <field name="stock_value"/>
-                                <field name="competition_level"/>
-                                <field name="product_presentation"/>
-                                <field name="commercial_attitude"/>
-                                <field name="visit_type" column_invisible="1"/>
-                                <field name="is_counter_visit" column_invisible="1"/>
-                            </tree>
-                        </field>
-                        <field name="field_visit_ids" string="Contre-VAV" nolabel="1"
-                            context="{'default_visit_type': 'sales_point', 'default_is_counter_visit': True}"
-                            domain="[('visit_type', '=', 'sales_point'), ('is_counter_visit', '=', True)]">
-                            <tree editable="bottom">
-                                <field name="agent_id"/>
-                                <field name="visit_date"/>
-                                <field name="counter_visit_of_id"/>
-                                <field name="project_exists"/>
-                                <field name="potential_clients_level"/>
-                                <field name="stock_value"/>
-                                <field name="competition_level"/>
-                                <field name="product_presentation"/>
-                                <field name="commercial_attitude"/>
-                                <field name="application_id" column_invisible="1"/>
-                                <field name="visit_type" column_invisible="1"/>
-                                <field name="is_counter_visit" column_invisible="1"/>
-                            </tree>
-                        </field>
+                    <!-- Même mécanisme <group> que le bloc ci-dessus (pas un <div> fait main) :
+                         garantit une largeur/un alignement identiques à la grille native Odoo. -->
+                    <group>
+                        <group style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;">
+                            <label for="vad_constats"/>
+                            <field name="vad_constats" nolabel="1"/>
+                            <label for="vad_neighborhood_reputation"/>
+                            <field name="vad_neighborhood_reputation" nolabel="1"/>
+                        </group>
+                        <group style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;">
+                            <label for="contre_vad_constats"/>
+                            <field name="contre_vad_constats" nolabel="1"/>
+                            <label for="contre_vad_neighborhood_reputation"/>
+                            <field name="contre_vad_neighborhood_reputation" nolabel="1"/>
+                        </group>
+                    </group>
+                    <group string="Visite au lieu de vente (VAV)"/>
+                    <group>
+                        <group string="VAV" style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;">
+                            <field name="vav_agent_id"/>
+                            <field name="vav_visit_date"/>
+                            <field name="vav_project_exists"/>
+                            <field name="vav_potential_clients_level" widget="radio" options="{'horizontal': true}"/>
+                            <field name="vav_stock_value"/>
+                            <field name="vav_competition_level" widget="radio" options="{'horizontal': true}"/>
+                            <field name="vav_product_presentation" widget="radio" options="{'horizontal': true}"/>
+                            <field name="vav_commercial_attitude" widget="radio" options="{'horizontal': true}"/>
+                        </group>
+                        <group string="Contre-VAV" style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;">
+                            <field name="contre_vav_agent_id"/>
+                            <field name="contre_vav_visit_date"/>
+                            <field name="contre_vav_project_exists"/>
+                            <field name="contre_vav_potential_clients_level" widget="radio" options="{'horizontal': true}"/>
+                            <field name="contre_vav_stock_value"/>
+                            <field name="contre_vav_competition_level" widget="radio" options="{'horizontal': true}"/>
+                            <field name="contre_vav_product_presentation" widget="radio" options="{'horizontal': true}"/>
+                            <field name="contre_vav_commercial_attitude" widget="radio" options="{'horizontal': true}"/>
+                        </group>
                     </group>
 
                     <group string="VII — Avis du CA et du CDAG"/>

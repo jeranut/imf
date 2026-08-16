@@ -58,4 +58,93 @@
             display: inline-block;
         }
     }
+
+    // Bloc "Ménage" : Taille / Nb >14 / Nb <14 sur une seule ligne (fiche papier), labels
+    // jamais coupés même longs ("Nb de membres > 14 ans").
+    .o_microfinance_household_row {
+        .o_form_label {
+            white-space: nowrap;
+            width: auto;
+            min-width: 0;
+        }
+    }
+
+    // Bloc "Accroissement du revenu" : libellés plus longs que la colonne de 150px par
+    // défaut de .o_inner_group — élargie explicitement pour éviter le retour à la ligne.
+    .o_microfinance_income_growth_group {
+        .o_form_label {
+            width: 260px;
+            min-width: 260px;
+            white-space: normal;
+        }
+    }
+
+    // Conteneur des cartes de notation sociale (Section VI) : div simple, jamais un <group>
+    // Odoo (dont le layout interne .o_inner_group écraserait ce display: grid).
+    .o_microfinance_score_grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+        gap: 14px;
+        align-items: start;
+        margin-bottom: 12px;
+
+        .o_microfinance_score_card {
+            margin-bottom: 0;
+        }
+    }
+
+    .o_microfinance_score_card {
+        position: relative;
+        border: 1px solid var(--border, #d1d5db);
+        border-radius: 6px;
+        padding: 14px 90px 14px 16px;
+
+        &--no-badge,
+        &--no-side {
+            padding-right: 16px;
+        }
+
+        &--full-width {
+            grid-column: 1 / -1;
+        }
+
+        &__badge {
+            position: absolute;
+            top: 12px;
+            right: 14px;
+            min-width: 52px;
+            text-align: center;
+            border: 1px solid var(--border, #d1d5db);
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-weight: 600;
+        }
+
+        &__title {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        &__divider {
+            border-top: 0.5px solid var(--border, #d1d5db);
+            margin: 12px -16px 12px -16px;
+        }
+
+        &--no-badge &__divider,
+        &--no-side &__divider {
+            margin-right: -16px;
+        }
+
+        &__inline_row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+
+            .o_microfinance_score_card__inline_label {
+                font-weight: 500;
+            }
+        }
+    }
 }
