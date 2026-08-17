@@ -86,46 +86,67 @@ class MicrofinanceLoanPayment(models.Model):
             if journal:
                 payment.journal_id = journal
 
+    @api.model
+    def _allocation_plan(self, installments, amount):
+        """Générateur (échéance, intérêt_alloué, principal_alloué, pénalité_allouée) selon la
+        ventilation CEFOR (Décision 2, distincte de LPF) : intérêt dû -> principal dû ->
+        pénalités, sur la tranche courante à chaque itération, avec débordement sur la ou les
+        tranches suivantes (même ordre) si `amount` dépasse le total dû de la tranche courante.
+        Ne mute rien (aucune écriture) : source unique de vérité, réutilisée à la fois par
+        _allocate_to_installments() ci-dessous (qui applique les écritures lors d'un
+        remboursement réel) et par preview_repayment_allocation() (aperçu de la ventilation côté
+        interface caisse, Lot 4, avant validation — pour ne jamais dupliquer ce calcul en JS)."""
+        remaining = amount
+        for inst in installments:
+            if remaining <= 0.01:
+                break
+            interest_due = max(inst.interest_amount - inst.paid_interest, 0.0)
+            interest_pay = min(remaining, interest_due)
+            remaining -= interest_pay
+            principal_due = max(inst.principal_amount - inst.paid_principal, 0.0)
+            principal_pay = min(remaining, principal_due)
+            remaining -= principal_pay
+            penalty_due = max(inst.penalty_amount - inst.paid_penalty, 0.0)
+            penalty_pay = min(remaining, penalty_due)
+            remaining -= penalty_pay
+            if interest_pay or principal_pay or penalty_pay:
+                yield inst, interest_pay, principal_pay, penalty_pay
+
+    @api.model
+    def preview_repayment_allocation(self, loan_id, amount):
+        """Aperçu de la ventilation d'un remboursement, sans rien écrire en base — appelé par
+        l'interface caisse (Lot 4) avant validation, pour afficher exactement ce que
+        _allocate_to_installments() calculerait réellement au moment de la comptabilisation."""
+        loan = self.env['microfinance.loan'].browse(loan_id)
+        installments = loan.installment_ids.filtered(lambda i: i.residual_amount > 0.01).sorted(lambda i: (i.due_date, i.sequence))
+        alloc_interest = alloc_principal = alloc_penalty = 0.0
+        for _inst, interest_pay, principal_pay, penalty_pay in self._allocation_plan(installments, amount):
+            alloc_interest += interest_pay
+            alloc_principal += principal_pay
+            alloc_penalty += penalty_pay
+        return {
+            'interest_amount': alloc_interest,
+            'principal_amount': alloc_principal,
+            'penalty_amount': alloc_penalty,
+        }
+
     def _allocate_to_installments(self):
         self.ensure_one()
         if self.loan_id.state not in ('active', 'defaulted'):
             raise UserError(_('Le crédit doit être actif ou en défaut pour enregistrer un remboursement.'))
         if self.amount > self.loan_id.balance_total + 0.01:
             raise UserError(_('Surpaiement interdit. Solde restant : %.2f') % self.loan_id.balance_total)
-        remaining = self.amount
-        alloc_penalty = alloc_interest = alloc_principal = 0.0
-        touched = self.env['microfinance.loan.installment']
-        # Ventilation CEFOR (Décision 2, distincte de LPF) : intérêt dû -> principal dû ->
-        # pénalités, sur la tranche courante uniquement à chaque itération. Le tour de boucle
-        # `for inst in installments` (échéances non soldées triées par due_date/sequence) gère
-        # déjà le débordement sur la ou les tranches suivantes lorsque le montant payé dépasse le
-        # total dû de la tranche courante : `remaining` continue simplement d'être consommé sur
-        # l'échéance suivante avec le même ordre de priorité, tranche par tranche.
         installments = self.loan_id.installment_ids.filtered(lambda i: i.residual_amount > 0.01).sorted(lambda i: (i.due_date, i.sequence))
-        for inst in installments:
-            if remaining <= 0.01:
-                break
-            interest_due = max(inst.interest_amount - inst.paid_interest, 0.0)
-            pay = min(remaining, interest_due)
-            if pay:
-                inst.paid_interest += pay
-                alloc_interest += pay
-                remaining -= pay
-                touched |= inst
-            principal_due = max(inst.principal_amount - inst.paid_principal, 0.0)
-            pay = min(remaining, principal_due)
-            if pay:
-                inst.paid_principal += pay
-                alloc_principal += pay
-                remaining -= pay
-                touched |= inst
-            penalty_due = max(inst.penalty_amount - inst.paid_penalty, 0.0)
-            pay = min(remaining, penalty_due)
-            if pay:
-                inst.paid_penalty += pay
-                alloc_penalty += pay
-                remaining -= pay
-                touched |= inst
+        alloc_interest = alloc_principal = alloc_penalty = 0.0
+        touched = self.env['microfinance.loan.installment']
+        for inst, interest_pay, principal_pay, penalty_pay in self._allocation_plan(installments, self.amount):
+            inst.paid_interest += interest_pay
+            inst.paid_principal += principal_pay
+            inst.paid_penalty += penalty_pay
+            alloc_interest += interest_pay
+            alloc_principal += principal_pay
+            alloc_penalty += penalty_pay
+            touched |= inst
         self.write({
             'allocated_penalty': alloc_penalty,
             'allocated_interest': alloc_interest,

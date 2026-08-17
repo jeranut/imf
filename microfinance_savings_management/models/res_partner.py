@@ -90,3 +90,60 @@ class ResPartner(models.Model):
             'domain': [('partner_id', '=', self.id)],
             'context': {'default_partner_id': self.id},
         }
+
+    # --- Backend interface caisse (Lot 3) ---
+    # Placées ici (microfinance_savings_management, pas microfinance_loan_management) pour la
+    # même raison que microfinance.caisse.mouvement (cf. ce modèle) : ce module voit à la fois
+    # microfinance_savings_account_ids (défini ici) et microfinance_loan_ids (défini dans
+    # microfinance_loan_management, dont ce module dépend) sans dépendance circulaire.
+
+    @api.model
+    def search_caisse_clients(self, query, company_id):
+        """Recherche client pour le guichet : par nom OU par numéro de compte permanent
+        (microfinance_account_number, format AGENCE/NNNNNN). Méthode dédiée plutôt qu'une
+        surcharge de name_search, pour ne pas modifier le comportement de recherche partenaire
+        des autres modules partagés (EAT/MIIA) sur ce même res.partner."""
+        domain = [('microfinance_partner_type', '=', 'client'), ('company_id', '=', company_id)]
+        if query:
+            domain += ['|', ('name', 'ilike', query), ('microfinance_account_number', 'ilike', query)]
+        partners = self.search(domain, limit=20)
+        return [{
+            'id': partner.id,
+            'name': partner.name,
+            'account_number': partner.microfinance_account_number,
+        } for partner in partners]
+
+    @api.model
+    def get_client_accounts_summary(self, partner_id, company_id):
+        """Agrège en un seul appel les comptes épargne actifs et les crédits actionnables au
+        guichet (approuvé en attente de décaissement, actif ou en défaut pour remboursement) —
+        formaté directement pour consommation par le composant Owl.js du guichet (Lot 4)."""
+        partner = self.browse(partner_id)
+        savings_accounts = partner.microfinance_savings_account_ids.filtered(
+            lambda a: a.company_id.id == company_id and a.state == 'active'
+        )
+        loans = partner.microfinance_loan_ids.filtered(
+            lambda l: l.company_id.id == company_id and l.state in ('approved', 'active', 'defaulted')
+        )
+        loan_data = []
+        for loan in loans:
+            next_installment = loan.installment_ids.filtered(lambda i: i.residual_amount > 0.01).sorted(
+                lambda i: (i.due_date, i.sequence)
+            )[:1]
+            loan_data.append({
+                'id': loan.id,
+                'name': loan.name,
+                'state': loan.state,
+                'balance_total': loan.balance_total,
+                'next_due_date': next_installment.due_date if next_installment else False,
+                'next_due_amount': next_installment.residual_amount if next_installment else 0.0,
+            })
+        return {
+            'savings_accounts': [{
+                'id': account.id,
+                'name': account.name,
+                'product': account.product_id.name,
+                'balance': account.balance,
+            } for account in savings_accounts],
+            'loans': loan_data,
+        }

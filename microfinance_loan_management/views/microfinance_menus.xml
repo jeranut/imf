@@ -18,8 +18,12 @@
         groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent"/>
     <menuitem id="menu_caisse_root" name="Caisse" parent="menu_microfinance_root" sequence="5"
         groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager"/>
+    <menuitem id="menu_microfinance_caisse_pos" name="Guichet" parent="menu_caisse_root"
+        action="action_microfinance_caisse_pos" sequence="0"/>
+    <menuitem id="menu_microfinance_caisse_session" name="Sessions de caisse" parent="menu_caisse_root"
+        action="action_microfinance_caisse_session" sequence="1"/>
     <menuitem id="menu_microfinance_caisse_fiche_journee" name="Fiches journalières" parent="menu_caisse_root"
-        action="action_microfinance_caisse_fiche_journee" sequence="1"/>
+        action="action_microfinance_caisse_fiche_journee" sequence="2"/>
     <menuitem id="menu_microfinance_dashboard" name="Tableau de bord" parent="menu_microfinance_root" action="action_microfinance_dashboard_client" sequence="1"/>
     <menuitem id="menu_microfinance_loan_accounts" name="Compte crédit" parent="menu_credits_root" action="action_microfinance_loan_account" sequence="0"/>
     <menuitem id="menu_microfinance_loan_applications" name="Enquêtes" parent="menu_credits_root" action="action_microfinance_loan_application" sequence="1"/>

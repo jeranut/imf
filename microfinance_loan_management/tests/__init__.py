@@ -52,3 +52,4 @@ from . import test_application_guarantor_document_wizards
 from . import test_application_activity
 from . import test_application_financial_section
 from . import test_loan_account
+from . import test_caisse_session
