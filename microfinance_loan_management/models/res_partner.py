@@ -417,6 +417,8 @@ class ResPartner(models.Model):
     microfinance_id_number = fields.Char(string="N° pièce d'identité")
     microfinance_id_issue_date = fields.Date(string='Date de délivrance')
     microfinance_id_issue_place = fields.Char(string='Lieu de délivrance')
+    microfinance_id_duplicate_date = fields.Date(string='Duplicata délivré le')
+    microfinance_id_duplicate_place = fields.Char(string='Duplicata délivré à')
     microfinance_birthdate = fields.Date(string='Date de naissance')
     microfinance_birth_place = fields.Char(string='Lieu de naissance')
     microfinance_gender = fields.Selection([('m', 'Masculin'), ('f', 'Féminin')], string='Genre')
@@ -562,6 +564,35 @@ class ResPartner(models.Model):
                 digits = re.sub(r'\D', '', partner.microfinance_id_number)
                 if len(digits) != 12:
                     raise ValidationError(_('Le numéro de CIN doit contenir exactement 12 chiffres.'))
+
+    @api.constrains('microfinance_id_type', 'microfinance_id_number')
+    def _check_cin_unique(self):
+        # Unicité globale (toute la base, toutes sociétés/usages confondus) : une CIN identifie
+        # une personne physique unique, indépendamment de son rôle (client, garant, conjoint) ou
+        # de l'usage de l'instance (microfinance, EAT, immobilier) — cf. audit
+        # docs_dev/centralisation_identite_partner/AUDIT.md section 5, décision confirmée par
+        # Micka. Comparaison sur les chiffres seuls (comme _check_cin_format) pour ignorer les
+        # variations de présentation (espaces du widget microfinance_grouped_digits).
+        for partner in self:
+            if partner.microfinance_id_type != 'cin' or not partner.microfinance_id_number:
+                continue
+            digits = re.sub(r'\D', '', partner.microfinance_id_number)
+            if not digits:
+                continue
+            # Comparaison sur les chiffres seuls (pas sur la chaîne stockée telle quelle) pour
+            # ignorer les variations de présentation (espaces éventuels).
+            candidates = self.env['res.partner'].search([
+                ('id', '!=', partner.id),
+                ('microfinance_id_type', '=', 'cin'),
+                ('microfinance_id_number', '!=', False),
+            ])
+            duplicate = candidates.filtered(
+                lambda p: re.sub(r'\D', '', p.microfinance_id_number or '') == digits
+            )
+            if duplicate:
+                raise ValidationError(_(
+                    'Ce numéro de CIN est déjà utilisé par un autre contact (%s).'
+                ) % duplicate[:1].display_name)
 
     @api.constrains('microfinance_client_type', 'microfinance_nif')
     def _check_nif_format(self):
