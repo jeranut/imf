@@ -214,11 +214,9 @@
                         </tree>
                     </field>
                     <field name="surveyor_comment" placeholder="Commentaire de l'enquêteur..."/>
-                    <button string="Page suivante" type="object" name="action_survey_next_page" class="btn-primary" icon="fa-arrow-right"/>
                     </div>
 
                     <div invisible="survey_page != 'guarantor_documents_activity'">
-                    <button string="Page précédente" type="object" name="action_survey_previous_page" class="btn-primary" icon="fa-arrow-left"/>
 
                     <group string="II — Identification du garant">
                         <group>
@@ -320,11 +318,9 @@
                         <field name="debt_creditor_type" invisible="not has_existing_debt"/>
                         <field name="debt_repayment_mode" invisible="not has_existing_debt"/>
                     </group>
-                    <button string="Page suivante" type="object" name="action_survey_next_page" class="btn-primary" icon="fa-arrow-right"/>
                     </div>
 
                     <div invisible="survey_page != 'financial_visits_ca_cdag'">
-                    <button string="Page précédente" type="object" name="action_survey_previous_page" class="btn-primary" icon="fa-arrow-left"/>
 
                     <group string="V — Analyse financière et capacité de remboursement"/>
 
@@ -372,6 +368,10 @@
                         <field name="repayment_capacity_monthly_current" readonly="1"/>
                         <field name="repayment_capacity_weekly_current" readonly="1"/>
                     </group>
+
+                    </div>
+
+                    <div invisible="survey_page != 'income_growth_forecast'">
 
                     <group string="Accroissement du revenu" class="o_microfinance_income_growth_group">
                         <field name="income_growth_occurred" widget="radio" options="{'horizontal': True}"/>
@@ -424,6 +424,10 @@
                         <field name="repayment_capacity_monthly_forecast" readonly="1"/>
                         <field name="repayment_capacity_weekly_forecast" readonly="1"/>
                     </group>
+
+                    </div>
+
+                    <div invisible="survey_page != 'financing_plan_social_grid'">
 
                     <group string="Plan de financement">
                         <group string="Actuel">
@@ -555,6 +559,10 @@
                         </div>
                     </div>
 
+                    </div>
+
+                    <div invisible="survey_page != 'surveyor_impression_field_visits'">
+
                     <group string="Impression de l'enquêteur">
                         <field name="is_eligible" widget="radio" options="{'horizontal': True}"/>
                     </group>
@@ -594,6 +602,10 @@
                             <field name="contre_vad_neighborhood_reputation" nolabel="1"/>
                         </group>
                     </group>
+                    </div>
+
+                    <div invisible="survey_page != 'ca_cdag_committee'">
+
                     <group string="Visite au lieu de vente (VAV)"/>
                     <group>
                         <group string="VAV" style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;">
@@ -656,6 +668,67 @@
                         </group>
                         <group/>
                     </group>
+                    </div>
+
+                    <div class="o_microfinance_survey_footer_nav">
+                        <button string="Précédent" type="object" name="action_survey_previous_page"
+                            class="btn-secondary" icon="fa-arrow-left"
+                            invisible="survey_page == 'partner_identification'"/>
+
+                        <div class="o_microfinance_survey_footer_nav__pages">
+                            <button string="1" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'partner_identification'}"
+                                class="btn-primary" invisible="survey_page != 'partner_identification'"/>
+                            <button string="1" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'partner_identification'}"
+                                class="btn-secondary" invisible="survey_page == 'partner_identification'"/>
+
+                            <button string="2" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'guarantor_documents_activity'}"
+                                class="btn-primary" invisible="survey_page != 'guarantor_documents_activity'"/>
+                            <button string="2" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'guarantor_documents_activity'}"
+                                class="btn-secondary" invisible="survey_page == 'guarantor_documents_activity'"/>
+
+                            <button string="3" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'financial_visits_ca_cdag'}"
+                                class="btn-primary" invisible="survey_page != 'financial_visits_ca_cdag'"/>
+                            <button string="3" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'financial_visits_ca_cdag'}"
+                                class="btn-secondary" invisible="survey_page == 'financial_visits_ca_cdag'"/>
+
+                            <button string="4" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'income_growth_forecast'}"
+                                class="btn-primary" invisible="survey_page != 'income_growth_forecast'"/>
+                            <button string="4" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'income_growth_forecast'}"
+                                class="btn-secondary" invisible="survey_page == 'income_growth_forecast'"/>
+
+                            <button string="5" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'financing_plan_social_grid'}"
+                                class="btn-primary" invisible="survey_page != 'financing_plan_social_grid'"/>
+                            <button string="5" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'financing_plan_social_grid'}"
+                                class="btn-secondary" invisible="survey_page == 'financing_plan_social_grid'"/>
+
+                            <button string="6" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'surveyor_impression_field_visits'}"
+                                class="btn-primary" invisible="survey_page != 'surveyor_impression_field_visits'"/>
+                            <button string="6" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'surveyor_impression_field_visits'}"
+                                class="btn-secondary" invisible="survey_page == 'surveyor_impression_field_visits'"/>
+
+                            <button string="7" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'ca_cdag_committee'}"
+                                class="btn-primary" invisible="survey_page != 'ca_cdag_committee'"/>
+                            <button string="7" type="object" name="action_survey_goto_page"
+                                context="{'survey_target_page': 'ca_cdag_committee'}"
+                                class="btn-secondary" invisible="survey_page == 'ca_cdag_committee'"/>
+                        </div>
+
+                        <button string="Suivant" type="object" name="action_survey_next_page"
+                            class="btn-secondary" icon="fa-arrow-right"
+                            invisible="survey_page == 'ca_cdag_committee'"/>
                     </div>
                 </sheet>
             </form>

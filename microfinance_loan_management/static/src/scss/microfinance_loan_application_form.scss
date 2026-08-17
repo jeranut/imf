@@ -147,4 +147,23 @@
             }
         }
     }
+
+    .o_microfinance_survey_footer_nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 0.5px solid var(--border, #d1d5db);
+
+        &__pages {
+            display: flex;
+            gap: 6px;
+
+            button {
+                min-width: 32px;
+            }
+        }
+    }
 }

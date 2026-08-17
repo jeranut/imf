@@ -6,6 +6,7 @@ class MicrofinanceSocialScoreBracket(models.Model):
     _name = 'microfinance.social.score.bracket'
     _description = "Tranche de notation sociale"
     _order = 'category, sequence'
+    _rec_name = 'label'
 
     _sql_constraints = [
         ('category_company_sequence_unique', 'unique(category, company_id, sequence)',

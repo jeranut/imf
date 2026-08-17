@@ -3,10 +3,13 @@ from .common import MicrofinanceCommon
 
 
 class TestApplicationSurveyPagination(MicrofinanceCommon):
-    """Pagination à 3 pages de la fiche d'enquête : survey_page est indépendant de state,
+    """Pagination à 7 pages de la fiche d'enquête : survey_page est indépendant de state,
     navigable librement même sur un dossier déjà avancé dans le workflow. Page 1 = Section I,
-    Page 2 = Sections II/III/IV, Page 3 = Sections V/VI/VII/VIII (cf. repagination
-    2026-07-19, docs_dev/programme_progressif/STATUS.md)."""
+    Page 2 = Sections II/III/IV, Page 3 = Section V jusqu'à la capacité de remboursement
+    (situation actuelle), Page 4 = accroissement du revenu + situation prévisionnelle, Page 5 =
+    plan de financement + Section VI (catégorisation sociale), Page 6 = impression de
+    l'enquêteur + visite à domicile (VAD), Page 7 = visite au lieu de vente (VAV) + Sections
+    VII/VIII (cf. repagination fine 2026-08-18)."""
 
     def _create_application(self, **kwargs):
         vals = {'partner_id': self.partner.id, 'loan_product_id': self.product.id}
@@ -17,27 +20,33 @@ class TestApplicationSurveyPagination(MicrofinanceCommon):
         application = self._create_application()
         self.assertEqual(application.survey_page, 'partner_identification')
 
-    def test_next_page_navigation_through_all_three_pages(self):
+    def test_next_page_navigation_through_all_seven_pages(self):
         application = self._create_application()
-        application.action_survey_next_page()
-        self.assertEqual(application.survey_page, 'guarantor_documents_activity')
-        application.action_survey_next_page()
-        self.assertEqual(application.survey_page, 'financial_visits_ca_cdag')
+        expected = [
+            'guarantor_documents_activity', 'financial_visits_ca_cdag', 'income_growth_forecast',
+            'financing_plan_social_grid', 'surveyor_impression_field_visits', 'ca_cdag_committee',
+        ]
+        for expected_page in expected:
+            application.action_survey_next_page()
+            self.assertEqual(application.survey_page, expected_page)
 
-    def test_next_page_stays_on_page_three_at_the_end(self):
+    def test_next_page_stays_on_page_seven_at_the_end(self):
         application = self._create_application()
-        application.action_survey_next_page()
-        application.action_survey_next_page()
-        application.action_survey_next_page()
-        self.assertEqual(application.survey_page, 'financial_visits_ca_cdag')
+        for _ in range(8):
+            application.action_survey_next_page()
+        self.assertEqual(application.survey_page, 'ca_cdag_committee')
 
-    def test_previous_page_navigation_through_all_three_pages(self):
+    def test_previous_page_navigation_through_all_seven_pages(self):
         application = self._create_application()
-        application.survey_page = 'financial_visits_ca_cdag'
-        application.action_survey_previous_page()
-        self.assertEqual(application.survey_page, 'guarantor_documents_activity')
-        application.action_survey_previous_page()
-        self.assertEqual(application.survey_page, 'partner_identification')
+        application.survey_page = 'ca_cdag_committee'
+        expected = [
+            'surveyor_impression_field_visits', 'financing_plan_social_grid',
+            'income_growth_forecast', 'financial_visits_ca_cdag',
+            'guarantor_documents_activity', 'partner_identification',
+        ]
+        for expected_page in expected:
+            application.action_survey_previous_page()
+            self.assertEqual(application.survey_page, expected_page)
 
     def test_previous_page_stays_on_page_one_at_the_start(self):
         application = self._create_application()

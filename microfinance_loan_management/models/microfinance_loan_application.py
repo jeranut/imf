@@ -83,7 +83,7 @@ class MicrofinanceLoanApplication(models.Model):
         ('fait', 'Fait'),
     ], string='État', default='draft', tracking=True, index=True, group_expand=True)
     kanban_color = fields.Integer(string='Couleur kanban', compute='_compute_kanban_color')
-    # Pagination de la fiche d'enquête (3 pages, cf. _SURVEY_PAGES ci-dessous pour l'ordre de
+    # Pagination de la fiche d'enquête (7 pages, cf. _SURVEY_PAGES ci-dessous pour l'ordre de
     # navigation) : totalement indépendante de state, navigable librement même sur un dossier
     # déjà validé ou clôturé — un futur découpage plus fin en davantage de pages reste possible
     # sans casser ce mécanisme (ajout de nouvelles valeurs de sélection + _SURVEY_PAGES).
@@ -91,6 +91,10 @@ class MicrofinanceLoanApplication(models.Model):
         ('partner_identification', 'Page 1'),
         ('guarantor_documents_activity', 'Page 2'),
         ('financial_visits_ca_cdag', 'Page 3'),
+        ('income_growth_forecast', 'Page 4'),
+        ('financing_plan_social_grid', 'Page 5'),
+        ('surveyor_impression_field_visits', 'Page 6'),
+        ('ca_cdag_committee', 'Page 7'),
     ], string="Page de la fiche d'enquête", default='partner_identification', copy=False)
     loan_id = fields.Many2one('microfinance.loan', string='Crédit créé', readonly=True, copy=False, tracking=True)
     loan_sequence_number = fields.Integer(
@@ -1472,12 +1476,16 @@ class MicrofinanceLoanApplication(models.Model):
         }
 
     # ------------------------------------------------------------------
-    # Pagination de la fiche d'enquête (3 pages) — bascule survey_page selon l'ordre de
+    # Pagination de la fiche d'enquête (7 pages) — bascule survey_page selon l'ordre de
     # _SURVEY_PAGES, sans aucun effet sur state ni sur les autres champs. Basé sur une liste
     # ordonnée plutôt que des valeurs figées pour rester valable si une page supplémentaire est
     # ajoutée un jour (il suffit alors d'étendre _SURVEY_PAGES et le Selection survey_page).
     # ------------------------------------------------------------------
-    _SURVEY_PAGES = ['partner_identification', 'guarantor_documents_activity', 'financial_visits_ca_cdag']
+    _SURVEY_PAGES = [
+        'partner_identification', 'guarantor_documents_activity', 'financial_visits_ca_cdag',
+        'income_growth_forecast', 'financing_plan_social_grid',
+        'surveyor_impression_field_visits', 'ca_cdag_committee',
+    ]
 
     def action_survey_next_page(self):
         for application in self:
@@ -1490,6 +1498,13 @@ class MicrofinanceLoanApplication(models.Model):
             index = self._SURVEY_PAGES.index(application.survey_page)
             if index > 0:
                 application.survey_page = self._SURVEY_PAGES[index - 1]
+
+    def action_survey_goto_page(self):
+        target = self.env.context.get('survey_target_page')
+        if target not in self._SURVEY_PAGES:
+            return
+        for application in self:
+            application.survey_page = target
 
 class MicrofinanceLoanApplicationDependent(models.Model):
     """Section I — Enfants et personnes à charge du partenaire.
