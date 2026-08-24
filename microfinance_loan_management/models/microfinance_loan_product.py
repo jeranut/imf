@@ -70,11 +70,24 @@ class MicrofinanceLoanProduct(models.Model):
     installment_rounding_unit = fields.Monetary(
         string="Unité d'arrondi de l'échéance", default=1000.0,
         help="Politique interest-first (génération d'échéancier, méthode de calcul "
-             "d'intérêts \"Taux fixe\") : le montant total cible par tranche est arrondi au plus "
-             "proche multiple de cette unité avant répartition intérêt/principal - la dernière "
-             "tranche absorbe le reliquat d'arrondi exact. Aucune règle spéciale pour les petits "
-             "crédits : l'arrondi s'applique systématiquement, y compris si la cible arrondie "
-             "tombe à 0. Mettre à 0 pour désactiver l'arrondi (cible utilisée telle quelle).",
+             "d'intérêts \"Taux fixe\") : le montant total cible par tranche est arrondi (selon "
+             "installment_rounding_mode) au multiple de cette unité avant répartition "
+             "intérêt/principal - la dernière tranche absorbe le reliquat d'arrondi exact. "
+             "Aucune règle spéciale pour les petits crédits : l'arrondi s'applique "
+             "systématiquement, y compris si la cible arrondie tombe à 0. Mettre à 0 pour "
+             "désactiver l'arrondi (cible utilisée telle quelle).",
+    )
+    installment_rounding_mode = fields.Selection([
+        ('ceiling', 'Arrondi supérieur'),
+        ('nearest', 'Au plus proche'),
+    ], string="Mode d'arrondi de l'échéance", default='ceiling', required=True,
+        help="'Arrondi supérieur' (ceiling) : la cible de tranche est arrondie au multiple de "
+             "installment_rounding_unit immédiatement supérieur - c'est le comportement LPF de "
+             "référence, validé sur plusieurs échéanciers réels (1.XLS, IS/000289) : arrondir "
+             "vers le haut réduit mécaniquement la dernière tranche (reliquat), donc le risque "
+             "de queue de crédit. 'Au plus proche' (nearest) : arrondi classique au multiple le "
+             "plus proche, conservé uniquement pour comparaison ou cas particulier - ce n'est "
+             "plus le comportement par défaut.",
     )
     grace_period_days = fields.Integer(string='Délai de grâce (jours)', default=0)
     min_membership_days = fields.Integer(string='Ancienneté minimum client (jours)', default=0)
@@ -85,6 +98,26 @@ class MicrofinanceLoanProduct(models.Model):
         string='Ratio minimum de garantie (%)', default=0.0,
         help='Pourcentage minimum du montant du crédit que la somme des garanties validées doit couvrir. '
              '0 = pas de minimum même si une garantie est obligatoire.',
+    )
+    # Champ de configuration préparant une future évolution du workflow de validation — n'a
+    # pour l'instant AUCUN effet sur le déroulement actuel des états avis_ca/avis_cdag de
+    # microfinance.loan (state, cf. action_ca_review/action_cdag_review dans
+    # microfinance_loan.py) : tout dossier continue de passer séquentiellement par les deux,
+    # quel que soit le produit. Point à trancher explicitement avec Micka avant d'implémenter
+    # la logique de gating correspondante (pas deviné ici) : "Avis CA" signifie-t-il que le
+    # dossier peut être validé directement après avis_ca en sautant avis_cdag, ou "Avis CDAG"
+    # signifie-t-il que le passage par CDAG reste obligatoire (= comportement actuel) ?
+    validation_authority = fields.Selection([
+        ('ca', 'Avis CA'),
+        ('cdag', 'Avis CDAG'),
+    ], string='Instance de validation requise', required=True, default='cdag',
+        help="Détermine quelle instance doit valider les dossiers de crédit créés avec ce "
+             "produit. 'Avis CA' : le CA seul peut valider le prêt. 'Avis CDAG' : l'avis CDAG "
+             "est nécessaire pour la validation. Champ de configuration préparant une future "
+             "évolution du workflow de validation — n'a pour l'instant aucun effet sur le "
+             "déroulement actuel des états avis_ca/avis_cdag de microfinance.loan, qui reste "
+             "inchangé (voir le commentaire ci-dessus pour le point à trancher avant "
+             "d'implémenter la logique de gating correspondante).",
     )
     penalty_type = fields.Selection([
         ('fixed', 'Montant fixe'),

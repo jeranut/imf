@@ -140,3 +140,138 @@ class TestPeriodicities(MicrofinanceCommon):
                 'repayment_frequency_mode': 'client_choice',
                 'allowed_repayment_frequency_ids': [(5, 0, 0)],
             })
+
+
+class TestProductDurationLimits(MicrofinanceCommon):
+    """_check_product_limits compare la durée réelle en mois (_actual_duration_months),
+    pas le nombre brut d'échéances - un produit multi-périodicité (type PRET RURAL) doit
+    accepter un term élevé si la périodicité choisie donne une durée réelle dans les bornes
+    min_term/max_term du produit (exprimées en mois, quelle que soit la périodicité)."""
+
+    def setUp(self):
+        super().setUp()
+        self.weekly = self.env.ref('microfinance_loan_management.repayment_frequency_weekly')
+        self.monthly = self.env.ref('microfinance_loan_management.repayment_frequency_monthly')
+        self.product.max_term = 12
+        self.product.write({
+            'repayment_frequency_mode': 'client_choice',
+            'allowed_repayment_frequency_ids': [(6, 0, (self.weekly | self.monthly).ids)],
+        })
+
+    def test_monthly_term_within_bounds_still_passes(self):
+        loan = self._create_loan(term=6, repayment_frequency_id=self.monthly.id)
+        self.assertEqual(loan.term, 6)
+
+    def test_weekly_term_24_within_real_duration_no_longer_raises(self):
+        # 24 échéances hebdomadaires ~= 5,6 mois réels (24 x 7 / 30), dans les bornes [1, 12]
+        # du produit - ne doit plus lever d'erreur (bug d'origine : 24 > 12 comparé brut à
+        # tort, sans conversion de périodicité).
+        loan = self._create_loan(term=24, repayment_frequency_id=self.weekly.id)
+        self.assertEqual(loan.term, 24)
+        self.assertAlmostEqual(loan._actual_duration_months(), 5.6, places=2)
+
+    def test_weekly_term_60_exceeds_real_duration_still_raises(self):
+        # 60 échéances hebdomadaires ~= 14 mois réels, dépasse max_term=12 - la borne max doit
+        # continuer à fonctionner une fois convertie correctement.
+        with self.assertRaises(ValidationError):
+            self._create_loan(term=60, repayment_frequency_id=self.weekly.id)
+
+    def test_no_frequency_chosen_does_not_block(self):
+        # Produit client_choice, périodicité pas encore choisie : ne pas bloquer sur la durée
+        # tant qu'on ne peut pas la convertir - le contrôle se refait automatiquement dès que
+        # la périodicité est choisie (repayment_frequency_id dans @api.constrains).
+        loan = self._create_loan(term=999)
+        self.assertFalse(loan.repayment_frequency_id)
+        self.assertEqual(loan.term, 999)
+
+    def test_constraint_retriggers_when_frequency_changed_afterwards(self):
+        # repayment_frequency_id doit bien être surveillé par @api.constrains : choisir une
+        # périodicité sur un crédit existant (pas seulement à la création) doit redéclencher
+        # la vérification.
+        loan = self._create_loan(term=60)
+        self.assertFalse(loan.repayment_frequency_id)
+        with self.assertRaises(ValidationError):
+            loan.repayment_frequency_id = self.weekly.id
+
+    def test_term_update_respects_actual_duration_not_raw_count(self):
+        """Reproduit le scénario exact du bug IS/000289 : un produit multi-périodicité
+        (min_term=1, max_term=12 mois) doit accepter un changement de term vers 24 échéances
+        hebdomadaires (~5,6 mois réels), alors que 24 > 12 en brut aurait échoué avec
+        l'ancienne contrainte - et l'échéancier regénéré doit bien refléter la nouvelle
+        valeur (24 lignes), pas l'ancienne (8 lignes) restée en base suite à un write()
+        silencieusement rejeté."""
+        loan = self._create_loan(term=8, repayment_frequency_id=self.weekly.id)
+        loan.action_generate_schedule()
+        self.assertEqual(len(loan.installment_ids), 8)
+
+        loan.write({'term': 24})  # ne doit PAS lever de ValidationError
+        self.assertEqual(loan.term, 24)
+
+        loan.action_generate_schedule()
+        self.assertEqual(len(loan.installment_ids), 24)
+
+
+class TestLpfInterestFactorAlignment(MicrofinanceCommon):
+    """Alignement LPF (décision 2026-08-18) : _period_interest_factor utilise
+    periods_per_year (fraction fixe conventionnelle), pas period_value / 365 (jours
+    calendaires réels), pour les périodicités infra-mensuelles."""
+
+    def test_period_interest_factor_weekly_uses_fixed_52_not_calendar_days(self):
+        """Aligné sur LPF (décision 2026-08-18) : 1/52, pas 7/365."""
+        loan = self._create_loan(
+            term=24,
+            repayment_frequency_id=self.env.ref('microfinance_loan_management.repayment_frequency_weekly').id,
+        )
+        self.assertAlmostEqual(loan._period_interest_factor(), 1.0 / 52.0, places=6)
+
+    def test_period_interest_factor_daily_uses_fixed_365(self):
+        # term=35 (pas 10) : le produit de test par défaut a min_term=1 mois -
+        # _actual_duration_months() exige donc au moins ~30 jours (cf. correctif précédent
+        # sur _check_product_limits, sujet distinct de celui-ci).
+        loan = self._create_loan(
+            term=35,
+            repayment_frequency_id=self.env.ref('microfinance_loan_management.repayment_frequency_daily').id,
+        )
+        self.assertAlmostEqual(loan._period_interest_factor(), 1.0 / 365.0, places=6)
+
+    def test_period_interest_factor_biweekly_uses_fixed_26_not_calendar_days(self):
+        # period_value = 15 jours (quinzaine) -> calendaire aurait donné 15/365 ≈ 0,04110,
+        # LPF impose 1/26 ≈ 0,03846 (convention 26 quinzaines/an, pas 365/15 ≈ 24,3).
+        loan = self._create_loan(
+            term=10,
+            repayment_frequency_id=self.env.ref('microfinance_loan_management.repayment_frequency_biweekly').id,
+        )
+        self.assertAlmostEqual(loan._period_interest_factor(), 1.0 / 26.0, places=6)
+
+    def test_period_interest_factor_monthly_unchanged(self):
+        """Les périodicités mensuelles et au-delà ne doivent pas changer de comportement
+        (12/period_value == periods_per_year pour ces fréquences, cf. Étape 2 du prompt)."""
+        loan = self._create_loan(
+            term=12,
+            repayment_frequency_id=self.env.ref('microfinance_loan_management.repayment_frequency_monthly').id,
+        )
+        self.assertAlmostEqual(loan._period_interest_factor(), 1.0 / 12.0, places=6)
+
+    def test_period_interest_factor_quarterly_unchanged(self):
+        loan = self._create_loan(
+            term=4,
+            repayment_frequency_id=self.env.ref('microfinance_loan_management.repayment_frequency_quarterly').id,
+        )
+        self.assertAlmostEqual(loan._period_interest_factor(), 1.0 / 4.0, places=6)
+
+    def test_total_interest_matches_lpf_convention_on_reference_example(self):
+        """Reproduit l'exemple comparatif réel : 500.000 Ar, 36%/an, 24 échéances hebdo.
+        Vérifie que l'intérêt total généré correspond à la formule LPF (taux x term/52),
+        pas à l'ancienne formule calendaire (taux x term x 7/365)."""
+        self.product.interest_rate = 36.0
+        self.product.max_amount = 1000000.0
+        loan = self._create_loan(
+            loan_amount=500000.0, term=24,
+            repayment_frequency_id=self.env.ref('microfinance_loan_management.repayment_frequency_weekly').id,
+        )
+        loan.action_generate_schedule()
+        total_interest = sum(loan.installment_ids.mapped('interest_amount'))
+        expected_interest_lpf = 500000.0 * 0.36 * (24 / 52.0)
+        old_calendar_interest = 500000.0 * 0.36 * (24 * 7 / 365.0)
+        self.assertAlmostEqual(total_interest, expected_interest_lpf, delta=1.0)
+        self.assertNotAlmostEqual(total_interest, old_calendar_interest, delta=1.0)

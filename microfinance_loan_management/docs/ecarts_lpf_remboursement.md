@@ -26,14 +26,49 @@ absorbe le reliquat exact (principal restant, intérêt restant) plutôt que de 
 cible, garantissant que les totaux somment exactement au capital et à l'intérêt total.
 
 **Nouveau champ de configuration** : `installment_rounding_unit` (Monetary, sur
-`microfinance.loan.product`, défaut 1000.0) — la cible par tranche est arrondie au plus proche
-multiple de cette unité avant répartition intérêt/principal (nearest, ni ceiling ni floor).
-**Aucune règle spéciale pour les petits crédits** : l'arrondi s'applique même si la cible arrondie
-tombe à 0 (vérifié par test dédié). Mettre à 0 désactive l'arrondi. Ce champ n'existait pas du
-tout avant ce chantier (recherché exhaustivement : aucun mécanisme d'arrondi ni de jours ouvrables
-nulle part dans le module) — la prémisse initiale du prompt ("conserver la logique d'arrondi
-existante") était fausse, l'arrondi a donc été conçu de zéro selon la décision validée
-explicitement (nearest, 1000 Ar, champ de config, pas de seuil minimal).
+`microfinance.loan.product`, défaut 1000.0) — la cible par tranche est arrondie (selon
+`installment_rounding_mode`, voir Lot 1 — correction du 2026-08-24 ci-dessous) au multiple de
+cette unité avant répartition intérêt/principal. **Aucune règle spéciale pour les petits
+crédits** : l'arrondi s'applique même si la cible arrondie tombe à 0 en mode `nearest` (vérifié
+par test dédié). Mettre à 0 désactive l'arrondi. Ce champ n'existait pas du tout avant ce
+chantier (recherché exhaustivement : aucun mécanisme d'arrondi ni de jours ouvrables nulle part
+dans le module) — la prémisse initiale du prompt ("conserver la logique d'arrondi existante")
+était fausse, l'arrondi a donc été conçu de zéro. **Le mode `nearest` retenu à l'origine
+("ni ceiling ni floor") n'était pas un choix de conception validé sur pièce, contrairement à ce
+qu'indiquait cette section jusqu'au 2026-08-24 — c'était un bug d'implémentation, découvert et
+corrigé depuis (cf. point 5 de la section "Écarts vs LPF" ci-dessous : LPF arrondit en réalité
+au multiple SUPÉRIEUR, `ceiling`, désormais le défaut).**
+
+**Choix du mode de répartition du reliquat d'arrondi — décision du 2026-08-19** : le mode
+historique ci-dessus ("Absorption sur la dernière tranche" — toutes les tranches sauf la
+dernière visent la même cible arrondie nearest, la dernière absorbe tout le reliquat réel) peut
+produire un écart marqué sur la dernière tranche par rapport aux autres, notamment sur des
+crédits infra-mensuels à nombreuses échéances : cas de référence `IS/000289` (500 000 Ar, 36 %,
+24 échéances hebdomadaires, arrondi 1000) — 23 tranches à 24 000 Ar puis une dernière à
+31 076,92 Ar. Plutôt que de figer un seul comportement, un **wizard** (`microfinance.loan.
+schedule.rounding.wizard`, ouvert par le bouton "Générer échéancier" via
+`action_open_generate_schedule_wizard`) propose désormais un choix explicite à chaque
+génération :
+- `last_installment` (défaut, comportement historique décrit ci-dessus, inchangé) ;
+- `distributed` (nouveau) : la cible des tranches non-finales est arrondie **au plancher**
+  (`floor`, jamais nearest, pour ne jamais dépasser le total dû avant lissage), et le reliquat
+  est réparti en incréments entiers de `installment_rounding_unit` sur les dernières tranches de
+  la liste (les plus proches de la fin) au lieu d'être concentré sur la seule dernière tranche.
+  La toute dernière tranche continue d'absorber une fraction résiduelle sous le millier
+  (inévitable, non représentable en multiples entiers de l'unité d'arrondi), mais cette fraction
+  reste petite comparée au mode absorption.
+
+Implémentation : `_compute_installment_targets(total_due, rounding_unit, rounding_mode)`
+calcule la liste des cibles pour les tranches 1..term-1 selon le mode choisi ; la dernière
+tranche (`term`) n'utilise jamais cette liste et absorbe toujours le reliquat exact restant —
+c'est ce qui garantit, **dans les deux modes**, que la somme exacte des tranches reste
+rigoureusement égale au total dû (capital + intérêt) au centime près : seule la répartition de
+l'écart d'arrondi entre les tranches change, jamais le montant total réellement payé par
+l'emprunteur. `action_generate_schedule(rounding_mode='last_installment')` : paramètre par
+défaut, tous les appels internes existants (ex. `action_disburse()` si l'échéancier n'a pas
+encore été généré) restent inchangés sans modification. Le mode dégressif
+(`interest_method == 'reducing'`) et le rééchelonnement (`_reschedule_installments`, qui
+n'applique aujourd'hui aucun arrondi) ne sont pas concernés par ce chantier.
 
 **Effet de bord découvert et corrigé** : le produit de test générique partagé (`tests/common.py`,
 utilisé par ~20 fichiers de tests avec des crédits de quelques centaines/milliers d'Ar, sans
@@ -107,8 +142,9 @@ comptes).
 
 1. **Répartition d'échéancier** : intérêt-first (Décision 1) au lieu du calcul linéaire d'origine
    du module (montant identique par tranche) — et au lieu de la logique LPF "1ère tranche seule"
-   parfois observée sur d'autres systèmes. Arrondi de la cible à 1000 Ar (configurable), absent de
-   LPF à notre connaissance.
+   parfois observée sur d'autres systèmes. Arrondi de la cible à 1000 Ar (configurable) — LPF
+   arrondit aussi (cf. point 5 ci-dessous), la mention "absent de LPF" présente ici jusqu'au
+   2026-08-24 était erronée.
 2. **Ventilation de remboursement** : 3 catégories (intérêt, principal, pénalités) avec l'ordre
    intérêt → principal → pénalités, au lieu des 8 catégories LPF (qui distinguent notamment
    commission échue/à échoir, intérêts échus/à échoir séparément du courant) et de leur ordre de
@@ -118,3 +154,47 @@ comptes).
 3. **Comptabilisation** : cash-basis pur (LPF le pratique aussi pour CEFOR selon le contexte donné)
    — pas d'intérêts échus/accrual, écriture au fil de l'eau à chaque remboursement, jamais en
    amont.
+4. **Fraction annuelle du taux d'intérêt sur les périodicités infra-mensuelles — RÉSOLU le
+   2026-08-18.** Constat initial (exemple comparatif réel, 500.000 Ar / 36%/an / 24 échéances
+   hebdomadaires) : LPF calculait un intérêt total de 83.077 Ar, Odoo 82.849,32 Ar (écart ~228 Ar,
+   0,27%) — pas un arrondi mineur mais une différence de convention : Odoo utilisait le calcul
+   calendaire réel (`period_value / 365`, ex. hebdo = 7/365 ≈ 0,019178) là où LPF traite chaque
+   périodicité infra-mensuelle comme une fraction fixe et conventionnelle de l'année,
+   indépendamment du nombre exact de jours (hebdo = 1/52 ≈ 0,019231, soit 52 semaines/an, pas
+   365/7 ≈ 52,14). Décision validée avec Micka : aligner sur LPF plutôt que documenter l'écart.
+   Correctif : nouveau champ `periods_per_year` sur `microfinance.repayment.frequency` (valeurs
+   conventionnelles : journalier 365, hebdo 52, quinzaine 26, 4-semaines 13 — mensuel et au-delà
+   inchangés, `12 / period_value` étant déjà strictement équivalent à ces bornes), et
+   `_period_interest_factor()` simplifiée en `1.0 / freq.periods_per_year` (`microfinance_loan.py`).
+   Seul le montant d'intérêt par tranche change — les dates d'échéance réelles restent calculées
+   au calendrier exact (`_period_delta()` inchangée, ex. +7 jours chaque semaine). Migration
+   `17.0.1.8.0` pour les 10 périodicités déjà chargées en `noupdate="1"` ; aucune reprise
+   rétroactive des échéanciers déjà générés (pas en production).
+5. **Mode d'arrondi de la cible d'échéance (nearest vs ceiling) — RÉSOLU le 2026-08-24.**
+   **Règle confirmée** : *Cible d'échéance = arrondi SUPÉRIEUR (ceiling) de total_dû / nombre
+   d'échéances au multiple configuré le plus proche, et non l'arrondi au plus proche.* Le
+   diviseur `n` (nombre total d'échéances) était correct dès l'origine (Lot 1 ci-dessus) ; le
+   bug était le **mode d'arrondi** : `nearest` au lieu de `ceiling`. Preuve établie sur 9 exports
+   bruts LPF (`.XLS`, ClientDataSet Delphi) et le dossier papier `IS/000289`
+   (docs_dev/correction_diviseur_echeancier/) : deux cas discriminants confirment `ceiling` sans
+   exception — `1.XLS` (700 000 Ar, mensuel, 11 échéances, total dû 931 000) : 931000/11 =
+   84 636,36, LPF affiche 85 000 (ceiling) et non 84 000 (nearest) ; `IS/000289` (papier, hebdo,
+   24 échéances, total dû 583 077) : 583077/24 = 24 294,875, LPF affiche 25 000 (ceiling) et non
+   24 000 (nearest = bug Odoo constaté). Deux autres exports (`2.XLS`, division exacte ; `10.XLS`/
+   `12.XLS`) ne sont pas discriminants (les deux modes coïncident) mais ne contredisent pas la
+   règle. **Rationale métier** : arrondir vers le haut réduit mécaniquement la dernière tranche
+   (le reliquat), donc le risque de queue de crédit — le dernier paiement, le plus exposé en cas
+   d'impayé final, reste toujours inférieur ou égal à la cible normale.
+   Correctif : nouveau champ `installment_rounding_mode` (Selection `ceiling`/`nearest`, défaut
+   `ceiling`) sur `microfinance.loan.product`, et helper partagé
+   `_round_installment_target(value, unit, mode)` appelé depuis les deux points de calcul de la
+   cible (`_compute_installment_targets` et `_onchange_loan_amount_recompute_installment`,
+   `microfinance_loan.py`) — `nearest` reste disponible comme option explicite, non supprimée,
+   mais n'est plus le défaut nulle part. Cas `n = 1` (échéance unique) traité explicitement : pas
+   de tranche de reliquat pour absorber un dépassement d'arrondi, la tranche unique reste
+   toujours le total dû exact, jamais un multiple arrondi qui le dépasserait. **Ce n'était pas un
+   écart de conception assumé mais un bug d'implémentation**, maintenant aligné sur LPF (voir
+   aussi la correction du texte du Lot 1 ci-dessus, qui présentait à tort `nearest` comme un choix
+   validé). Impact rétroactif : nul (un seul crédit existe en base sur SEFOR, IS/000289 lui-même,
+   dont l'échéancier déjà généré est de toute façon obsolète et devra être régénéré séparément,
+   hors périmètre de ce correctif).

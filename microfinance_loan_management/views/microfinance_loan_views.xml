@@ -65,7 +65,7 @@
                     <button name="action_ca_review" string="Avis CA" type="object" groups="microfinance_loan_management.group_microfinance_credit_committee" invisible="state != 'enquete'"/>
                     <button name="action_cdag_review" string="Avis CDAG" type="object" groups="microfinance_loan_management.group_microfinance_credit_committee" invisible="state != 'avis_ca'"/>
                     <button name="action_approve" string="Approuver" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'avis_cdag'"/>
-                    <button name="action_generate_schedule" string="Générer échéancier" type="object" invisible="state not in ('draft','enquete','avis_ca','avis_cdag','approved')"/>
+                    <button name="action_open_generate_schedule_wizard" string="Générer échéancier" type="object" invisible="state not in ('draft','enquete','avis_ca','avis_cdag','approved')"/>
                     <button name="action_charge_fee" string="Encaisser les frais de dossier" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved' or fee_paid or fee_amount_due &lt;= 0"/>
                     <button name="action_disburse" string="Activer / Décaisser" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
                     <button name="action_open_payment_wizard" string="Enregistrer remboursement" type="object" class="btn-primary" invisible="state not in ('active','defaulted')"/>
@@ -101,6 +101,7 @@
                             <field name="currency_id"/>
                             <field name="loan_amount"/>
                             <field name="term"/>
+                            <field name="installment_amount" readonly="state not in ('draft','enquete','avis_ca','avis_cdag','approved')"/>
                             <field name="repayment_frequency_mode" invisible="1"/>
                             <field name="allowed_repayment_frequency_ids" invisible="1"/>
                             <field name="repayment_frequency_id" readonly="repayment_frequency_mode == 'fixed'"/>

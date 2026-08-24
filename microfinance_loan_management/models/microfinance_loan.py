@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import base64
+import math
 from collections import defaultdict
 
 from dateutil.relativedelta import relativedelta
@@ -83,6 +84,15 @@ class MicrofinanceLoan(models.Model):
     manager_id = fields.Many2one('res.users', string='Manager', tracking=True)
     finance_user_id = fields.Many2one('res.users', string='Utilisateur finance', tracking=True)
     collection_agent_id = fields.Many2one('res.users', string='Agent recouvrement', tracking=True)
+    installment_amount = fields.Monetary(
+        string='Échéance',
+        help="Montant de la tranche périodique, calculé automatiquement à partir du montant du "
+             "crédit et du nombre d'échéances (ou modifiable directement, ce qui recalcule alors "
+             "le nombre d'échéances en retour). Aperçu avant génération de l'échéancier détaillé "
+             "(installment_ids) - un aller-retour loan_amount/term <-> installment_amount ne "
+             "redonne pas nécessairement le montant de départ exact, du fait des arrondis "
+             "(installment_rounding_unit d'un côté, arrondi à l'entier du nombre d'échéances de "
+             "l'autre) : comportement normal, pas un bug.")
     installment_ids = fields.One2many('microfinance.loan.installment', 'loan_id', string='Échéancier')
     payment_ids = fields.One2many('microfinance.loan.payment', 'loan_id', string='Remboursements')
     visit_ids = fields.One2many('microfinance.collection.visit', 'loan_id', string='Visites')
@@ -158,6 +168,12 @@ class MicrofinanceLoan(models.Model):
              "négatif. Dérogation distincte des autres contrôles de décaissement.",
     )
 
+    # États où le crédit reste modifiable avant activation (avant tout paiement possible) :
+    # échéancier/échéance encore librement recalculables. Utilisée par action_generate_schedule
+    # et par les onchange d'aperçu installment_amount/installment_ids ci-dessous — remplace la
+    # liste précédemment dupliquée en dur dans action_generate_schedule.
+    _EDITABLE_SCHEDULE_STATES = ('draft', 'enquete', 'avis_ca', 'avis_cdag', 'approved')
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
@@ -187,14 +203,33 @@ class MicrofinanceLoan(models.Model):
         if not self.fond_credit_id and self.company_id.microfinance_fond_credit_default_id:
             self.fond_credit_id = self.company_id.microfinance_fond_credit_default_id
 
-    @api.constrains('loan_amount', 'term', 'product_id')
+    def _actual_duration_months(self):
+        """Durée réelle du crédit en mois, à partir du nombre d'échéances et de la
+        périodicité choisie. Les min_term/max_term du produit sont exprimés en mois
+        quelle que soit la périodicité effectivement choisie sur le crédit (un produit
+        multi-périodicité type PRET RURAL peut être remboursé en journalier, hebdomadaire
+        ou mensuel) : il faut donc convertir avant de comparer, plutôt que de comparer le
+        nombre brut d'échéances aux bornes mensuelles du produit.
+        Approximation mois = 30 jours, cohérente avec le niveau de précision attendu pour
+        une borne métier (pas un calcul financier au jour près comme les intérêts)."""
+        self.ensure_one()
+        freq = self.repayment_frequency_id
+        if not freq:
+            return False
+        if freq.period_kind == 'months':
+            return self.term * freq.period_value
+        return (self.term * freq.period_value) / 30.0
+
+    @api.constrains('loan_amount', 'term', 'product_id', 'repayment_frequency_id')
     def _check_product_limits(self):
         for loan in self:
             product = loan.product_id
             if product and (loan.loan_amount < product.min_amount or loan.loan_amount > product.max_amount):
                 raise ValidationError(_('Le montant doit respecter les limites du produit.'))
-            if product and (loan.term < product.min_term or loan.term > product.max_term):
-                raise ValidationError(_('La durée doit respecter les limites du produit.'))
+            if product and loan.repayment_frequency_id:
+                duration_months = loan._actual_duration_months()
+                if duration_months < product.min_term or duration_months > product.max_term:
+                    raise ValidationError(_('La durée doit respecter les limites du produit.'))
 
     @api.constrains('repayment_frequency_id', 'product_id')
     def _check_repayment_frequency_allowed(self):
@@ -538,6 +573,13 @@ class MicrofinanceLoan(models.Model):
                     ) % {'missing': missing, 'ratio': product.min_guarantee_ratio, 'required': required_guarantee})
 
     def action_start_enquete(self):
+        # Filet de sécurité seulement : si installment_amount a déjà été calculé via l'onchange
+        # normal du formulaire, cette boucle ne fait rien de plus (condition `not
+        # loan.installment_amount` déjà fausse). Utile pour les crédits créés hors formulaire
+        # standard (import, API), où l'onchange n'a jamais eu l'occasion de s'exécuter.
+        for loan in self:
+            if not loan.installment_amount and loan.loan_amount and loan.term and loan.repayment_frequency_id:
+                loan._onchange_loan_amount_recompute_installment()
         self._check_eligibility()
         self.action_calculate_scoring(silent=True)
         self.write({'state': 'enquete'})
@@ -582,109 +624,300 @@ class MicrofinanceLoan(models.Model):
         return relativedelta(months=freq.period_value) if freq.period_kind == 'months' else relativedelta(days=freq.period_value)
 
     def _period_interest_factor(self):
-        """Fraction of the annual interest rate to apply for one repayment period."""
+        """Fraction of the annual interest rate to apply for one repayment period.
+        Uses freq.periods_per_year (fixed conventional value, aligned with LPF) rather than
+        a calendar-days-based ratio: e.g. weekly = 1/52, not 7/365. See decision note dated
+        2026-08-18 in ecarts_lpf.md."""
         self.ensure_one()
         freq = self.repayment_frequency_id
         if not freq:
             raise UserError(_('Choisissez une périodicité de remboursement avant de générer l\'échéancier.'))
-        return freq.period_value / 12.0 if freq.period_kind == 'months' else freq.period_value / 365.0
+        return 1.0 / freq.periods_per_year
 
-    def action_generate_schedule(self):
+    def _compute_installment_target(self):
+        """Cible d'échéance interest-first (arrondie) pour les valeurs actuelles de
+        loan_amount/term/repayment_frequency_id/interest_rate - même formule que
+        action_generate_schedule. Factorisé hors de l'onchange aller ci-dessous pour servir
+        aussi de référence de cohérence à la garde anti-boucle de l'onchange retour : ce dernier
+        compare installment_amount à ce que CETTE méthode produirait pour le `term` actuel, afin
+        de distinguer un installment_amount recalculé automatiquement (aucune action requise) d'un
+        installment_amount réellement modifié à la main par l'utilisateur (cf. les deux onchange
+        ci-dessous et docs_dev/regression_nb_echeances/ pour l'historique du bug que cette garde
+        corrige)."""
+        self.ensure_one()
+        interest_factor = self._period_interest_factor()
+        total_interest = (
+            self.loan_amount * (self.interest_rate / 100.0)
+            * interest_factor * self.term
+        )
+        target = (self.loan_amount + total_interest) / self.term
+        rounding = self.product_id.installment_rounding_unit or 0
+        if rounding and self.term > 1:
+            # term == 1 : pas de tranche de reliquat pour absorber un dépassement d'arrondi
+            # (ceiling peut dépasser le total dû) - l'échéance unique reste le montant exact,
+            # cohérent avec _compute_installment_targets/_build_installment_commands qui, pour
+            # une échéance unique, ne passe jamais par une cible arrondie (cf. leurs commentaires).
+            target = self._round_installment_target(target, rounding, self.product_id.installment_rounding_mode)
+        return target
+
+    @api.onchange('loan_amount', 'term', 'repayment_frequency_id', 'interest_rate')
+    def _onchange_loan_amount_recompute_installment(self):
+        # Aperçu avant génération de l'échéancier détaillé (action_generate_schedule) : même
+        # formule que la cible interest-first calculée là-bas (total_dû / nombre d'échéances),
+        # factorisée dans _compute_installment_target ci-dessus. Rafraîchit aussi installment_ids
+        # en direct (même valeur de `term` que celle utilisée pour installment_amount ci-dessous,
+        # pas de risque de désynchronisation) plutôt que de dépendre d'un onchange séparé
+        # déclenché par les mêmes champs. Sans effet une fois le crédit actif (cf.
+        # _EDITABLE_SCHEDULE_STATES).
+        #
+        # Garde anti-boucle (régression corrigée ici, cf. docs_dev/regression_nb_echeances/) :
+        # n'écrire installment_amount que si la cible a réellement changé. Sans cette garde,
+        # cet onchange réécrirait installment_amount même quand la valeur est déjà correcte
+        # (ex. rafraîchissement d'un champ sans changement réel de valeur), ce qui redéclenche
+        # inutilement _onchange_installment_amount_recompute_terms ci-dessous dans le même cycle.
         for loan in self:
-            if loan.state not in ('draft', 'enquete', 'avis_ca', 'avis_cdag', 'approved'):
+            if loan.state not in loan._EDITABLE_SCHEDULE_STATES:
+                continue
+            if not loan.loan_amount or not loan.term or not loan.repayment_frequency_id:
+                continue
+            target = loan._compute_installment_target()
+            if not (loan.installment_amount and abs(loan.installment_amount - target) < 0.01):
+                loan.installment_amount = target
+            # installment_ids ne porte aucun onchange propre (vérifié - seuls loan_amount, term,
+            # repayment_frequency_id, interest_rate et installment_amount en ont un sur ce modèle) :
+            # le reconstruire inconditionnellement ici ne peut donc pas retrigger la boucle, et
+            # reste nécessaire même quand la garde ci-dessus saute l'écriture d'installment_amount
+            # (term a pu changer sans que la cible arrondie change, cas rare mais possible).
+            loan.installment_ids = [(5, 0, 0)] + loan._build_installment_commands()
+
+    @api.onchange('installment_amount')
+    def _onchange_installment_amount_recompute_terms(self):
+        # Sens inverse du calcul ci-dessus : un aller-retour ne redonne pas nécessairement le
+        # montant de départ exact du fait des arrondis des deux côtés (installment_rounding_unit
+        # ici, entier le plus proche sur term) - comportement normal, pas un bug (cf. help du champ
+        # installment_amount). Rafraîchit installment_ids ici même (avec le `term` fraîchement
+        # recalculé juste au-dessus), pour la même raison que dans l'onchange aller : ne pas
+        # dépendre de l'ordre d'exécution d'un onchange séparé déclenché sur `term`.
+        #
+        # Garde anti-boucle (corrige la régression Lot 1 où saisir `term` le faisait retomber à
+        # une autre valeur dans le même cycle onchange, cf. docs_dev/regression_nb_echeances/
+        # AUDIT.md) : avant de recalculer `term`, on vérifie si installment_amount correspond
+        # déjà exactement à la cible que produirait _compute_installment_target() pour le `term`
+        # actuel. Si oui, ce changement d'installment_amount vient du recalcul automatique de
+        # l'onchange aller ci-dessus (pas d'une saisie manuelle de l'utilisateur dans CE champ) :
+        # il ne faut alors surtout pas recalculer `term` en retour, sous peine d'écraser la valeur
+        # que l'utilisateur vient de saisir. On ne recalcule `term` que quand installment_amount
+        # diverge réellement de cette cible - c'est-à-dire quand l'utilisateur a modifié
+        # installment_amount lui-même à la main.
+        for loan in self:
+            if loan.state not in loan._EDITABLE_SCHEDULE_STATES:
+                continue
+            if not loan.loan_amount or not loan.installment_amount or not loan.repayment_frequency_id:
+                continue
+            if loan.term:
+                current_target = loan._compute_installment_target()
+                if abs(loan.installment_amount - current_target) < 0.01:
+                    continue
+            interest_factor = loan._period_interest_factor()
+            rate_component = loan.loan_amount * (loan.interest_rate / 100.0) * interest_factor
+            denominator = loan.installment_amount - rate_component
+            if denominator <= 0:
+                continue  # échéance trop faible pour couvrir même l'intérêt d'une période
+            computed_terms = loan.loan_amount / denominator
+            new_term = max(1, round(computed_terms))
+            if loan.term and loan.term == new_term:
+                continue
+            loan.term = new_term
+            loan.installment_ids = [(5, 0, 0)] + loan._build_installment_commands()
+
+    def _round_installment_target(self, value, unit, mode):
+        """Arrondit une cible d'échéance au multiple de `unit` selon `mode` (valeur du champ
+        produit installment_rounding_mode - à ne pas confondre avec le paramètre `rounding_mode`
+        de _compute_installment_targets ci-dessous, qui porte sur la répartition du reliquat
+        entre tranches, un sujet indépendant).
+
+        'ceiling' (défaut, comportement LPF de référence - Lot 1, validé sur plusieurs
+        échéanciers réels 1.XLS/IS_000289) : arrondi SUPÉRIEUR au multiple de `unit`. Réduit
+        mécaniquement la dernière tranche (le reliquat), donc le risque de queue de crédit.
+        'nearest' (ancien comportement par défaut, conservé pour comparaison/cas particulier
+        uniquement) : arrondi au multiple le plus proche."""
+        if not unit:
+            return value
+        if mode == 'ceiling':
+            return math.ceil(value / unit) * unit
+        return round(value / unit) * unit
+
+    def _compute_installment_targets(self, total_due, rounding_unit, rounding_mode):
+        """Retourne la liste des montants cibles pour les tranches 1..term-1 (la tranche
+        `term`, la toute dernière, n'utilise jamais cette liste : elle absorbe toujours le
+        reliquat exact restant, cf. _build_installment_commands - c'est ce qui garantit que la
+        somme totale égale exactement total_due, quel que soit le mode choisi ici).
+
+        `rounding_mode` ici concerne uniquement la RÉPARTITION du reliquat entre tranches (choix
+        du wizard de génération), pas la direction d'arrondi de chaque cible (ce second réglage,
+        installment_rounding_mode sur le produit, est appliqué via _round_installment_target
+        ci-dessus - les deux notions de "mode" sont indépendantes, ne pas les confondre) :
+
+        - rounding_mode == 'last_installment' (Absorption sur la dernière tranche,
+          comportement historique) : toutes les tranches visent le même montant, arrondi selon
+          installment_rounding_mode du produit (ceiling par défaut - Lot 1 ; nearest en option).
+          Conforme au cas de référence IS/01913 (mensuel) et IS/000289 (hebdo, papier) déjà
+          couverts par test_interest_first_schedule.py.
+        - rounding_mode == 'distributed' (Répartition sur les dernières tranches) : la
+          plupart des tranches visent le montant arrondi PAR DÉFAUT (floor, jamais nearest ni
+          ceiling, pour ne jamais dépasser le total dû avant lissage - logique propre à ce mode,
+          non affectée par installment_rounding_mode), et le reliquat est réparti en incréments
+          de rounding_unit sur les dernières tranches de la liste (les plus proches de la fin),
+          au lieu d'être concentré sur la tranche `term` seule."""
+        self.ensure_one()
+        n = self.term
+        raw_target = total_due / n
+        if not rounding_unit:
+            return [raw_target] * (n - 1)
+        if n == 1:
+            # Pas de tranche de reliquat pour absorber un dépassement d'arrondi (ceiling peut
+            # dépasser total_due) : la liste est de toute façon vide (n-1=0, jamais consultée
+            # par _build_installment_commands pour une échéance unique, qui prend directement
+            # la branche "dernière tranche = reliquat exact") - retournée explicitement ici pour
+            # ne jamais calculer/exposer une cible arrondie qui dépasserait total_due.
+            return []
+        if rounding_mode == 'distributed':
+            floor_target = math.floor(raw_target / rounding_unit) * rounding_unit
+            remainder_amount = total_due - (floor_target * n)
+            extra_units = min(int(remainder_amount // rounding_unit), n - 1)
+            targets = [floor_target] * (n - 1)
+            for i in range(1, extra_units + 1):
+                targets[-i] += rounding_unit
+            return targets
+        # rounding_mode == 'last_installment' (défaut historique)
+        base_target = self._round_installment_target(raw_target, rounding_unit, self.product_id.installment_rounding_mode)
+        return [base_target] * (n - 1)
+
+    def _build_installment_commands(self, rounding_mode='last_installment'):
+        """Retourne une liste de commandes o2m (0, 0, vals) pour installment_ids, calculée avec
+        la même logique interest-first que action_generate_schedule (délai de grâce, arrondi de
+        la cible, branche reducing) - extrait ici pour être réutilisable à la fois par le bouton
+        "Générer échéancier" (écriture réelle) et par l'onchange d'aperçu en direct (Lot E,
+        recalcul en mémoire avant sauvegarde - toujours en mode 'last_installment', l'aperçu
+        avant sauvegarde n'expose pas le choix du wizard). Ne lève aucune exception
+        (contrairement à action_generate_schedule) : un onchange ne doit jamais planter sur un
+        formulaire incomplet, retourne simplement [] si les prérequis ne sont pas réunis."""
+        self.ensure_one()
+        if not self.repayment_frequency_id or not self.loan_amount or not self.term:
+            return []
+        remaining = self.loan_amount
+        start = self.approval_date or self.application_date or fields.Date.context_today(self)
+        delta = self._period_delta()
+        interest_factor = self._period_interest_factor()
+        grace_days = self.product_id.grace_period_days or 0
+        schedule_start = start
+        vals = []
+        sequence_offset = 0
+        if grace_days:
+            schedule_start = fields.Date.add(start, days=grace_days)
+            period_days = ((start + delta) - start).days
+            if grace_days > period_days:
+                grace_interest = self.loan_amount * (self.interest_rate / 100.0) / 365.0 * grace_days
+                vals.append({
+                    'sequence': 1,
+                    'due_date': schedule_start,
+                    'principal_amount': 0.0,
+                    'interest_amount': grace_interest,
+                })
+                sequence_offset = 1
+        if self.interest_method == 'flat':
+            # Politique CEFOR "intérêt d'abord" (interest-first, toutes agences/produits en
+            # taux uniforme confondus - pas une option par produit) : chaque tranche cible un
+            # montant total identique (total_dû / nb_tranches) ; l'intérêt total du crédit
+            # (taux uniforme, formule déjà en place : montant x taux annuel x période x nombre
+            # de tranches) est consommé en priorité sur les premières tranches jusqu'à
+            # épuisement, le principal ne comble que le reste de la cible. La dernière tranche
+            # absorbe exactement le reliquat (principal restant, intérêt restant) plutôt que
+            # de recalculer sa propre cible, pour que les totaux somment exactement au capital
+            # et à l'intérêt total - aucun euro/ariary ne se perd à l'arrondi flottant.
+            #
+            # Le délai de grâce ci-dessus reste un mécanisme distinct et déjà pris en compte :
+            # sa tranche dédiée (le cas échéant) est déjà ajoutée à `vals` avant cette boucle,
+            # avec son propre intérêt calculé séparément ; cette boucle ne porte que sur les
+            # `self.term` tranches "normales" restantes.
+            total_interest = self.loan_amount * (self.interest_rate / 100.0) * interest_factor * self.term
+            total_due = self.loan_amount + total_interest
+            # Cible par tranche (arrondie au plus proche multiple de installment_rounding_unit,
+            # champ de configuration du produit) : mode 'last_installment' historique (une
+            # seule cible, la dernière tranche absorbe tout le reliquat) ou 'distributed'
+            # (reliquat réparti en incréments de l'unité d'arrondi sur les dernières tranches),
+            # au choix de l'utilisateur via le wizard de génération - cf.
+            # _compute_installment_targets. Le reliquat réel (différence entre la somme des
+            # cibles et le total dû exact) est de toute façon absorbé par la dernière tranche
+            # ci-dessous, quel que soit le mode.
+            rounding_unit = self.product_id.installment_rounding_unit
+            installment_targets = self._compute_installment_targets(total_due, rounding_unit, rounding_mode)
+            interest_remaining = total_interest
+            principal_allocated = 0.0
+            for idx in range(1, self.term + 1):
+                due_date = schedule_start + (delta * idx)
+                if idx == self.term:
+                    principal_amount = self.loan_amount - principal_allocated
+                    interest_amount = interest_remaining
+                else:
+                    target = installment_targets[idx - 1]
+                    interest_amount = min(interest_remaining, target)
+                    principal_amount = target - interest_amount
+                    interest_remaining -= interest_amount
+                    principal_allocated += principal_amount
+                vals.append({
+                    'sequence': idx + sequence_offset,
+                    'due_date': due_date,
+                    'principal_amount': principal_amount,
+                    'interest_amount': interest_amount,
+                })
+        else:
+            # Méthode dégressive (solde restant dû) : hors périmètre de la Décision 1, qui ne
+            # porte que sur le taux uniforme ("flat") - dans ce mode l'intérêt total n'est pas
+            # connu à l'avance indépendamment de l'échéancier (il dépend du solde restant à
+            # chaque période, lui-même fonction du rythme d'amortissement du principal), donc
+            # la notion de "pool d'intérêt total à consommer en premier" de l'algorithme
+            # interest-first ne s'y applique pas telle quelle. Logique dégressive existante
+            # conservée à l'identique.
+            principal = self.loan_amount / self.term
+            for idx in range(1, self.term + 1):
+                interest = remaining * (self.interest_rate / 100.0) * interest_factor
+                due_date = schedule_start + (delta * idx)
+                vals.append({
+                    'sequence': idx + sequence_offset,
+                    'due_date': due_date,
+                    'principal_amount': principal,
+                    'interest_amount': interest,
+                })
+                remaining -= principal
+        return [(0, 0, v) for v in vals]
+
+    def action_generate_schedule(self, rounding_mode='last_installment'):
+        for loan in self:
+            if loan.state not in loan._EDITABLE_SCHEDULE_STATES:
                 raise UserError(_('Échéancier autorisé avant activation seulement.'))
             if not loan.repayment_frequency_id:
                 raise UserError(_(
                     'Ce produit laisse le choix de la périodicité de remboursement : '
                     "choisissez-en une avant de générer l'échéancier."
                 ))
-            loan.installment_ids.unlink()
-            remaining = loan.loan_amount
-            start = loan.approval_date or loan.application_date or fields.Date.context_today(loan)
-            delta = loan._period_delta()
-            interest_factor = loan._period_interest_factor()
-            grace_days = loan.product_id.grace_period_days or 0
-            schedule_start = start
-            vals = []
-            sequence_offset = 0
-            if grace_days:
-                schedule_start = fields.Date.add(start, days=grace_days)
-                period_days = ((start + delta) - start).days
-                if grace_days > period_days:
-                    grace_interest = loan.loan_amount * (loan.interest_rate / 100.0) / 365.0 * grace_days
-                    vals.append((0, 0, {
-                        'sequence': 1,
-                        'due_date': schedule_start,
-                        'principal_amount': 0.0,
-                        'interest_amount': grace_interest,
-                    }))
-                    sequence_offset = 1
-            if loan.interest_method == 'flat':
-                # Politique CEFOR "intérêt d'abord" (interest-first, toutes agences/produits en
-                # taux uniforme confondus - pas une option par produit) : chaque tranche cible un
-                # montant total identique (total_dû / nb_tranches) ; l'intérêt total du crédit
-                # (taux uniforme, formule déjà en place : montant x taux annuel x période x nombre
-                # de tranches) est consommé en priorité sur les premières tranches jusqu'à
-                # épuisement, le principal ne comble que le reste de la cible. La dernière tranche
-                # absorbe exactement le reliquat (principal restant, intérêt restant) plutôt que
-                # de recalculer sa propre cible, pour que les totaux somment exactement au capital
-                # et à l'intérêt total - aucun euro/ariary ne se perd à l'arrondi flottant.
-                #
-                # Le délai de grâce ci-dessus reste un mécanisme distinct et déjà pris en compte :
-                # sa tranche dédiée (le cas échéant) est déjà ajoutée à `vals` avant cette boucle,
-                # avec son propre intérêt calculé séparément ; cette boucle ne porte que sur les
-                # `loan.term` tranches "normales" restantes.
-                total_interest = loan.loan_amount * (loan.interest_rate / 100.0) * interest_factor * loan.term
-                total_due = loan.loan_amount + total_interest
-                installment_target = total_due / loan.term
-                # Arrondi de la cible au plus proche multiple de installment_rounding_unit (champ
-                # de configuration du produit, pas une valeur codée en dur ici) : arrondi nearest
-                # (ni ceiling ni floor), sans seuil minimal - s'applique même si la cible arrondie
-                # tombe à 0 sur un petit crédit. Le reliquat réel (différence entre la cible
-                # arrondie et le total dû exact) est de toute façon absorbé par la dernière
-                # tranche ci-dessous, que l'arrondi soit actif ou non.
-                rounding_unit = loan.product_id.installment_rounding_unit
-                if rounding_unit:
-                    installment_target = round(installment_target / rounding_unit) * rounding_unit
-                interest_remaining = total_interest
-                principal_allocated = 0.0
-                for idx in range(1, loan.term + 1):
-                    due_date = schedule_start + (delta * idx)
-                    if idx == loan.term:
-                        principal_amount = loan.loan_amount - principal_allocated
-                        interest_amount = interest_remaining
-                    else:
-                        interest_amount = min(interest_remaining, installment_target)
-                        principal_amount = installment_target - interest_amount
-                        interest_remaining -= interest_amount
-                        principal_allocated += principal_amount
-                    vals.append((0, 0, {
-                        'sequence': idx + sequence_offset,
-                        'due_date': due_date,
-                        'principal_amount': principal_amount,
-                        'interest_amount': interest_amount,
-                    }))
-            else:
-                # Méthode dégressive (solde restant dû) : hors périmètre de la Décision 1, qui ne
-                # porte que sur le taux uniforme ("flat") - dans ce mode l'intérêt total n'est pas
-                # connu à l'avance indépendamment de l'échéancier (il dépend du solde restant à
-                # chaque période, lui-même fonction du rythme d'amortissement du principal), donc
-                # la notion de "pool d'intérêt total à consommer en premier" de l'algorithme
-                # interest-first ne s'y applique pas telle quelle. Logique dégressive existante
-                # conservée à l'identique.
-                principal = loan.loan_amount / loan.term
-                for idx in range(1, loan.term + 1):
-                    interest = remaining * (loan.interest_rate / 100.0) * interest_factor
-                    due_date = schedule_start + (delta * idx)
-                    vals.append((0, 0, {
-                        'sequence': idx + sequence_offset,
-                        'due_date': due_date,
-                        'principal_amount': principal,
-                        'interest_amount': interest,
-                    }))
-                    remaining -= principal
-            loan.write({'installment_ids': vals})
+            # (5, 0, 0) ("vider" l'o2m) plutôt que installment_ids.unlink() : équivalent
+            # fonctionnel, mais passe par la même API o2m que les onchange d'aperçu en direct
+            # ci-dessus, pour que tous les chemins utilisent exactement le même code sans
+            # divergence.
+            loan.installment_ids = [(5, 0, 0)] + loan._build_installment_commands(rounding_mode=rounding_mode)
         return True
+
+    def action_open_generate_schedule_wizard(self):
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _("Génération de l'échéancier"),
+            'res_model': 'microfinance.loan.schedule.rounding.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_loan_id': self.id},
+        }
 
     def action_reschedule(self):
         self.ensure_one()

@@ -57,6 +57,7 @@
                                 <field name="allowed_repayment_frequency_ids" widget="many2many_tags" invisible="repayment_frequency_mode != 'client_choice'"/>
                                 <field name="grace_period_days"/>
                                 <field name="installment_rounding_unit"/>
+                                <field name="installment_rounding_mode" widget="radio" invisible="not installment_rounding_unit"/>
                             </group>
                         </page>
                         <page string="Éligibilité">
@@ -64,6 +65,9 @@
                                 <field name="min_membership_days"/>
                                 <field name="allow_second_loan"/>
                                 <field name="block_second_if_arrears" invisible="not allow_second_loan"/>
+                            </group>
+                            <group string="Validation">
+                                <field name="validation_authority" widget="radio"/>
                             </group>
                         </page>
                         <page string="Pénalités">

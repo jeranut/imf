@@ -10,6 +10,7 @@
                 <field name="code"/>
                 <field name="period_kind"/>
                 <field name="period_value"/>
+                <field name="periods_per_year"/>
             </tree>
         </field>
     </record>

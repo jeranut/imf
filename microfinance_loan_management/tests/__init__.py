@@ -53,3 +53,6 @@ from . import test_application_activity
 from . import test_application_financial_section
 from . import test_loan_account
 from . import test_caisse_session
+from . import test_loan_product_validation_authority
+from . import test_loan_installment_amount
+from . import test_loan_term_installment_feedback_loop

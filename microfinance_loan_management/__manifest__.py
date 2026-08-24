@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Loan Management',
-    'version': '17.0.1.7.0',
+    'version': '17.0.1.8.0',
     'summary': 'Gestion des crédits clients pour institutions de microfinance',
     'description': 'Produits de crédit, demandes, approbations, échéanciers, remboursements, pénalités, recouvrement et risque.',
     'category': 'Accounting/Finance',
@@ -50,6 +50,7 @@
         'wizard/microfinance_loan_reschedule_wizard_views.xml',
         'wizard/microfinance_loan_writeoff_wizard_views.xml',
         'wizard/microfinance_loan_payment_cancel_wizard_views.xml',
+        'wizard/microfinance_loan_schedule_rounding_wizard_views.xml',
         'views/microfinance_dashboard_views.xml',
         'views/microfinance_partner_views.xml',
         'views/microfinance_client_blacklist_views.xml',
