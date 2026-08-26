@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 # États d'un crédit considérés comme "réalisés" pour le calcul du rang de prêt
 # (loan_sequence_number) : les dossiers jamais décaissés (brouillon → approuvé, annulé)
@@ -675,23 +675,56 @@ class MicrofinanceLoanApplication(models.Model):
     # ------------------------------------------------------------------
     # Bloc E — Avis CA / CDAG
     # ------------------------------------------------------------------
+    # Ces champs reflètent microfinance.loan (related, readonly) plutôt que d'être ressaisis ou
+    # recalculés ici : depuis le chantier Avis CA/CDAG (Lot 1), la saisie et le calcul
+    # bidirectionnel montant/durée/échéance vivent exclusivement sur le crédit
+    # (avis_ca_amount/avis_ca_term/... et leur cascade CA -> CDAG, cf. microfinance_loan.py) -
+    # décision confirmée avec Micka : une seule source de vérité, pas de logique dupliquée ici
+    # qui risquerait de diverger de celle du crédit. Même mécanisme déjà en place pour
+    # requested_amount ci-dessous (related='loan_id.loan_amount', existant avant ce chantier).
     requested_amount = fields.Monetary(
         related='loan_id.loan_amount', string='Montant demandé', readonly=True, tracking=True,
         help='Reprend automatiquement le montant du crédit lié — non modifiable depuis le '
              'dossier, à ajuster sur le crédit (microfinance.loan) si besoin.',
     )
-    required_savings = fields.Monetary(string='Épargne exigée (demande)')
-    repayment_amount = fields.Monetary(string='Remboursement (demande)')
-    period = fields.Integer(string='Durée demandée (échéances)')
-    available_savings = fields.Monetary(string='Épargne disponible')
-    ca_amount = fields.Monetary(string='Montant avis CA', tracking=True)
-    ca_required_savings = fields.Monetary(string='Épargne exigée (CA)')
-    ca_repayment_amount = fields.Monetary(string='Remboursement (CA)')
-    ca_period = fields.Integer(string='Durée avis CA (échéances)')
-    cdag_amount = fields.Monetary(string='Montant avis CDAG', tracking=True)
-    cdag_required_savings = fields.Monetary(string='Épargne exigée (CDAG)')
-    cdag_repayment_amount = fields.Monetary(string='Remboursement (CDAG)')
-    cdag_period = fields.Integer(string='Durée avis CDAG (échéances)')
+    required_savings = fields.Monetary(
+        string='Épargne exigée (demande)',
+        help="Saisie libre : aucun champ équivalent sur microfinance.loan à refléter (pas de "
+             "notion d'épargne exigée pour la demande initiale, avant tout avis CA/CDAG).")
+    repayment_amount = fields.Monetary(
+        related='loan_id.installment_amount', string='Remboursement (demande)', readonly=True,
+        help="Reprend automatiquement l'échéance du crédit lié (avant tout avis CA/CDAG - une "
+             "fois un avis propagé, cf. microfinance_loan.py::_propagate_avis_to_loan, ce champ "
+             "suit la même valeur que requested_amount/period ci-dessus : le crédit n'a qu'un "
+             "seul jeu loan_amount/term/installment_amount, pas de copie figée de la demande "
+             "initiale distincte de l'avis en cours).")
+    period = fields.Integer(
+        related='loan_id.term', string='Durée demandée (échéances)', readonly=True,
+        help='Reprend automatiquement la durée du crédit lié — mêmes règles que requested_amount.')
+    available_savings = fields.Monetary(
+        string='Épargne disponible',
+        help="Saisie libre : aucun champ équivalent sur microfinance.loan (information externe, "
+             "pas une valeur dérivée du crédit).")
+    ca_amount = fields.Monetary(
+        related='loan_id.avis_ca_amount', string='Montant avis CA', readonly=True, tracking=True,
+        help='Reprend automatiquement avis_ca_amount du crédit lié — à modifier sur le crédit '
+             "(onglet 'Avis CA / CDAG'), pas depuis ce dossier.")
+    ca_required_savings = fields.Monetary(
+        related='loan_id.avis_ca_epargne_exigee', string='Épargne exigée (CA)', readonly=True)
+    ca_repayment_amount = fields.Monetary(
+        related='loan_id.avis_ca_installment_amount', string='Remboursement (CA)', readonly=True)
+    ca_period = fields.Integer(
+        related='loan_id.avis_ca_term', string='Durée avis CA (échéances)', readonly=True)
+    cdag_amount = fields.Monetary(
+        related='loan_id.avis_cdag_amount', string='Montant avis CDAG', readonly=True, tracking=True,
+        help='Reprend automatiquement avis_cdag_amount du crédit lié — mêmes règles que '
+             'ca_amount ci-dessus.')
+    cdag_required_savings = fields.Monetary(
+        related='loan_id.avis_cdag_epargne_exigee', string='Épargne exigée (CDAG)', readonly=True)
+    cdag_repayment_amount = fields.Monetary(
+        related='loan_id.avis_cdag_installment_amount', string='Remboursement (CDAG)', readonly=True)
+    cdag_period = fields.Integer(
+        related='loan_id.avis_cdag_term', string='Durée avis CDAG (échéances)', readonly=True)
     previous_loan_amount = fields.Monetary(string='Montant du prêt précédent')
     previous_loan_repayment_behavior = fields.Selection([
         ('early', 'En avance'),
@@ -699,6 +732,92 @@ class MicrofinanceLoanApplication(models.Model):
         ('irregular', 'Irrégulier'),
         ('late', 'En retard'),
     ], string='Comportement de remboursement précédent')
+
+    # ------------------------------------------------------------------
+    # Bloc F — Comité d'octroi (Section VIII)
+    # ------------------------------------------------------------------
+    # Remplace le placeholder "standby" (état seul) - cf. docs_dev/comite_octroi/AUDIT.md.
+    # Même patron que Section VI (field_visit_ids ci-dessus) : le stockage réel est un
+    # One2many (committee_review_ids), mais le formulaire n'expose jamais ce One2many en
+    # <tree> - deux "emplacements" (slots) Many2one fixes, garantis présents/créés au bon
+    # moment, exposés via des champs related en cartes. Différence avec les 4 slots VAD/VAV
+    # (tous créés inconditionnellement à la création du dossier, cf. _ensure_field_visit_slots) :
+    # le 2ème slot ici est CONDITIONNEL (n'a de sens que si le 1er comité a refusé, règle actée) -
+    # créé à la demande via action_add_second_committee_review(), pas à la création du dossier.
+    committee_review_ids = fields.One2many(
+        'microfinance.credit.committee.review', 'application_id', string="Comité d'octroi")
+    first_committee_review_id = fields.Many2one(
+        'microfinance.credit.committee.review', string='1er comité d\'octroi', readonly=True, copy=False)
+    second_committee_review_id = fields.Many2one(
+        'microfinance.credit.committee.review', string='2ème comité d\'octroi', readonly=True, copy=False)
+
+    committee_first_review_date = fields.Date(
+        related='first_committee_review_id.review_date', string='Date', readonly=False)
+    committee_first_decision = fields.Selection(
+        related='first_committee_review_id.decision', string='Décision', readonly=False)
+    committee_first_postpone_reason = fields.Selection(
+        related='first_committee_review_id.postpone_reason', string='Raison du report', readonly=False)
+    committee_first_complement = fields.Text(
+        related='first_committee_review_id.complement', string='Complément', readonly=False,
+        help="Libellé de la fiche papier tronqué (\"Complément sur ...\") - implémenté comme "
+             "texte libre générique faute de précision. Cf. question ouverte n°2 de "
+             "docs_dev/comite_octroi/AUDIT.md, toujours sans réponse au moment de ce lot.")
+    committee_first_comment = fields.Text(
+        related='first_committee_review_id.comment', string='Commentaires', readonly=False)
+
+    committee_second_review_date = fields.Date(
+        related='second_committee_review_id.review_date', string='Date', readonly=False)
+    committee_second_decision = fields.Selection(
+        related='second_committee_review_id.decision', string='Décision', readonly=False)
+    committee_second_comment = fields.Text(
+        related='second_committee_review_id.comment', string='Commentaires', readonly=False)
+
+    def action_add_second_committee_review(self):
+        """Crée le 2ème comité d'octroi (bouton, visible en vue seulement si le 1er comité a
+        été refusé et qu'aucun 2ème n'existe déjà - cf. vue). Contrôle redondant ici (le
+        _check_second_committee_requires_first_refused du modèle enfant le referait de toute
+        façon) : filet de sécurité pour un appel direct de cette action hors bouton, avec un
+        message d'erreur plus parlant que la ValidationError générique de la contrainte."""
+        self.ensure_one()
+        if self.second_committee_review_id:
+            return
+        if not self.first_committee_review_id or self.first_committee_review_id.decision != 'refused':
+            raise UserError(_(
+                "Le 2ème comité d'octroi n'est disponible que si le 1er comité a été refusé."
+            ))
+        self.second_committee_review_id = self.env['microfinance.credit.committee.review'].create({
+            'application_id': self.id,
+            'committee_number': 'second',
+        })
+
+    def _ensure_committee_review_slot(self):
+        """Garantit la présence du 1er emplacement de comité d'octroi, même patron que
+        _ensure_field_visit_slots (Section VI) - appelée uniquement depuis create(), jamais
+        depuis read(). Le 2ème emplacement n'est PAS créé ici (cf. commentaire du bloc de champs
+        ci-dessus) : action_add_second_committee_review() s'en charge, à la demande."""
+        self.ensure_one()
+        if self.first_committee_review_id:
+            return
+        existing = self.env['microfinance.credit.committee.review'].search([
+            ('application_id', '=', self.id), ('committee_number', '=', 'first'),
+        ], limit=1)
+        if existing:
+            self.first_committee_review_id = existing
+            return
+        # with_context bootstrap : cette création accompagne la création du DOSSIER lui-même
+        # (appelée depuis create() ci-dessus), par n'importe quel utilisateur autorisé à créer
+        # un dossier d'instruction (enquêteur, pas forcément membre du comité d'octroi) - ce
+        # n'est pas encore une "décision du comité" (ligne vide, aucune décision posée), donc
+        # pas soumise au contrôle de groupe de _check_committee_group_access (même principe que
+        # microfinance_bootstrap_field_visit_slots pour les 4 slots VAD/VAV). Le 2ème comité, à
+        # l'inverse (action_add_second_committee_review ci-dessus), reste soumis au contrôle
+        # normal : sa création est un acte délibéré, pas un effet de bord de la création du
+        # dossier.
+        self.first_committee_review_id = self.env['microfinance.credit.committee.review'].with_context(
+            microfinance_bootstrap_committee_slot=True).create({
+                'application_id': self.id,
+                'committee_number': 'first',
+            })
 
     # ------------------------------------------------------------------
     # Calculs
@@ -1234,6 +1353,7 @@ class MicrofinanceLoanApplication(models.Model):
             application._ensure_default_document_lines()
             application._ensure_default_financial_lines()
             application._ensure_field_visit_slots()
+            application._ensure_committee_review_slot()
         return applications
 
     # NE PAS réintroduire d'appel à _ensure_default_financial_lines() (ni équivalent) depuis
@@ -1698,3 +1818,123 @@ class MicrofinanceLoanApplicationFieldVisit(models.Model):
                     'La contre-visite doit être réalisée par un agent différent de celui de '
                     'la visite initiale (contrôle indépendant).'
                 ))
+
+
+class MicrofinanceCreditCommitteeReview(models.Model):
+    """Décision du comité d'octroi (Section VIII) - un enregistrement par comité (1er, et 2ème
+    seulement si le 1er a été refusé), rattaché au dossier d'instruction. Cf.
+    docs_dev/comite_octroi/AUDIT.md : nom provisoire, jamais exposé en <tree> dans le formulaire
+    (mêmes emplacements Many2one + champs related que Section VI/field_visit_ids), groupe de
+    sécurité réutilisé (group_microfinance_credit_committee, décision actée - même groupe que
+    Avis CA/Avis CDAG sur microfinance.loan, indifférenciation déjà connue et documentée)."""
+    _name = 'microfinance.credit.committee.review'
+    _description = "Décision du comité d'octroi"
+    _order = 'committee_number, id'
+
+    application_id = fields.Many2one(
+        'microfinance.loan.application', string='Dossier', required=True, ondelete='cascade')
+
+    committee_number = fields.Selection([
+        ('first', '1er comité'), ('second', '2ème comité'),
+    ], string='Comité', required=True)
+
+    review_date = fields.Date(string='Date', required=True, default=fields.Date.context_today)
+
+    # Valeurs partagées entre 1er et 2ème comité (même champ, même modèle - décision actée) :
+    # 'postponed' n'est valide que pour committee_number == 'first' (pas de "reporté" au 2ème,
+    # règle actée). Le widget radio ne permet pas de masquer une valeur précise par ligne
+    # (limite Odoo constatée, pas contournée ici) : la vue du 2ème comité continue d'afficher
+    # les 3 options au widget, mais _check_second_committee_no_postpone ci-dessous rejette
+    # 'postponed' au niveau serveur si jamais sélectionné - garantie réelle malgré la limite UI,
+    # cf. commentaire du Lot dans docs_dev/comite_octroi/.
+    decision = fields.Selection([
+        ('accepted', 'Accepté'), ('refused', 'Refusé'), ('postponed', 'Reporté'),
+    ], string='Décision')
+
+    postpone_reason = fields.Selection([
+        ('vad', 'VAD'), ('vav', 'VAV'), ('incomplete_file', 'Dossier incomplet'),
+        ('activity_analysis', 'Analyse activité'),
+        ('prior_repayment_issue', 'Problème remboursement prêt précédent'),
+    ], string='Raison du report')
+
+    complement = fields.Text(string='Complément')
+    comment = fields.Text(string='Commentaires')
+
+    @api.constrains('decision', 'comment')
+    def _check_comment_required_if_refused(self):
+        for review in self:
+            if review.decision == 'refused' and not review.comment:
+                raise ValidationError(_(
+                    "Le commentaire est obligatoire lorsque la décision du comité d'octroi est "
+                    "'Refusé'."
+                ))
+
+    @api.constrains('committee_number', 'decision')
+    def _check_second_committee_no_postpone(self):
+        for review in self:
+            if review.committee_number == 'second' and review.decision == 'postponed':
+                raise ValidationError(_(
+                    "Le 2ème comité d'octroi ne peut pas avoir la décision 'Reporté' - seul le "
+                    "1er comité peut reporter."
+                ))
+
+    @api.constrains('application_id', 'committee_number')
+    def _check_second_committee_requires_first_refused(self):
+        for review in self:
+            if review.committee_number != 'second':
+                continue
+            first = review.application_id.first_committee_review_id
+            if not first or first.decision != 'refused':
+                raise ValidationError(_(
+                    "Un 2ème comité d'octroi ne peut exister que si le 1er comité a été refusé."
+                ))
+
+    @api.constrains('decision', 'committee_number')
+    def _check_first_committee_decision_consistency(self):
+        # Symétrique de la contrainte ci-dessus, dans l'autre sens : empêche de faire "disparaître"
+        # rétroactivement la justification d'un 2ème comité déjà créé en changeant la décision du
+        # 1er comité (le 2ème comité n'est jamais mis à jour/supprimé automatiquement en réaction -
+        # aucun mécanisme de cascade dans ce lot, cf. limites documentées).
+        for review in self:
+            if review.committee_number != 'first' or review.decision == 'refused':
+                continue
+            second = review.application_id.second_committee_review_id
+            if second:
+                raise ValidationError(_(
+                    "Impossible de changer la décision du 1er comité tant qu'un 2ème comité "
+                    "d'octroi existe pour ce dossier."
+                ))
+
+    def _check_committee_group_access(self):
+        # Filet de sécurité serveur (décision actée n°3) : le groups="..." posé en vue
+        # (microfinance_loan_application_views.xml) masque déjà cette section pour un
+        # utilisateur hors groupe, mais un masquage de vue seul n'empêche jamais un write()/
+        # create()/unlink() direct par un autre chemin (import, API, autre vue, `write()` sur un
+        # recordset obtenu par recherche) - même principe que le seul autre précédent has_group
+        # du module (action_reopen_day, microfinance_caisse_fiche_journee.py), généralisé ici à
+        # create/write/unlink plutôt qu'à une seule action, pour couvrir "même hors UI" tel que
+        # demandé. self.env.su exempté (appels techniques : migrations, sudo() internes) - même
+        # traitement que le contrôle d'accès natif d'Odoo (ir.model.access/ir.rule), qui exempte
+        # aussi le superuser.
+        if self.env.su:
+            return
+        if self.env.context.get('microfinance_bootstrap_committee_slot'):
+            return
+        if not self.env.user.has_group('microfinance_loan_management.group_microfinance_credit_committee'):
+            raise AccessError(_(
+                "Seuls les membres du comité d'octroi peuvent modifier les décisions du comité "
+                "d'octroi."
+            ))
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        self._check_committee_group_access()
+        return super().create(vals_list)
+
+    def write(self, vals):
+        self._check_committee_group_access()
+        return super().write(vals)
+
+    def unlink(self):
+        self._check_committee_group_access()
+        return super().unlink()

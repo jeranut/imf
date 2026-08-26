@@ -38,6 +38,33 @@ class MicrofinanceLoan(models.Model):
     )
     savings_account_count = fields.Integer(compute='_compute_savings_account_count')
 
+    # Redéclaration en compute+store des deux champs Avis CA/CDAG (définis en saisie libre dans
+    # microfinance_loan_management, cf. docs_dev/epargne_exigee_ca_cdag/AUDIT.md) : le module de
+    # base n'a aucune notion d'épargne garantie de crédit (guarantee_savings_percent vit
+    # uniquement ici), donc ce calcul ne peut pas vivre dans microfinance_loan.py lui-même - même
+    # logique que guarantee_savings_required ci-dessus, appliquée au montant proposé par chaque
+    # avis (avis_ca_amount/avis_cdag_amount) plutôt qu'au loan_amount générique, pour rester
+    # cohérent avec le reste du bloc Avis CA/CDAG (avis_ca_installment_amount etc., qui dérivent
+    # tous du montant de l'avis, pas du crédit). Un compute écrase implicitement tout readonly=False
+    # : plus besoin de readonly explicite en vue pour la demande "toujours lecture seule".
+    avis_ca_epargne_exigee = fields.Monetary(
+        string='Épargne exigée (CA)', compute='_compute_avis_epargne_exigee', store=True,
+        help="Calculé automatiquement : avis_ca_amount x product_id.guarantee_savings_percent - "
+             "0 si le produit n'a pas d'épargne garantie de crédit configurée.",
+    )
+    avis_cdag_epargne_exigee = fields.Monetary(
+        string='Épargne exigée (CDAG)', compute='_compute_avis_epargne_exigee', store=True,
+        help="Calculé automatiquement : avis_cdag_amount x product_id.guarantee_savings_percent "
+             "- 0 si le produit n'a pas d'épargne garantie de crédit configurée.",
+    )
+
+    @api.depends('avis_ca_amount', 'avis_cdag_amount', 'product_id.guarantee_savings_percent')
+    def _compute_avis_epargne_exigee(self):
+        for loan in self:
+            percent = loan.product_id.guarantee_savings_percent
+            loan.avis_ca_epargne_exigee = (loan.avis_ca_amount or 0.0) * percent / 100.0
+            loan.avis_cdag_epargne_exigee = (loan.avis_cdag_amount or 0.0) * percent / 100.0
+
     @api.depends('partner_id.microfinance_savings_account_ids')
     def _compute_savings_account_count(self):
         for loan in self:

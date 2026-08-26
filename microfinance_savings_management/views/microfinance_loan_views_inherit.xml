@@ -21,6 +21,21 @@
                 <field name="guarantee_savings_balance" invisible="not guarantee_savings_required" readonly="1"/>
                 <field name="guarantee_savings_verified" invisible="not guarantee_savings_required" readonly="1"/>
             </field>
+            <!-- Épargne exigée (CA/CDAG), onglet "Avis CA / CDAG" : masqué si le produit n'a pas
+                 d'épargne garantie de crédit configurée (réutilise guarantee_savings_required,
+                 déjà calculé ci-dessus, comme condition - un invisible= de vue Odoo 17 ne peut
+                 pas traverser une relation comme product_id.guarantee_savings_percent, cf.
+                 docs_dev/epargne_exigee_ca_cdag/AUDIT.md). readonly="1" redondant avec le compute
+                 (déjà readonly de fait) mais ajouté pour la cohérence visuelle avec guarantee_
+                 savings_required/balance/verified ci-dessus. -->
+            <field name="avis_ca_epargne_exigee" position="attributes">
+                <attribute name="invisible">not guarantee_savings_required</attribute>
+                <attribute name="readonly">1</attribute>
+            </field>
+            <field name="avis_cdag_epargne_exigee" position="attributes">
+                <attribute name="invisible">not guarantee_savings_required</attribute>
+                <attribute name="readonly">1</attribute>
+            </field>
         </field>
     </record>
 </odoo>

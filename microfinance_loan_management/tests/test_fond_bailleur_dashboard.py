@@ -62,6 +62,9 @@ class TestFondDashboardMultiCompanyChart(TestFondBailleurCommon):
             'account_principal_groupe_id': cls.principal_account_b.id,
             'account_interets_recus_individuel_id': cls.interest_account_b.id,
             'account_interets_recus_groupe_id': cls.interest_account_b.id,
+            # Arrondi désactivé (cf. test_fond_bailleur.py, même correctif sur un produit
+            # "agence B" analogue) : garde-fou reliquat négatif.
+            'installment_rounding_unit': 0,
         })
         cls.partner_b = cls.env['res.partner'].create({'name': 'Client Test Dashboard Agence B'})
 
@@ -173,6 +176,9 @@ class TestFondMatrix(TestFondBailleurCommon):
             'account_principal_groupe_id': cls.principal_account_b.id,
             'account_interets_recus_individuel_id': cls.interest_account_b.id,
             'account_interets_recus_groupe_id': cls.interest_account_b.id,
+            # Arrondi désactivé (cf. test_fond_bailleur.py, même correctif sur un produit
+            # "agence B" analogue) : garde-fou reliquat négatif.
+            'installment_rounding_unit': 0,
         })
         cls.partner_b = cls.env['res.partner'].create({'name': 'Client Test Matrice Agence B'})
 

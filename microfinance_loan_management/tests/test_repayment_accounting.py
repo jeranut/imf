@@ -105,6 +105,9 @@ class TestRepaymentAccounting(MicrofinanceCommon):
             'account_interets_recus_individuel_id': interest_account_b.id,
             'account_interets_recus_groupe_id': interest_account_b.id,
             'account_penalites_id': penalty_account_b.id,
+            # Arrondi désactivé (même raison que common.py MicrofinanceCommon.setUpClass) : voir
+            # test_fond_bailleur.py pour le même correctif sur un produit "agence B" analogue.
+            'installment_rounding_unit': 0,
         })
         partner_b = self.env['res.partner'].create({'name': 'Client B (compta remboursement)'})
         loan_b = self.env['microfinance.loan'].create({

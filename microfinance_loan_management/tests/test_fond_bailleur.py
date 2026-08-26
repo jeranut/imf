@@ -289,6 +289,12 @@ class TestFondMultiCompany(TestFondBailleurCommon):
             'account_principal_groupe_id': cls.principal_account_b.id,
             'account_interets_recus_individuel_id': cls.interest_account_b.id,
             'account_interets_recus_groupe_id': cls.interest_account_b.id,
+            # Arrondi désactivé (même raison que common.py MicrofinanceCommon.setUpClass) : les
+            # montants ronds et courts utilisés dans ces tests (ex. 1000 Ar / 3 échéances) n'ont
+            # aucun rapport avec la granularité réelle CEFOR et tombent dans la zone à risque du
+            # garde-fou reliquat négatif (cf. docs_dev/garde_fou_reliquat_negatif/AUDIT.md) sans
+            # que ce soit ce que ces tests vérifient.
+            'installment_rounding_unit': 0,
         })
         cls.partner_b = cls.env['res.partner'].create({'name': 'Client Test Fonds Agence B'})
 

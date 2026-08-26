@@ -56,3 +56,8 @@ from . import test_caisse_session
 from . import test_loan_product_validation_authority
 from . import test_loan_installment_amount
 from . import test_loan_term_installment_feedback_loop
+from . import test_loan_avis_ca_cdag
+from . import test_credit_committee_review
+from . import test_installment_schedule_persistence
+from . import test_schedule_negative_reliquat_guard
+from . import test_locked_dossier_fields

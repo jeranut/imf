@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_form_inherit_savings" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.form.inherit.savings</field>
+        <field name="model">microfinance.loan.application</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_application_form"/>
+        <field name="arch" type="xml">
+            <!-- Champ relais invisible, uniquement pour servir de condition invisible= ci-dessous
+                 (cf. docs_dev/epargne_exigee_ca_cdag/AUDIT.md) - même pattern que savings_
+                 requirement_type/avis_cdag_manually_set ailleurs dans ce module. -->
+            <field name="ca_amount" position="after">
+                <field name="guarantee_savings_required" invisible="1"/>
+            </field>
+            <field name="ca_required_savings" position="attributes">
+                <attribute name="invisible">not guarantee_savings_required</attribute>
+            </field>
+            <field name="cdag_required_savings" position="attributes">
+                <attribute name="invisible">not guarantee_savings_required</attribute>
+            </field>
+        </field>
+    </record>
+</odoo>

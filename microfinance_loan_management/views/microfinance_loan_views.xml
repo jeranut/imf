@@ -92,16 +92,25 @@
                     <group>
                         <group string="Dossier">
                             <field name="partner_id"/>
-                            <field name="product_id"/>
+                            <!-- readonly dès avis_ca/avis_cdag (et tous les états suivants) sur
+                                 product_id/loan_amount/term/installment_amount : verrouillage
+                                 des champs "Calcul crédit" après avis rendu (Lot 1, docs_dev/
+                                 verrouillage_calcul_credit/) - filet côté vue, doublé du filet
+                                 serveur _check_locked_dossier_fields() dans microfinance_loan.py
+                                 (write()), seul rempart réel puisqu'un readonly de vue seul est
+                                 contournable (API, import). Liste d'états reprise à l'identique
+                                 de _LOCKED_DOSSIER_STATES - la faire évoluer aux deux endroits
+                                 en même temps si jamais modifiée. -->
+                            <field name="product_id" readonly="state in ('avis_ca','avis_cdag','approved','active','closed','defaulted','written_off')"/>
                             <!-- Pas de groups="base.group_multi_company" : le domaine de
                                  fond_credit_id ci-dessous référence company_id, qui doit donc
                                  rester présent dans la vue quel que soit le groupe (même
                                  exception que sur microfinance_loan_product_views.xml). -->
                             <field name="company_id"/>
                             <field name="currency_id"/>
-                            <field name="loan_amount"/>
-                            <field name="term"/>
-                            <field name="installment_amount" readonly="state not in ('draft','enquete','avis_ca','avis_cdag','approved')"/>
+                            <field name="loan_amount" readonly="state in ('avis_ca','avis_cdag','approved','active','closed','defaulted','written_off')"/>
+                            <field name="term" readonly="state in ('avis_ca','avis_cdag','approved','active','closed','defaulted','written_off')"/>
+                            <field name="installment_amount" readonly="state in ('avis_ca','avis_cdag','approved','active','closed','defaulted','written_off')"/>
                             <field name="repayment_frequency_mode" invisible="1"/>
                             <field name="allowed_repayment_frequency_ids" invisible="1"/>
                             <field name="repayment_frequency_id" readonly="repayment_frequency_mode == 'fixed'"/>
@@ -139,6 +148,37 @@
                         <field name="bypass_cash_balance" invisible="state != 'approved'"/>
                     </group>
                     <notebook>
+                        <page string="Avis CA / CDAG" invisible="state not in ('avis_ca', 'avis_cdag', 'approved', 'active', 'closed', 'defaulted', 'written_off')">
+                            <!-- Pas de readonly par état ni de restriction groups= ici (agence
+                                 CA / CDAG, qui CA peut modifier quel bloc) : Lot 2 du chantier
+                                 Avis CA/CDAG, séparé - hors périmètre de ce Lot 1. Un readonly
+                                 conditionné à l'état a été testé puis retiré : Odoo n'enregistre
+                                 jamais un champ readonly même modifié par onchange (cf.
+                                 odoo/tests/form.py:405, "does not save readonly fields"), ce qui
+                                 bloquait précisément la cascade CA -> CDAG (elle écrit
+                                 avis_cdag_* alors que l'état est encore 'avis_ca') - constaté en
+                                 test, pas une supposition. -->
+                            <field name="avis_cdag_manually_set" invisible="1"/>
+                            <group>
+                                <group string="Avis CA">
+                                    <field name="avis_ca_amount"/>
+                                    <field name="avis_ca_epargne_exigee"/>
+                                    <field name="avis_ca_installment_amount"/>
+                                    <field name="avis_ca_term"/>
+                                </group>
+                                <group string="Avis CDAG">
+                                    <field name="avis_cdag_amount"/>
+                                    <field name="avis_cdag_epargne_exigee"/>
+                                    <field name="avis_cdag_installment_amount"/>
+                                    <field name="avis_cdag_term"/>
+                                </group>
+                            </group>
+                        </page>
+                        <!-- readonly="1" : empêche l'édition manuelle des lignes, pas un obstacle
+                             à la persistance - write() régénère réellement ce champ à chaque
+                             modification de loan_amount/term/etc. (cf. _SCHEDULE_TRIGGER_FIELDS,
+                             microfinance_loan.py), l'aperçu onchange seul ne suffisait pas (cf.
+                             docs_dev/echeancier_obsolete_readonly/AUDIT.md). -->
                         <page string="Échéancier"><field name="installment_ids" readonly="1"/></page>
                         <page string="Remboursements"><field name="payment_ids" readonly="1"/></page>
                         <page string="Garanties"><field name="guarantee_ids" context="{'default_loan_id': id}"/></page>

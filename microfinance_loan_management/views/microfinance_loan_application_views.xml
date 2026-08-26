@@ -659,14 +659,40 @@
                         </group>
                     </group>
 
-                    <!-- VIII — Comité d'octroi : standby, pas de workflow de comité
-                         multi-validateurs. Affiche seulement l'état du dossier (les
-                         boutons d'action sont déjà dans l'en-tête). -->
-                    <group string="VIII — Comité d'octroi">
-                        <group>
-                            <field name="state" widget="badge"/>
+                    <!-- VIII — Comité d'octroi : cf. docs_dev/comite_octroi/. groups= sur le
+                         <group> englobant (masquage vue, pas un readonly - un readonly aurait
+                         empêché la sauvegarde des champs related ci-dessous, même piège que
+                         rencontré sur le chantier Avis CA/CDAG, cf. docs_dev/
+                         workflow_avis_ca_cdag/STATUS.md - groups= n'a pas ce problème : le bloc
+                         est simplement absent du fields_spec pour un non-membre, pas affiché en
+                         readonly). Contrainte serveur équivalente sur le modèle enfant
+                         (microfinance.credit.committee.review.write/create/unlink), seule
+                         garantie réelle hors UI (import, API, autre vue). -->
+                    <group string="VIII — Comité d'octroi"
+                           groups="microfinance_loan_management.group_microfinance_credit_committee">
+                        <field name="second_committee_review_id" invisible="1"/>
+                        <group string="1er comité d'octroi" style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;">
+                            <field name="committee_first_review_date"/>
+                            <field name="committee_first_decision" widget="radio"/>
+                            <field name="committee_first_postpone_reason" widget="radio"
+                                   invisible="committee_first_decision != 'postponed'"/>
+                            <field name="committee_first_complement"/>
+                            <field name="committee_first_comment"
+                                   required="committee_first_decision == 'refused'"/>
                         </group>
-                        <group/>
+                        <group string="2ème comité d'octroi" style="border: 1px solid #e5e7eb; border-radius:8px; padding:16px;"
+                               invisible="committee_first_decision != 'refused'">
+                            <!-- Le widget radio ne masque pas d'option précise par ligne (limite
+                                 Odoo) : "Reporté" reste visible ici bien qu'interdit au 2ème
+                                 comité (règle actée) - rejeté par _check_second_committee_
+                                 no_postpone côté serveur si sélectionné malgré tout, cf. modèle. -->
+                            <button name="action_add_second_committee_review"
+                                    string="Ajouter le 2ème comité d'octroi" type="object"
+                                    class="btn-secondary" invisible="second_committee_review_id"/>
+                            <field name="committee_second_review_date" invisible="not second_committee_review_id"/>
+                            <field name="committee_second_decision" widget="radio" invisible="not second_committee_review_id"/>
+                            <field name="committee_second_comment" invisible="not second_committee_review_id"/>
+                        </group>
                     </group>
                     </div>
 

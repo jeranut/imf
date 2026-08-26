@@ -93,6 +93,54 @@ class MicrofinanceLoan(models.Model):
              "redonne pas nécessairement le montant de départ exact, du fait des arrondis "
              "(installment_rounding_unit d'un côté, arrondi à l'entier du nombre d'échéances de "
              "l'autre) : comportement normal, pas un bug.")
+    avis_ca_amount = fields.Monetary(
+        string='Montant avis CA', tracking=True,
+        help="Montant proposé par le Comité d'Agence (CA). Par défaut égal à loan_amount à "
+             "l'entrée en état 'Avis CA' (action_ca_review), modifiable ensuite tant que le "
+             "crédit reste dans cet état. Toute modification recalcule avis_ca_installment_amount "
+             "(même mécanisme bidirectionnel que loan_amount/term/installment_amount ci-dessus) "
+             "et se répercute par défaut sur le bloc Avis CDAG tant que celui-ci n'a pas été "
+             "modifié explicitement (cf. avis_cdag_manually_set).")
+    avis_ca_epargne_exigee = fields.Monetary(
+        string='Épargne exigée (CA)',
+        help="Saisie libre par défaut - ce module seul n'a aucune notion d'épargne garantie de "
+             "crédit à calculer (ne participe pas au recalcul bidirectionnel montant/durée/"
+             "échéance ci-dessus). Redéclaré en champ calculé (compute+store, lecture seule) par "
+             "microfinance_savings_management s'il est installé - cf. docs_dev/epargne_exigee_"
+             "ca_cdag/AUDIT.md et microfinance_loan_extension.py::_compute_avis_epargne_exigee.")
+    avis_ca_installment_amount = fields.Monetary(
+        string='Remboursement (CA)',
+        help="Calculé automatiquement à partir de avis_ca_amount/avis_ca_term (même formule "
+             "ceiling que installment_amount ci-dessus) - modifiable directement, ce qui "
+             "recalcule alors avis_ca_term en retour.")
+    avis_ca_term = fields.Integer(
+        string='Durée avis CA (échéances)',
+        help="Par défaut égal à term à l'entrée en état 'Avis CA'. Modifiable : recalcule "
+             "avis_ca_installment_amount avec le nombre d'échéances proposé par le CA.")
+    avis_cdag_amount = fields.Monetary(
+        string='Montant avis CDAG', tracking=True,
+        help="Hérite par défaut de avis_ca_amount à chaque modification du bloc CA, tant que le "
+             "CDAG n'a pas modifié explicitement ce bloc (cf. avis_cdag_manually_set) - passé ce "
+             "point, la cascade automatique CA -> CDAG s'arrête définitivement pour ce crédit.")
+    avis_cdag_epargne_exigee = fields.Monetary(
+        string='Épargne exigée (CDAG)',
+        help="Saisie libre par défaut, mêmes règles que avis_ca_epargne_exigee ci-dessus - y "
+             "compris la redéclaration en champ calculé par microfinance_savings_management.")
+    avis_cdag_installment_amount = fields.Monetary(
+        string='Remboursement (CDAG)',
+        help="Calculé automatiquement à partir de avis_cdag_amount/avis_cdag_term, même "
+             "mécanisme que le bloc Avis CA ci-dessus.")
+    avis_cdag_term = fields.Integer(string='Durée avis CDAG (échéances)')
+    avis_cdag_manually_set = fields.Boolean(
+        string='Avis CDAG modifié manuellement', default=False, copy=False,
+        help="Champ technique, non affiché en formulaire standard. Passe à True dès que "
+             "avis_cdag_amount/avis_cdag_term diverge de avis_ca_amount/avis_ca_term (preuve "
+             "d'une saisie manuelle du CDAG, par opposition à un recalcul automatique issu de la "
+             "cascade CA -> CDAG, qui pose toujours ces deux paires à des valeurs identiques) ; "
+             "ne repasse jamais à False. Sert uniquement de garde pour arrêter la cascade "
+             "automatique CA -> CDAG une fois que le CDAG a pris la main (cf. "
+             "_onchange_avis_ca_recompute_installment et les deux onchange du bloc CDAG "
+             "ci-dessous).")
     installment_ids = fields.One2many('microfinance.loan.installment', 'loan_id', string='Échéancier')
     payment_ids = fields.One2many('microfinance.loan.payment', 'loan_id', string='Remboursements')
     visit_ids = fields.One2many('microfinance.collection.visit', 'loan_id', string='Visites')
@@ -191,6 +239,130 @@ class MicrofinanceLoan(models.Model):
                 partner = self.env['res.partner'].browse(vals['partner_id'])
                 vals['loan_account_id'] = partner._get_or_create_microfinance_loan_account().id
         return super().create(vals_list)
+
+    # Champs dont l'écriture doit répercuter l'avis courant (CA ou CDAG) sur loan_amount/term/
+    # installment_amount - cf. write() et _propagate_avis_to_loan() ci-dessous. Décision actée du
+    # chantier Avis CA/CDAG : répercussion immédiate à chaque sauvegarde, pas seulement à une
+    # transition de statut (cf. docs_dev/workflow_avis_ca_cdag/).
+    _AVIS_PROPAGATION_TRIGGER_FIELDS = {
+        'avis_ca_amount', 'avis_ca_term', 'avis_ca_installment_amount',
+        'avis_cdag_amount', 'avis_cdag_term', 'avis_cdag_installment_amount',
+    }
+
+    # Champs dont l'écriture doit régénérer installment_ids - cf. write() ci-dessous. Corrige le
+    # bug documenté dans docs_dev/echeancier_obsolete_readonly/AUDIT.md (Option 2) : les onchange
+    # _onchange_loan_amount_recompute_installment/_onchange_installment_amount_recompute_terms
+    # recalculent bien installment_ids en mémoire pour l'aperçu formulaire, mais ce champ est
+    # marqué readonly="1" en vue - Odoo n'enregistre jamais un champ readonly modifié par
+    # onchange (cf. AUDIT.md étape 1), donc l'échéancier réel en base restait figé sur son ancien
+    # contenu après toute modification de ces champs. Généralise ici exactement le pattern déjà
+    # utilisé par _propagate_avis_to_loan() ci-dessous, qui régénère correctement (parce que via
+    # write()/action_generate_schedule(), jamais via onchange seul).
+    _SCHEDULE_TRIGGER_FIELDS = {
+        'loan_amount', 'term', 'repayment_frequency_id', 'interest_rate', 'installment_amount',
+    }
+
+    # États à partir desquels les champs _LOCKED_DOSSIER_FIELDS ci-dessous ne doivent plus être
+    # modifiables manuellement (Lot 1, docs_dev/verrouillage_calcul_credit/) - reprend
+    # exactement les états atteignables après avis_ca/avis_cdag établis à l'audit (section 2) :
+    # 'cancelled' est volontairement exclu, aucune méthode du module ne l'atteint aujourd'hui
+    # (état mort, cf. AUDIT.md section 2) - à ajouter ici le jour où un mécanisme l'atteint
+    # réellement. Volontairement une constante séparée de _EDITABLE_SCHEDULE_STATES ci-dessus
+    # (décision Micka explicite, AUDIT.md section 2) : portée différente, celle-ci verrouille la
+    # saisie manuelle des champs source, _EDITABLE_SCHEDULE_STATES gouverne la régénération de
+    # l'échéancier détaillé (ex. toujours permissif en 'approved') - ne pas fusionner les deux.
+    _LOCKED_DOSSIER_STATES = ('avis_ca', 'avis_cdag', 'approved', 'active', 'closed', 'defaulted', 'written_off')
+
+    # Champs verrouillés dès qu'un crédit atteint _LOCKED_DOSSIER_STATES - décision Micka,
+    # docs_dev/verrouillage_calcul_credit/AUDIT.md, périmètre confirmé au Lot 1.
+    _LOCKED_DOSSIER_FIELDS = {'loan_amount', 'term', 'product_id', 'interest_rate', 'installment_amount'}
+
+    def _check_locked_dossier_fields(self, vals):
+        """Lève une ValidationError si `vals` touche un champ de _LOCKED_DOSSIER_FIELDS sur un
+        crédit déjà dans _LOCKED_DOSSIER_STATES - sauf si l'écriture vient de
+        _propagate_avis_to_loan() elle-même (context `propagation_avis_ca_cdag`, posé
+        explicitement par cette méthode avant son propre write() interne). Volontairement un
+        override de write(), pas un @api.constrains : un constrains valide un état final, il ne
+        peut pas à lui seul distinguer une écriture système légitime d'une saisie manuelle sans
+        ce même mécanisme de contexte - inutile de dupliquer la logique dans les deux endroits.
+        Appelée avant super().write() (donc sur l'état du crédit tel qu'il était juste avant
+        cette écriture, pas après)."""
+        locked_now = self._LOCKED_DOSSIER_FIELDS & set(vals)
+        if not locked_now or self.env.context.get('propagation_avis_ca_cdag'):
+            return
+        for loan in self:
+            if loan.state not in loan._LOCKED_DOSSIER_STATES:
+                continue
+            avis_label = {'avis_ca': "un avis CA", 'avis_cdag': "un avis CDAG"}.get(loan.state, "un avis CA/CDAG")
+            field_labels = ', '.join(loan._fields[f].string for f in sorted(locked_now))
+            raise ValidationError(_(
+                "Le crédit %(loan_name)s a déjà reçu %(avis)s : %(fields)s ne peuvent plus être "
+                "modifiés à ce stade. Contactez le support technique si une correction est "
+                "encore nécessaire."
+            ) % {'loan_name': loan.name, 'avis': avis_label, 'fields': field_labels})
+
+    def write(self, vals):
+        self._check_locked_dossier_fields(vals)
+        result = super().write(vals)
+        if self._AVIS_PROPAGATION_TRIGGER_FIELDS & set(vals):
+            for loan in self:
+                loan._propagate_avis_to_loan()
+        if self._SCHEDULE_TRIGGER_FIELDS & set(vals):
+            for loan in self:
+                # Ne régénère que si un échéancier existe déjà (évite de forcer une première
+                # génération hors du wizard "Générer échéancier", qui laisse le choix du
+                # rounding_mode - cf. AUDIT.md, régénérer un échéancier déjà existant utilise en
+                # revanche toujours le mode 'last_installment' par défaut, comme le fait déjà
+                # _propagate_avis_to_loan() : limitation connue et documentée, pas nouvelle ici,
+                # cf. AUDIT.md étape 1 pour le détail (rounding_mode n'est stocké nulle part sur
+                # le crédit, seulement transitoire dans le wizard).
+                if loan.installment_ids and loan.state in loan._EDITABLE_SCHEDULE_STATES:
+                    loan.action_generate_schedule()
+        return result
+
+    def _propagate_avis_to_loan(self):
+        """Répercute le dernier avis (CA ou CDAG, selon l'état courant du crédit) sur
+        loan_amount/term/installment_amount et régénère l'échéancier détaillé. Appelée uniquement
+        depuis write() ci-dessus (jamais directement) dès qu'un des champs
+        _AVIS_PROPAGATION_TRIGGER_FIELDS vient d'être écrit.
+
+        Le `write({'loan_amount': ..., 'term': ..., 'installment_amount': ...})` ci-dessous
+        rappelle write() (donc cette méthode) récursivement, mais sans risque de boucle : aucun
+        des trois champs écrits ici (loan_amount/term/installment_amount) ne fait partie de
+        _AVIS_PROPAGATION_TRIGGER_FIELDS, l'appel récursif ne retrouve donc jamais de champ
+        déclencheur et s'arrête de lui-même. Même raisonnement pour action_generate_schedule()
+        (écrit uniquement installment_ids)."""
+        self.ensure_one()
+        if self.state not in self._EDITABLE_SCHEDULE_STATES:
+            return
+        if self.state == 'avis_ca':
+            source_amount, source_term, source_installment = (
+                self.avis_ca_amount, self.avis_ca_term, self.avis_ca_installment_amount)
+        elif self.state == 'avis_cdag':
+            source_amount, source_term, source_installment = (
+                self.avis_cdag_amount, self.avis_cdag_term, self.avis_cdag_installment_amount)
+        else:
+            return
+        if not source_amount or not source_term:
+            return
+        if self.loan_amount == source_amount and self.term == source_term:
+            return  # déjà synchronisé - évite un write()/régénération d'échéancier inutiles
+        # Filet de sécurité : l'avis courant devrait déjà avoir sa propre échéance calculée (cf.
+        # action_ca_review/action_cdag_review, qui appellent l'onchange correspondant juste après
+        # avoir posé les valeurs par défaut) - recalculée ici au cas où ce ne soit pas le cas
+        # (écriture directe hors formulaire/hors bouton, ex. import).
+        source_installment = source_installment or self._compute_installment_target(source_amount, source_term)
+        # Contexte `propagation_avis_ca_cdag` : signale à _check_locked_dossier_fields() que
+        # cette écriture est la répercussion système de l'avis courant (Lot 1, docs_dev/
+        # verrouillage_calcul_credit/), pas une saisie manuelle - sans ce flag, ce write() serait
+        # bloqué par son propre verrou (loan_amount/term/installment_amount, state déjà
+        # avis_ca/avis_cdag à ce stade).
+        self.with_context(propagation_avis_ca_cdag=True).write({
+            'loan_amount': source_amount,
+            'term': source_term,
+            'installment_amount': source_installment,
+        })
+        self.action_generate_schedule()
 
     @api.onchange('company_id')
     def _onchange_company_id_default_fond(self):
@@ -585,9 +757,30 @@ class MicrofinanceLoan(models.Model):
         self.write({'state': 'enquete'})
 
     def action_ca_review(self):
+        # Valeurs par défaut posées ici (entrée en état 'avis_ca'), pas à la création du crédit :
+        # loan_amount/term peuvent encore changer tant que le crédit n'a pas atteint cet état.
+        # `if not loan.avis_ca_amount` : ne réécrase jamais une valeur déjà saisie - filet de
+        # sécurité seulement (appel direct hors bouton, ex. tests/API), sans effet si l'onchange
+        # normal du formulaire a déjà tout posé avant l'appel de ce bouton.
+        for loan in self:
+            if not loan.avis_ca_amount:
+                loan.avis_ca_amount = loan.loan_amount
+            if not loan.avis_ca_term:
+                loan.avis_ca_term = loan.term
+            loan._onchange_avis_ca_recompute_installment()
         self.write({'state': 'avis_ca', 'manager_id': self.env.user.id})
 
     def action_cdag_review(self):
+        # Filet de sécurité seulement : en usage normal, avis_cdag_amount/term sont déjà remplis
+        # par la cascade CA -> CDAG (cf. _onchange_avis_ca_recompute_installment) au moment où le
+        # CA a été saisi. Repli sur avis_ca_amount/term puis loan_amount/term si, pour une raison
+        # quelconque (import, crédit créé hors formulaire), aucun avis CA n'a encore été posé.
+        for loan in self:
+            if not loan.avis_cdag_amount:
+                loan.avis_cdag_amount = loan.avis_ca_amount or loan.loan_amount
+            if not loan.avis_cdag_term:
+                loan.avis_cdag_term = loan.avis_ca_term or loan.term
+            loan._onchange_avis_cdag_recompute_installment()
         self.write({'state': 'avis_cdag', 'finance_user_id': self.env.user.id})
 
     def action_approve(self):
@@ -634,31 +827,58 @@ class MicrofinanceLoan(models.Model):
             raise UserError(_('Choisissez une périodicité de remboursement avant de générer l\'échéancier.'))
         return 1.0 / freq.periods_per_year
 
-    def _compute_installment_target(self):
-        """Cible d'échéance interest-first (arrondie) pour les valeurs actuelles de
-        loan_amount/term/repayment_frequency_id/interest_rate - même formule que
-        action_generate_schedule. Factorisé hors de l'onchange aller ci-dessous pour servir
-        aussi de référence de cohérence à la garde anti-boucle de l'onchange retour : ce dernier
-        compare installment_amount à ce que CETTE méthode produirait pour le `term` actuel, afin
-        de distinguer un installment_amount recalculé automatiquement (aucune action requise) d'un
-        installment_amount réellement modifié à la main par l'utilisateur (cf. les deux onchange
-        ci-dessous et docs_dev/regression_nb_echeances/ pour l'historique du bug que cette garde
-        corrige)."""
+    def _compute_installment_target(self, loan_amount=None, term=None):
+        """Cible d'échéance interest-first (arrondie) pour `loan_amount`/`term` (par défaut
+        self.loan_amount/self.term) au taux/produit/périodicité actuels - même formule que
+        action_generate_schedule. `loan_amount`/`term` paramétrables (Lot 1 du chantier Avis
+        CA/CDAG) pour être réutilisable telle quelle sur les champs avis_ca_amount/avis_ca_term
+        et avis_cdag_amount/avis_cdag_term ci-dessous, qui vivent sur ce même enregistrement
+        (même produit/taux/périodicité que loan_amount/term - pas de généralisation supplémentaire
+        nécessaire). Formule inchangée par rapport à avant ce paramétrage, comportement identique
+        à l'identique quand appelée sans argument.
+
+        Factorisé hors de l'onchange aller ci-dessous pour servir aussi de référence de cohérence
+        à la garde anti-boucle des onchange retour : ces derniers comparent le champ "échéance"
+        correspondant à ce que CETTE méthode produirait pour le "durée" actuelle, afin de
+        distinguer une échéance recalculée automatiquement (aucune action requise) d'une échéance
+        réellement modifiée à la main par l'utilisateur (cf. les onchange ci-dessous et
+        docs_dev/regression_nb_echeances/ pour l'historique du bug que cette garde corrige)."""
         self.ensure_one()
+        loan_amount = self.loan_amount if loan_amount is None else loan_amount
+        term = self.term if term is None else term
         interest_factor = self._period_interest_factor()
         total_interest = (
-            self.loan_amount * (self.interest_rate / 100.0)
-            * interest_factor * self.term
+            loan_amount * (self.interest_rate / 100.0)
+            * interest_factor * term
         )
-        target = (self.loan_amount + total_interest) / self.term
+        target = (loan_amount + total_interest) / term
         rounding = self.product_id.installment_rounding_unit or 0
-        if rounding and self.term > 1:
+        if rounding and term > 1:
             # term == 1 : pas de tranche de reliquat pour absorber un dépassement d'arrondi
             # (ceiling peut dépasser le total dû) - l'échéance unique reste le montant exact,
             # cohérent avec _compute_installment_targets/_build_installment_commands qui, pour
             # une échéance unique, ne passe jamais par une cible arrondie (cf. leurs commentaires).
             target = self._round_installment_target(target, rounding, self.product_id.installment_rounding_mode)
         return target
+
+    def _compute_term_from_installment_amount(self, installment_amount, loan_amount=None):
+        """Sens inverse de _compute_installment_target ci-dessus : nombre d'échéances qui,
+        combiné à `loan_amount` (par défaut self.loan_amount) et au taux/périodicité actuels,
+        produirait `installment_amount` comme cible interest-first non arrondie. Factorisée hors
+        de _onchange_installment_amount_recompute_terms (reprend sa formule à l'identique, aucun
+        changement de calcul) pour être réutilisable par le bloc Avis CA/CDAG ci-dessous sans
+        dupliquer la formule. Retourne None si `installment_amount` est trop faible pour couvrir
+        même l'intérêt d'une période (dénominateur <= 0) - à l'appelant de décider quoi faire
+        dans ce cas (ne rien changer, comme avant ce refactor)."""
+        self.ensure_one()
+        loan_amount = self.loan_amount if loan_amount is None else loan_amount
+        interest_factor = self._period_interest_factor()
+        rate_component = loan_amount * (self.interest_rate / 100.0) * interest_factor
+        denominator = installment_amount - rate_component
+        if denominator <= 0:
+            return None
+        computed_terms = loan_amount / denominator
+        return max(1, round(computed_terms))
 
     @api.onchange('loan_amount', 'term', 'repayment_frequency_id', 'interest_rate')
     def _onchange_loan_amount_recompute_installment(self):
@@ -718,17 +938,118 @@ class MicrofinanceLoan(models.Model):
                 current_target = loan._compute_installment_target()
                 if abs(loan.installment_amount - current_target) < 0.01:
                     continue
-            interest_factor = loan._period_interest_factor()
-            rate_component = loan.loan_amount * (loan.interest_rate / 100.0) * interest_factor
-            denominator = loan.installment_amount - rate_component
-            if denominator <= 0:
+            new_term = loan._compute_term_from_installment_amount(loan.installment_amount)
+            if new_term is None:
                 continue  # échéance trop faible pour couvrir même l'intérêt d'une période
-            computed_terms = loan.loan_amount / denominator
-            new_term = max(1, round(computed_terms))
             if loan.term and loan.term == new_term:
                 continue
             loan.term = new_term
             loan.installment_ids = [(5, 0, 0)] + loan._build_installment_commands()
+
+    @api.onchange('avis_ca_term', 'avis_ca_amount')
+    def _onchange_avis_ca_recompute_installment(self):
+        # Même mécanisme que _onchange_loan_amount_recompute_installment ci-dessus, appliqué au
+        # bloc Avis CA plutôt qu'à loan_amount/term (Lot 1 du chantier Avis CA/CDAG - réutilise
+        # _compute_installment_target à l'identique, aucune nouvelle formule de calcul).
+        #
+        # Cascade vers le bloc Avis CDAG tant que celui-ci n'a pas été modifié explicitement par
+        # le CDAG (avis_cdag_manually_set, cf. son help) : la cascade est volontairement
+        # INCONDITIONNELLE, PAS seulement à l'intérieur du `if` d'écriture d'avis_ca_installment_
+        # amount juste au-dessus. Si elle en dépendait, un aller-retour où avis_ca_installment_
+        # amount se trouve déjà auto-cohérent avec le nouveau avis_ca_term/avis_ca_amount (ex.
+        # juste après un passage par l'onchange inverse ci-dessous) sauterait la cascade alors
+        # même que avis_ca_term/avis_ca_amount ont bien changé et doivent être répercutés.
+        for loan in self:
+            if loan.state not in loan._EDITABLE_SCHEDULE_STATES:
+                continue
+            if not loan.avis_ca_amount or not loan.avis_ca_term:
+                continue
+            target = loan._compute_installment_target(loan.avis_ca_amount, loan.avis_ca_term)
+            if not (loan.avis_ca_installment_amount and abs(loan.avis_ca_installment_amount - target) < 0.01):
+                loan.avis_ca_installment_amount = target
+            if not loan.avis_cdag_manually_set:
+                loan.avis_cdag_amount = loan.avis_ca_amount
+                loan.avis_cdag_term = loan.avis_ca_term
+                loan.avis_cdag_installment_amount = target
+
+    @api.onchange('avis_ca_installment_amount')
+    def _onchange_avis_ca_installment_recompute_term(self):
+        # Sens inverse du calcul ci-dessus, même garde anti-boucle que
+        # _onchange_installment_amount_recompute_terms (comparaison à la cible que produirait
+        # _compute_installment_target pour le avis_ca_term actuel, pas à l'ancienne valeur du
+        # champ - cf. son commentaire pour le raisonnement complet). Ne cascade pas directement
+        # vers le CDAG ici : quand avis_ca_term change juste en dessous, Odoo redéclenche
+        # automatiquement _onchange_avis_ca_recompute_installment dans le même cycle onchange
+        # (avis_ca_term fait partie de ses champs déclencheurs), qui se charge alors de la
+        # cascade - évite de dupliquer cette logique à deux endroits.
+        for loan in self:
+            if loan.state not in loan._EDITABLE_SCHEDULE_STATES:
+                continue
+            if not loan.avis_ca_installment_amount or not loan.avis_ca_amount:
+                continue
+            if loan.avis_ca_term:
+                current_target = loan._compute_installment_target(loan.avis_ca_amount, loan.avis_ca_term)
+                if abs(loan.avis_ca_installment_amount - current_target) < 0.01:
+                    continue
+            new_term = loan._compute_term_from_installment_amount(loan.avis_ca_installment_amount, loan.avis_ca_amount)
+            if new_term is None:
+                continue
+            if loan.avis_ca_term and loan.avis_ca_term == new_term:
+                continue
+            loan.avis_ca_term = new_term
+
+    @api.onchange('avis_cdag_term', 'avis_cdag_amount')
+    def _onchange_avis_cdag_recompute_installment(self):
+        # Symétrique du bloc CA ci-dessus, MAIS sans cascade retour vers le CA (le flux ne va
+        # que CA -> CDAG, jamais l'inverse - décision actée du chantier).
+        #
+        # Détection d'une saisie manuelle réelle du CDAG (par opposition à l'écriture
+        # programmatique de la cascade CA -> CDAG ci-dessus, qui pose toujours avis_cdag_amount/
+        # avis_cdag_term à des valeurs IDENTIQUES à avis_ca_amount/avis_ca_term) : dès que ces
+        # deux champs divergent du bloc CA, c'est nécessairement que l'utilisateur vient de les
+        # modifier lui-même dans le formulaire (la cascade ne produit jamais cette divergence) -
+        # on fige alors définitivement la cascade automatique via avis_cdag_manually_set (jamais
+        # remis à False ensuite : une fois le CDAG intervenu, il reste seul maître de son propre
+        # bloc). Même vérification dupliquée dans l'onchange inverse ci-dessous (au lieu de
+        # compter sur le rebond de avis_cdag_term qui retriggerait cette méthode) : si
+        # l'utilisateur modifie avis_cdag_installment_amount et que le nouveau avis_cdag_term
+        # recalculé coïncide avec l'ancien, rien ne change de valeur et cette méthode ne serait
+        # jamais redéclenchée dans le même cycle - la garde serait alors manquée sans ce doublon.
+        for loan in self:
+            if loan.state not in loan._EDITABLE_SCHEDULE_STATES:
+                continue
+            if (loan.avis_cdag_amount, loan.avis_cdag_term) != (loan.avis_ca_amount, loan.avis_ca_term):
+                loan.avis_cdag_manually_set = True
+            if not loan.avis_cdag_amount or not loan.avis_cdag_term:
+                continue
+            target = loan._compute_installment_target(loan.avis_cdag_amount, loan.avis_cdag_term)
+            if not (loan.avis_cdag_installment_amount and abs(loan.avis_cdag_installment_amount - target) < 0.01):
+                loan.avis_cdag_installment_amount = target
+
+    @api.onchange('avis_cdag_installment_amount')
+    def _onchange_avis_cdag_installment_recompute_term(self):
+        # Sens inverse du calcul CDAG ci-dessus, même garde anti-boucle. La détection de saisie
+        # manuelle (avis_cdag_manually_set) est dupliquée ici pour la même raison que documentée
+        # dans _onchange_avis_cdag_recompute_installment ci-dessus (cf. son commentaire) : ne pas
+        # dépendre du rebond de avis_cdag_term, qui peut ne pas se produire si le nouveau terme
+        # recalculé coïncide avec l'ancien.
+        for loan in self:
+            if loan.state not in loan._EDITABLE_SCHEDULE_STATES:
+                continue
+            if (loan.avis_cdag_amount, loan.avis_cdag_term) != (loan.avis_ca_amount, loan.avis_ca_term):
+                loan.avis_cdag_manually_set = True
+            if not loan.avis_cdag_installment_amount or not loan.avis_cdag_amount:
+                continue
+            if loan.avis_cdag_term:
+                current_target = loan._compute_installment_target(loan.avis_cdag_amount, loan.avis_cdag_term)
+                if abs(loan.avis_cdag_installment_amount - current_target) < 0.01:
+                    continue
+            new_term = loan._compute_term_from_installment_amount(loan.avis_cdag_installment_amount, loan.avis_cdag_amount)
+            if new_term is None:
+                continue
+            if loan.avis_cdag_term and loan.avis_cdag_term == new_term:
+                continue
+            loan.avis_cdag_term = new_term
 
     def _round_installment_target(self, value, unit, mode):
         """Arrondit une cible d'échéance au multiple de `unit` selon `mode` (valeur du champ
@@ -793,15 +1114,28 @@ class MicrofinanceLoan(models.Model):
         base_target = self._round_installment_target(raw_target, rounding_unit, self.product_id.installment_rounding_mode)
         return [base_target] * (n - 1)
 
-    def _build_installment_commands(self, rounding_mode='last_installment'):
+    def _build_installment_commands(self, rounding_mode='last_installment', raise_on_negative_reliquat=False):
         """Retourne une liste de commandes o2m (0, 0, vals) pour installment_ids, calculée avec
         la même logique interest-first que action_generate_schedule (délai de grâce, arrondi de
         la cible, branche reducing) - extrait ici pour être réutilisable à la fois par le bouton
         "Générer échéancier" (écriture réelle) et par l'onchange d'aperçu en direct (Lot E,
         recalcul en mémoire avant sauvegarde - toujours en mode 'last_installment', l'aperçu
-        avant sauvegarde n'expose pas le choix du wizard). Ne lève aucune exception
+        avant sauvegarde n'expose pas le choix du wizard). Ne lève aucune exception PAR DÉFAUT
         (contrairement à action_generate_schedule) : un onchange ne doit jamais planter sur un
-        formulaire incomplet, retourne simplement [] si les prérequis ne sont pas réunis."""
+        formulaire incomplet, retourne simplement [] si les prérequis ne sont pas réunis.
+
+        `raise_on_negative_reliquat` (défaut False, préserve le comportement onchange
+        ci-dessus) : si True, lève une ValidationError quand la dernière tranche (celle qui
+        absorbe le reliquat, branche `interest_method == 'flat'` uniquement) serait négative -
+        garde-fou Lot "garde_fou_reliquat_negatif", cf. docs_dev/garde_fou_reliquat_negatif/
+        AUDIT.md pour la condition mathématique exacte. Effet de bord possible de l'arrondi
+        `ceiling` (Lot 1) quand le nombre d'échéances est élevé par rapport au montant du
+        crédit : le surplus d'arrondi cumulé sur les `n-1` premières tranches peut dépasser le
+        total dû. Seul `action_generate_schedule()` passe `True` ici - c'est le point de
+        convergence unique de tous les chemins qui persistent réellement l'échéancier (bouton
+        "Générer échéancier", _propagate_avis_to_loan(), et l'écriture automatique de write()
+        cf. _SCHEDULE_TRIGGER_FIELDS), donc suffisant pour couvrir tous les points d'entrée sans
+        dupliquer le contrôle."""
         self.ensure_one()
         if not self.repayment_frequency_id or not self.loan_amount or not self.term:
             return []
@@ -871,6 +1205,18 @@ class MicrofinanceLoan(models.Model):
                     'principal_amount': principal_amount,
                     'interest_amount': interest_amount,
                 })
+            if raise_on_negative_reliquat and vals:
+                last = vals[-1]
+                reliquat = last['principal_amount'] + last['interest_amount']
+                if reliquat < -0.01:
+                    raise ValidationError(_(
+                        "Impossible de générer cet échéancier : avec ce montant, ce nombre "
+                        "d'échéances et l'arrondi actuel, la dernière échéance calculée serait "
+                        "négative (%(reliquat).2f Ar). Cela arrive en général quand le nombre "
+                        "d'échéances est élevé par rapport au montant du crédit. Contactez le "
+                        "support technique pour ajuster le paramétrage (produit ou unité "
+                        "d'arrondi) avant de continuer."
+                    ) % {'reliquat': reliquat})
         else:
             # Méthode dégressive (solde restant dû) : hors périmètre de la Décision 1, qui ne
             # porte que sur le taux uniforme ("flat") - dans ce mode l'intérêt total n'est pas
@@ -905,7 +1251,8 @@ class MicrofinanceLoan(models.Model):
             # fonctionnel, mais passe par la même API o2m que les onchange d'aperçu en direct
             # ci-dessus, pour que tous les chemins utilisent exactement le même code sans
             # divergence.
-            loan.installment_ids = [(5, 0, 0)] + loan._build_installment_commands(rounding_mode=rounding_mode)
+            loan.installment_ids = [(5, 0, 0)] + loan._build_installment_commands(
+                rounding_mode=rounding_mode, raise_on_negative_reliquat=True)
         return True
 
     def action_open_generate_schedule_wizard(self):

@@ -14,3 +14,4 @@ from . import test_cheque_workflow
 from . import test_savings_account_number_derivation
 from . import test_savings_principal_account_on_create
 from . import test_caisse_pos
+from . import test_avis_epargne_exigee
