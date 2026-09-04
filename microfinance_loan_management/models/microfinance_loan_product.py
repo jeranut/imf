@@ -318,6 +318,18 @@ class MicrofinanceLoanProduct(models.Model):
         default=_pcec_default('717003'),
         help="Compte de comptabilisation des frais de dossier. Requis uniquement si des frais sont encaissés pour ce produit.",
     )
+    account_fee_receivable_id = fields.Many2one(
+        'account.account', string='Frais de dossier à recevoir',
+        domain="[('account_type', 'in', ('asset_current', 'asset_receivable')), ('company_id', '=', company_id)]",
+        default=_pcec_default('208005'),
+        help="Compte de créance mouvementé à l'approbation du dossier (engagement des frais de "
+             "dossier : débit ce compte / crédit Commission sur crédit), puis soldé à "
+             "l'encaissement effectif (débit caisse / crédit ce compte). Son solde débiteur = "
+             "total des frais de dossier dus non encore encaissés. Requis uniquement si des "
+             "frais sont encaissés pour ce produit ET que les frais sont exigés avant "
+             "décaissement (en mode « frais nettés du décaissement », aucun engagement n'est "
+             "créé).",
+    )
     account_papeterie_id = fields.Many2one(
         'account.account', string='Papeterie',
         domain="[('account_type', '=', 'income'), ('company_id', '=', company_id)]",
@@ -342,13 +354,30 @@ class MicrofinanceLoanProduct(models.Model):
         ('percentage', 'Pourcentage du montant du crédit'),
     ], string='Type de frais', default='fixed', required=True)
     fee_amount = fields.Monetary(string='Frais fixes', default=0.0)
-    fee_rate = fields.Float(string='Taux de frais (%)', default=0.0)
+    fee_rate = fields.Float(
+        string='Taux de frais (%)', default=5.0,
+        help="Taux de frais de dossier, en pourcentage du montant du crédit, appliqué "
+             "quand 'Type de frais' = 'Pourcentage du montant du crédit'. Défaut : 5 % "
+             "pour les nouveaux produits (les produits existants gardent leur valeur). "
+             "Modifiable à tout moment ; un changement n'impacte que les crédits encore "
+             "modifiables - les frais dus des crédits déjà approuvés/actifs restent figés "
+             "(cf. microfinance.loan._compute_fee_amount / _FEE_FROZEN_STATES).")
     fee_journal_id = fields.Many2one(
         'account.journal', string='Journal encaissement frais',
         domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
         default=_journal_default('CRE'),
         help='Journal utilisé pour encaisser les frais de dossier, distinct des journaux de '
              'décaissement/remboursement si l\'institution le souhaite (peut être identique à l\'un des deux).',
+    )
+    fee_engagement_journal_id = fields.Many2one(
+        'account.journal', string="Journal engagement frais",
+        domain="[('type', '=', 'general'), ('company_id', '=', company_id)]",
+        default=_journal_default('OD'),
+        help="Journal (opérations diverses) de l'écriture d'engagement des frais de dossier "
+             "créée à l'approbation du dossier. Distinct du journal d'encaissement des frais "
+             "(qui est un journal de caisse/banque) : l'engagement n'est pas un mouvement de "
+             "trésorerie. Requis uniquement si les frais sont exigés avant décaissement pour "
+             "ce produit.",
     )
     fee_charged_before_disbursement = fields.Boolean(
         string='Frais exigés avant décaissement', default=True,

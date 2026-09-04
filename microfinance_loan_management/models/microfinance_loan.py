@@ -7,6 +7,14 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
+try:
+    from num2words import num2words
+except ImportError:  # pragma: no cover
+    # num2words fait partie des dépendances de requirements.txt d'Odoo (le core
+    # l'utilise pour le libellé en lettres des chèques). Repli défensif : si absent,
+    # get_amount_in_words() renvoie une chaîne vide plutôt que de casser le module.
+    num2words = None
+
 
 class MicrofinanceLoan(models.Model):
     _name = 'microfinance.loan'
@@ -141,6 +149,26 @@ class MicrofinanceLoan(models.Model):
              "automatique CA -> CDAG une fois que le CDAG a pris la main (cf. "
              "_onchange_avis_ca_recompute_installment et les deux onchange du bloc CDAG "
              "ci-dessous).")
+    # Chantier "Épargne exigée/disponible" (docs_dev/epargne_exigee_disponible/AUDIT.md,
+    # microfinance_savings_management) : même patron que avis_ca_epargne_exigee ci-dessus - ce
+    # module seul n'a aucune notion d'épargne garantie de crédit, ces deux champs restent
+    # inertes (valeur nulle, jamais calculée) tant que microfinance_savings_management n'est pas
+    # installé. Redéclarés en champs calculés (compute+store pour l'exigée, compute seul pour le
+    # solde - jamais figé, toujours le solde réel courant) par ce module s'il est installé, cf.
+    # microfinance_loan_extension.py::_compute_guarantee_savings_required/_compute_guarantee_
+    # savings_balance. Déclarés ici (pas seulement dans l'extension) car
+    # microfinance.loan.application.required_savings/available_savings (module de base) y sont
+    # related= - un related= dont la cible n'existe pas encore au chargement du module de base
+    # fait échouer le chargement (KeyError sur le setup du champ), constaté en tentant de les
+    # déclarer uniquement dans l'extension épargne.
+    guarantee_savings_required = fields.Monetary(
+        string='Épargne garantie requise',
+        help="Saisie libre par défaut - ce module seul n'a aucune notion d'épargne garantie de "
+             "crédit. Redéclaré en champ calculé (compute+store, lecture seule) par "
+             "microfinance_savings_management s'il est installé.")
+    guarantee_savings_balance = fields.Monetary(
+        string='Solde épargne garantie du client',
+        help="Saisie libre par défaut, mêmes règles que guarantee_savings_required ci-dessus.")
     installment_ids = fields.One2many('microfinance.loan.installment', 'loan_id', string='Échéancier')
     payment_ids = fields.One2many('microfinance.loan.payment', 'loan_id', string='Remboursements')
     visit_ids = fields.One2many('microfinance.collection.visit', 'loan_id', string='Visites')
@@ -200,7 +228,21 @@ class MicrofinanceLoan(models.Model):
     )
     fee_amount_due = fields.Monetary(compute='_compute_fee_amount', store=True, string='Frais de dossier dus')
     fee_paid = fields.Boolean(string='Frais payés', default=False, readonly=True, copy=False)
+    # Flux Option A (docs_dev/frais_dossier_creance_pcec/) : deux écritures distinctes.
+    # fee_receivable_move_id = engagement créé à l'approbation (débit "frais à recevoir" 208005 /
+    # crédit commission 717003), uniquement pour les produits "frais exigés avant décaissement".
+    # fee_move_id = écriture de RÈGLEMENT créée au clic "Encaisser" (débit caisse / crédit
+    # 208005) - sémantique inchangée par rapport à avant ce lot (d'où le nom conservé), seul le
+    # compte crédité passe de 717003 à la créance.
+    fee_receivable_move_id = fields.Many2one(
+        'account.move', string='Écriture engagement frais', readonly=True, copy=False)
     fee_move_id = fields.Many2one('account.move', string='Écriture de frais', readonly=True, copy=False)
+    # Habillage badge du bloc frais (docs_dev/badges_fee_guarantee/) : dérivé, non stocké -
+    # fee_amount_due et fee_paid, dont il dépend, sont déjà stockés. Rendu en widget="badge"
+    # (vert = payé, rouge = non payé), sur le modèle du badge risk_level du scoring.
+    fee_payment_state = fields.Selection(
+        [('none', 'Sans frais'), ('unpaid', 'Non payé'), ('paid', 'Payé')],
+        string='État frais de dossier', compute='_compute_fee_payment_state')
     net_disbursed_amount = fields.Monetary(
         compute='_compute_net_disbursed_amount', store=True, string='Montant net remis au client',
         help='Montant réellement remis en caisse au client. Égal au montant du crédit tant que les '
@@ -215,6 +257,16 @@ class MicrofinanceLoan(models.Model):
              "décaissement (uniquement vérifié pour un journal de type 'Espèces') deviendrait "
              "négatif. Dérogation distincte des autres contrôles de décaissement.",
     )
+    signed_contract = fields.Binary(
+        string='Contrat signé', attachment=True, copy=False,
+        help="Contrat de crédit signé par l'emprunteur. Se téléverse une fois le crédit "
+             "approuvé et constitue un prérequis à l'activation : action_disburse() refuse "
+             "le décaissement tant que ce champ est vide. À l'enregistrement, le fichier est "
+             "aussi posté dans le fil de communication du dossier. Sa pièce jointe ne peut "
+             "plus être supprimée depuis le chatter (cf. ir.attachment.unlink) - un "
+             "remplacement par une nouvelle version reste possible en re-téléversant.",
+    )
+    signed_contract_filename = fields.Char(string='Nom du fichier contrat signé', copy=False)
 
     # États où le crédit reste modifiable avant activation (avant tout paiement possible) :
     # échéancier/échéance encore librement recalculables. Utilisée par action_generate_schedule
@@ -231,13 +283,23 @@ class MicrofinanceLoan(models.Model):
                 company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
                 number = company._get_or_create_numbering_sequence('microfinance.loan.agency')
                 vals['name'] = '%s/%s' % (company.agency_code, number)
-            if not vals.get('loan_account_id') and vals.get('partner_id'):
-                # Rattrapage paresseux (cf. correctif microfinance.loan.account) : couvre aussi
-                # bien un client déjà en base avant l'introduction de ce modèle qu'un client créé
-                # hors microfinance_context (où le déclencheur normal, res.partner.create(), ne
-                # s'exécute pas) — pas de script de migration global (volume négligeable).
+            if vals.get('partner_id'):
                 partner = self.env['res.partner'].browse(vals['partner_id'])
-                vals['loan_account_id'] = partner._get_or_create_microfinance_loan_account().id
+                # Numéro de compte permanent (microfinance_account_number) : plus limité à
+                # microfinance_partner_type == 'client' (cf. docs_dev/epargne_exigee_display/
+                # AUDIT_LOT0_conteneur_epargne.md - constaté en réel sur des partenaires
+                # 'bailleur' ou de type vide ayant pourtant un crédit, donc un loan_account_id,
+                # mais aucun numéro permanent, cassant la synchronisation avec le futur
+                # conteneur épargne). Tout partenaire qui emprunte en a désormais besoin, quel
+                # que soit son type - idempotent (no-op si déjà assigné).
+                partner._assign_microfinance_account_number()
+                if not vals.get('loan_account_id'):
+                    # Rattrapage paresseux (cf. correctif microfinance.loan.account) : couvre
+                    # aussi bien un client déjà en base avant l'introduction de ce modèle qu'un
+                    # client créé hors microfinance_context (où le déclencheur normal,
+                    # res.partner.create(), ne s'exécute pas) — pas de script de migration
+                    # global (volume négligeable).
+                    vals['loan_account_id'] = partner._get_or_create_microfinance_loan_account().id
         return super().create(vals_list)
 
     # Champs dont l'écriture doit répercuter l'avis courant (CA ou CDAG) sur loan_amount/term/
@@ -249,7 +311,7 @@ class MicrofinanceLoan(models.Model):
         'avis_cdag_amount', 'avis_cdag_term', 'avis_cdag_installment_amount',
     }
 
-    # Champs dont l'écriture doit régénérer installment_ids - cf. write() ci-dessous. Corrige le
+    # Champs dont l'écriture doit (re)générer installment_ids - cf. write() ci-dessous. Corrige le
     # bug documenté dans docs_dev/echeancier_obsolete_readonly/AUDIT.md (Option 2) : les onchange
     # _onchange_loan_amount_recompute_installment/_onchange_installment_amount_recompute_terms
     # recalculent bien installment_ids en mémoire pour l'aperçu formulaire, mais ce champ est
@@ -258,6 +320,13 @@ class MicrofinanceLoan(models.Model):
     # contenu après toute modification de ces champs. Généralise ici exactement le pattern déjà
     # utilisé par _propagate_avis_to_loan() ci-dessous, qui régénère correctement (parce que via
     # write()/action_generate_schedule(), jamais via onchange seul).
+    #
+    # Depuis le retrait du bouton "Générer échéancier" (docs_dev/retrait_bouton_generer_echeancier/)
+    # ce chemin couvre aussi la TOUTE PREMIÈRE génération : dès que loan_amount + term +
+    # repayment_frequency_id sont renseignés sur un crédit modifiable, la sauvegarde crée et
+    # persiste l'échéancier, sans geste manuel. Le mode d'arrondi du reliquat est toujours
+    # 'last_installment' (défaut, comme _propagate_avis_to_loan()) - 'distributed' n'est plus
+    # exposé en UI mais reste accessible par code via action_generate_schedule(rounding_mode=...).
     _SCHEDULE_TRIGGER_FIELDS = {
         'loan_amount', 'term', 'repayment_frequency_id', 'interest_rate', 'installment_amount',
     }
@@ -276,6 +345,16 @@ class MicrofinanceLoan(models.Model):
     # Champs verrouillés dès qu'un crédit atteint _LOCKED_DOSSIER_STATES - décision Micka,
     # docs_dev/verrouillage_calcul_credit/AUDIT.md, périmètre confirmé au Lot 1.
     _LOCKED_DOSSIER_FIELDS = {'loan_amount', 'term', 'product_id', 'interest_rate', 'installment_amount'}
+
+    # États à partir desquels fee_amount_due (frais de dossier dus) est figé : un
+    # changement ultérieur du taux/montant de frais sur le produit ne doit plus faire
+    # bouger les frais d'un dossier déjà approuvé (décision Micka, docs_dev/product_fee/
+    # AUDIT.md point 5 - même philosophie que _LOCKED_DOSSIER_STATES : montants gelés dès
+    # qu'un dossier avance). Volontairement plus restreint que _LOCKED_DOSSIER_STATES :
+    # avant 'approved' (draft/enquete/avis_ca/avis_cdag) les frais suivent encore la
+    # config produit courante ; seuls les nouveaux dossiers héritent d'un nouveau taux.
+    # 'cancelled' exclu (état mort, cf. _LOCKED_DOSSIER_STATES).
+    _FEE_FROZEN_STATES = ('approved', 'active', 'closed', 'defaulted', 'written_off')
 
     def _check_locked_dossier_fields(self, vals):
         """Lève une ValidationError si `vals` touche un champ de _LOCKED_DOSSIER_FIELDS sur un
@@ -301,22 +380,33 @@ class MicrofinanceLoan(models.Model):
                 "encore nécessaire."
             ) % {'loan_name': loan.name, 'avis': avis_label, 'fields': field_labels})
 
+    def unlink(self):
+        # La suppression d'un crédit purge ses pièces jointes (dont le contrat signé,
+        # protégé par ir.attachment.unlink) : on lève ici la protection le temps de la
+        # suppression du dossier lui-même.
+        return super(MicrofinanceLoan, self.with_context(bypass_signed_contract_protection=True)).unlink()
+
     def write(self, vals):
         self._check_locked_dossier_fields(vals)
         result = super().write(vals)
         if self._AVIS_PROPAGATION_TRIGGER_FIELDS & set(vals):
             for loan in self:
                 loan._propagate_avis_to_loan()
+        if vals.get('signed_contract'):
+            for loan in self:
+                loan._post_signed_contract_to_chatter()
         if self._SCHEDULE_TRIGGER_FIELDS & set(vals):
             for loan in self:
-                # Ne régénère que si un échéancier existe déjà (évite de forcer une première
-                # génération hors du wizard "Générer échéancier", qui laisse le choix du
-                # rounding_mode - cf. AUDIT.md, régénérer un échéancier déjà existant utilise en
-                # revanche toujours le mode 'last_installment' par défaut, comme le fait déjà
-                # _propagate_avis_to_loan() : limitation connue et documentée, pas nouvelle ici,
-                # cf. AUDIT.md étape 1 pour le détail (rounding_mode n'est stocké nulle part sur
-                # le crédit, seulement transitoire dans le wizard).
-                if loan.installment_ids and loan.state in loan._EDITABLE_SCHEDULE_STATES:
+                # (Re)génère l'échéancier à chaque sauvegarde tant que le crédit est modifiable -
+                # y compris la toute première fois (le bouton "Générer échéancier" a été retiré,
+                # cf. docs_dev/retrait_bouton_generer_echeancier/). Toujours le mode d'arrondi
+                # 'last_installment' par défaut, comme _propagate_avis_to_loan() : rounding_mode
+                # n'est stocké nulle part sur le crédit, et 'distributed' n'a plus d'accès UI.
+                # La garde sur les 3 champs essentiels évite un UserError de action_generate_
+                # schedule() (périodicité manquante, L~1310) sur une sauvegarde de brouillon
+                # incomplet : elle reste alors un no-op jusqu'à ce qu'ils soient renseignés.
+                if (loan.state in loan._EDITABLE_SCHEDULE_STATES
+                        and loan.repayment_frequency_id and loan.loan_amount and loan.term):
                     loan.action_generate_schedule()
         return result
 
@@ -438,7 +528,24 @@ class MicrofinanceLoan(models.Model):
 
     @api.depends('loan_amount', 'product_id.fee_type', 'product_id.fee_amount', 'product_id.fee_rate')
     def _compute_fee_amount(self):
+        # Frais figés dès l'approbation (décision Micka, docs_dev/product_fee/AUDIT.md
+        # point 5) : ce compute reste déclenché quand product_id.fee_rate/fee_amount change,
+        # mais pour un dossier déjà dans _FEE_FROZEN_STATES on conserve la valeur en base au
+        # lieu de la recalculer. Lecture SQL directe de fee_amount_due pour les dossiers
+        # figés : on ne veut surtout pas re-déclencher le compute en relisant le champ via
+        # l'ORM depuis sa propre méthode de calcul.
+        frozen = self.filtered(lambda l: l.state in l._FEE_FROZEN_STATES)
+        stored = {}
+        if frozen.ids:
+            self.env.cr.execute(
+                "SELECT id, fee_amount_due FROM microfinance_loan WHERE id IN %s",
+                (tuple(frozen.ids),),
+            )
+            stored = dict(self.env.cr.fetchall())
         for loan in self:
+            if loan in frozen:
+                loan.fee_amount_due = stored.get(loan.id) or 0.0
+                continue
             product = loan.product_id
             if not product:
                 loan.fee_amount_due = 0.0
@@ -446,6 +553,14 @@ class MicrofinanceLoan(models.Model):
                 loan.fee_amount_due = product.fee_amount
             else:
                 loan.fee_amount_due = loan.loan_amount * product.fee_rate / 100.0
+
+    @api.depends('fee_amount_due', 'fee_paid')
+    def _compute_fee_payment_state(self):
+        for loan in self:
+            if loan.fee_amount_due <= 0:
+                loan.fee_payment_state = 'none'
+            else:
+                loan.fee_payment_state = 'paid' if loan.fee_paid else 'unpaid'
 
     @api.depends('product_id.repayment_frequency_mode', 'product_id.repayment_frequency_id')
     def _compute_repayment_frequency_id(self):
@@ -784,7 +899,77 @@ class MicrofinanceLoan(models.Model):
         self.write({'state': 'avis_cdag', 'finance_user_id': self.env.user.id})
 
     def action_approve(self):
+        for loan in self:
+            loan._check_committee_octroi_accepted()
         self.write({'state': 'approved', 'approval_date': fields.Date.context_today(self)})
+        # Engagement comptable des frais de dossier (flux Option A, docs_dev/
+        # frais_dossier_creance_pcec/) : débit "frais à recevoir" (208005) / crédit commission
+        # (717003), au moment où fee_amount_due vient d'être figé (state 'approved' est dans
+        # _FEE_FROZEN_STATES). Créé UNIQUEMENT pour les produits "frais exigés avant
+        # décaissement" - en mode "frais nettés du décaissement" les frais restent comptabilisés
+        # dans l'écriture de décaissement (crédit 717003), pas d'engagement (décision Micka,
+        # AUDIT.md Q5 / issue 1). _prepare_disbursement_move n'est pas touché.
+        for loan in self:
+            if loan._is_fee_engagement_applicable():
+                move = self.env['account.move'].with_context(
+                    default_loan_id=False, default_loan_line_id=False,
+                ).create(loan._prepare_fee_receivable_move())
+                move.action_post()
+                loan.fee_receivable_move_id = move.id
+                loan.message_post(body=_(
+                    'Engagement frais de dossier (%.2f). Écriture : %s') % (
+                    loan.fee_amount_due, move.name))
+
+    def _is_fee_engagement_applicable(self):
+        """Vrai si ce dossier doit porter une écriture d'engagement de frais à l'approbation :
+        frais dus non nuls, produit en mode "frais exigés avant décaissement", engagement pas
+        déjà créé (garde de ré-entrance : une réapprobation ne doit pas doubler l'écriture), ET
+        produit configuré pour le flux Option A (compte de créance + journal d'engagement +
+        compte commission). Si le produit n'est PAS configuré, on ne bloque pas l'approbation :
+        pas d'engagement, et l'encaissement retombera sur le repli historique (crédit 717003) -
+        cf. _prepare_fee_settlement_move(). Le rattrapage reste possible plus tard via
+        action_charge_fee() une fois le produit paramétré."""
+        self.ensure_one()
+        product = self.product_id
+        return bool(
+            self.fee_amount_due > 0
+            and product.fee_charged_before_disbursement
+            and not self.fee_receivable_move_id
+            and product.fee_engagement_journal_id
+            and product.account_fee_receivable_id
+            and product.account_commission_credit_id
+        )
+
+    def _check_committee_octroi_accepted(self):
+        """Bloque l'approbation tant que le Comité d'Octroi (Section VIII, docs_dev/
+        blocage_approbation_comite_octroi/) n'a pas rendu une décision effectivement acceptée.
+        Un seul dossier d'instruction est considéré (application_ids[:1], même choix que
+        action_view_applications() - application_ids reste structurellement un One2many, aucun
+        cas réel à plusieurs dossiers observé à l'audit, mais non garanti par contrainte)."""
+        self.ensure_one()
+        application = self.application_ids[:1]
+        if not application:
+            raise UserError(_(
+                "Impossible d'approuver le crédit %(loan)s : aucun dossier d'instruction "
+                "n'existe pour ce crédit, le comité d'octroi n'a donc rendu aucune décision. "
+                "Contactez le support technique si cette décision doit être révisée."
+            ) % {'loan': self.name})
+        first = application.first_committee_review_id
+        if not first or not first.decision:
+            detail = _("aucune décision du comité d'octroi n'a encore été enregistrée sur le dossier d'instruction")
+        elif first.decision == 'accepted':
+            return
+        elif first.decision == 'postponed':
+            detail = _("le comité d'octroi a reporté sa décision")
+        else:  # 'refused'
+            second = application.second_committee_review_id
+            if second and second.decision == 'accepted':
+                return
+            detail = _("le comité d'octroi a refusé ce dossier")
+        raise UserError(_(
+            "Impossible d'approuver le crédit %(loan)s : %(detail)s. Contactez le support "
+            "technique si cette décision doit être révisée."
+        ) % {'loan': self.name, 'detail': detail})
 
     def action_mark_default(self):
         self.write({'state': 'defaulted'})
@@ -1255,16 +1440,43 @@ class MicrofinanceLoan(models.Model):
                 rounding_mode=rounding_mode, raise_on_negative_reliquat=True)
         return True
 
-    def action_open_generate_schedule_wizard(self):
+    def action_generate_schedule_button(self):
+        """Point d'entrée UI (bouton en-tête « Générer l'échéancier ») de la génération
+        manuelle. Nécessaire depuis le retrait du bouton historique + wizard
+        (docs_dev/retrait_bouton_generer_echeancier/) : la persistance automatique passe par
+        write()/_SCHEDULE_TRIGGER_FIELDS, qui ne se déclenche jamais sur un dossier créé puis
+        approuvé sans qu'aucun champ source ne soit ré-écrit (ni flux avis, ni décaissement) -
+        cas réel IS/003362, échéancier resté vide. Ce bouton rejoue exactement le même calcul
+        que les onchange d'aperçu, mais via action_generate_schedule() (écriture serveur hors
+        cycle onchange), donc persisté.
+
+        Reproduit ici la garde de write() (loan_amount/term/repayment_frequency_id présents) :
+        action_generate_schedule() ne la porte pas et, appelée nue sur un dossier incomplet,
+        _build_installment_commands() retourne [] -> installment_ids = [(5, 0, 0)] + []
+        VIDERAIT l'échéancier existant sans le recréer. Mode d'arrondi toujours
+        'last_installment' (comme _propagate_avis_to_loan() et write()) - 'distributed' n'a
+        plus d'accès UI depuis le retrait du wizard, mais reste joignable par code via
+        action_generate_schedule(rounding_mode=...).
+
+        Retour `soft_reload` (et non `display_notification`) : un retour notification
+        n'entraîne PAS de rechargement du formulaire (cf. web/.../view_button_hook.js -
+        `model.load()` uniquement dans le `onClose` d'une action absente/fermée), l'onglet
+        Échéancier et le compteur resteraient donc figés à l'ouverture de la fiche, et le
+        chatter n'afficherait pas le message posté ci-dessous (même limite que les boutons
+        d'impression, contournée pour eux par MicrofinanceLoanFormController via
+        MAIL:RELOAD-THREAD). `soft_reload` réinstancie le contrôleur courant : re-fetch de
+        l'enregistrement (échéances + compteur) ET Chatter reconstruit (message visible),
+        sans rechargement complet du navigateur. Le feedback utilisateur passe par le
+        message chatter, pas par un toast."""
         self.ensure_one()
-        return {
-            'type': 'ir.actions.act_window',
-            'name': _("Génération de l'échéancier"),
-            'res_model': 'microfinance.loan.schedule.rounding.wizard',
-            'view_mode': 'form',
-            'target': 'new',
-            'context': {'default_loan_id': self.id},
-        }
+        if not (self.loan_amount and self.term and self.repayment_frequency_id):
+            raise UserError(_(
+                "Renseignez le montant, le nombre d'échéances et la périodicité de "
+                "remboursement avant de générer l'échéancier."))
+        self.action_generate_schedule()
+        self.message_post(body=_(
+            "Échéancier généré manuellement (%d échéances).") % len(self.installment_ids))
+        return {'type': 'ir.actions.client', 'tag': 'soft_reload'}
 
     def action_reschedule(self):
         self.ensure_one()
@@ -1404,12 +1616,48 @@ class MicrofinanceLoan(models.Model):
             ] + credit_lines
         }
 
-    def _prepare_fee_move(self):
+    def _prepare_fee_receivable_move(self):
+        """Écriture d'ENGAGEMENT des frais de dossier, créée à l'approbation (flux Option A) :
+        débit "frais de dossier à recevoir" (208005) / crédit "commission sur crédit" (717003),
+        dans le journal d'opérations diverses du produit (pas un mouvement de trésorerie). Le
+        crédit 717003 constate le produit dès l'engagement ; le débit 208005 ouvre la créance
+        que _prepare_fee_settlement_move() soldera à l'encaissement effectif."""
+        self.ensure_one()
+        product = self.product_id
+        journal = product.fee_engagement_journal_id
+        if not journal or not product.account_fee_receivable_id or not product.account_commission_credit_id:
+            raise UserError(_(
+                "Configurez le journal d'engagement des frais (opérations diverses), le compte "
+                "« Frais de dossier à recevoir » et le compte « Commission sur crédit » du "
+                "produit avant d'approuver un dossier avec frais exigés avant décaissement."))
+        return {
+            'date': self.approval_date or fields.Date.context_today(self),
+            'journal_id': journal.id,
+            'ref': _('Engagement frais de dossier crédit %s') % self.name,
+            'microfinance_loan_id': self.id,
+            'line_ids': [
+                (0, 0, {'name': _('Frais de dossier à recevoir %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.account_fee_receivable_id.id, 'debit': self.fee_amount_due, 'credit': 0.0}),
+                (0, 0, {'name': _('Frais de dossier %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.account_commission_credit_id.id, 'debit': 0.0, 'credit': self.fee_amount_due}),
+            ]
+        }
+
+    def _prepare_fee_settlement_move(self):
+        """Écriture de RÈGLEMENT des frais de dossier, créée au clic « Encaisser » : débit caisse
+        (compte par défaut de fee_journal_id) / crédit la contrepartie. Depuis le flux Option A,
+        la contrepartie est le compte de créance « frais à recevoir » (208005) quand une écriture
+        d'engagement a été créée à l'approbation (cas normal des produits « frais exigés avant
+        décaissement ») : le règlement SOLDE alors la créance, le produit ayant déjà été constaté
+        à l'engagement. Repli sur « commission sur crédit » (717003) si aucun engagement n'existe
+        (dossier antérieur au flux Option A non rattrapé, ou produit sans compte de créance
+        configuré) - comportement identique à l'ancien _prepare_fee_move()."""
         self.ensure_one()
         product = self.product_id
         journal = product.fee_journal_id
-        if not journal or not journal.default_account_id or not product.account_commission_credit_id:
+        use_receivable = bool(self.fee_receivable_move_id and product.account_fee_receivable_id)
+        counterpart = product.account_fee_receivable_id if use_receivable else product.account_commission_credit_id
+        if not journal or not journal.default_account_id or not counterpart:
             raise UserError(_('Configurez le journal d\'encaissement des frais, son compte par défaut et le compte commission sur crédit du produit.'))
+        counterpart_label = _('Solde créance frais %s') % self.name if use_receivable else _('Frais de dossier %s') % self.name
         return {
             'date': fields.Date.context_today(self),
             'journal_id': journal.id,
@@ -1417,7 +1665,7 @@ class MicrofinanceLoan(models.Model):
             'microfinance_loan_id': self.id,
             'line_ids': [
                 (0, 0, {'name': _('Encaissement frais %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': journal.default_account_id.id, 'debit': self.fee_amount_due, 'credit': 0.0}),
-                (0, 0, {'name': _('Frais de dossier %s') % self.name, 'partner_id': self.partner_id.id, 'account_id': product.account_commission_credit_id.id, 'debit': 0.0, 'credit': self.fee_amount_due}),
+                (0, 0, {'name': counterpart_label, 'partner_id': self.partner_id.id, 'account_id': counterpart.id, 'debit': 0.0, 'credit': self.fee_amount_due}),
             ]
         }
 
@@ -1425,16 +1673,51 @@ class MicrofinanceLoan(models.Model):
         for loan in self:
             if loan.state != 'approved':
                 raise UserError(_('Les frais de dossier ne peuvent être encaissés que sur un crédit approuvé.'))
+            # Verrou pessimiste ligne (FOR UPDATE) posé AVANT la relecture de fee_paid /
+            # fee_amount_due : sérialise deux requêtes « Encaisser les frais » concurrentes sur
+            # le même dossier en prod multi-worker (docs_dev/refactor_frais_dossier_account_move/
+            # AUDIT.md §6). La transaction perdante attend le commit de la gagnante sur ce SELECT,
+            # puis invalide son cache et retombe sur la garde fee_paid ci-dessous - au lieu de
+            # créer un second account.move sur un fee_paid encore lu à False. Verrou relâché
+            # automatiquement au commit/rollback ; portée strictement limitée à la transaction du
+            # clic bouton (aucun verrou tenu au-delà, aucun impact perf en usage normal où il n'y
+            # a jamais de contention sur cette ligne).
+            loan.env.cr.execute("SELECT id FROM microfinance_loan WHERE id = %s FOR UPDATE", (loan.id,))
+            loan.invalidate_recordset(['fee_paid', 'fee_amount_due'])
             if loan.fee_paid:
                 raise UserError(_('Les frais de dossier ont déjà été encaissés.'))
             if loan.fee_amount_due <= 0:
                 raise UserError(_('Aucun frais de dossier à encaisser pour ce crédit.'))
+            # Rattrapage de l'engagement manquant : un dossier approuvé AVANT que le produit
+            # ne soit configuré pour le flux Option A (compte de créance + journal OD) n'a
+            # pas reçu son écriture d'engagement à l'approbation, et la migration ne rejoue
+            # pas. Sans ce rattrapage, _prepare_fee_settlement_move() basculerait sur le repli
+            # (crédit 717003 direct), sans trace de créance. On crée donc l'engagement ici,
+            # juste avant le règlement qui le soldera - même garde
+            # (_is_fee_engagement_applicable) que action_approve().
+            if loan._is_fee_engagement_applicable():
+                engagement = self.env['account.move'].with_context(
+                    default_loan_id=False, default_loan_line_id=False,
+                ).create(loan._prepare_fee_receivable_move())
+                engagement.action_post()
+                loan.fee_receivable_move_id = engagement.id
+                loan.message_post(body=_(
+                    'Engagement frais de dossier (rattrapage à l\'encaissement, %.2f). '
+                    'Écriture : %s') % (loan.fee_amount_due, engagement.name))
             move = self.env['account.move'].with_context(
                 default_loan_id=False,
                 default_loan_line_id=False,
-            ).create(loan._prepare_fee_move())
+            ).create(loan._prepare_fee_settlement_move())
             move.action_post()
             loan.write({'fee_paid': True, 'fee_move_id': move.id})
+            receivable_account = loan.product_id.account_fee_receivable_id
+            if loan.fee_receivable_move_id and receivable_account.reconcile:
+                # Lettrage engagement <-> règlement : le solde restant du compte 208005
+                # ne reflète alors que les créances réellement ouvertes (dossiers approuvés
+                # dont les frais ne sont pas encore encaissés).
+                (loan.fee_receivable_move_id.line_ids + move.line_ids).filtered(
+                    lambda l: l.account_id == receivable_account and not l.reconciled
+                ).reconcile()
             loan.message_post(body=_('Frais de dossier encaissés (%.2f). Écriture : %s') % (loan.fee_amount_due, move.name))
         return True
 
@@ -1586,6 +1869,10 @@ class MicrofinanceLoan(models.Model):
         for loan in self:
             if loan.state != 'approved':
                 raise UserError(_('Le crédit doit être approuvé avant décaissement.'))
+            if not loan.signed_contract:
+                raise UserError(_(
+                    "Le contrat signé doit être téléversé avant l'activation du crédit."
+                ))
             if loan.product_id.fee_charged_before_disbursement and not loan.fee_paid and loan.fee_amount_due > 0:
                 raise UserError(_('Les frais de dossier doivent être encaissés avant le décaissement.'))
             loan._check_disbursement_limit()
@@ -1766,6 +2053,149 @@ class MicrofinanceLoan(models.Model):
                 'sticky': False,
             },
         }
+
+    # ------------------------------------------------------------------
+    # Rapport « Contrat de Crédit » (report/report_contrat_credit.xml)
+    # Reproduction du document Word de référence Contrat_de_Crédit_IS_02131.doc.
+    # Décisions fonctionnelles : docs_dev/contrat_credit/AUDIT.md (validées Micka
+    # le 2026-09-01). Toutes ces méthodes sont appelées uniquement depuis le
+    # template QWeb et ne doivent jamais lever d'exception sur un champ vide.
+    # ------------------------------------------------------------------
+    def _format_contrat_date(self, date_value):
+        """Date au format JJ/MM/AAAA (jamais ISO) pour le contrat de crédit.
+        Chaîne vide si la date est absente, pour ne pas casser le rendu QWeb."""
+        return date_value.strftime('%d/%m/%Y') if date_value else ''
+
+    def _contrat_sorted_installments(self):
+        """Échéances triées par date d'échéance puis séquence — ligne de délai de
+        grâce éventuelle incluse (décision Micka : la « première échéance » du
+        contrat n'exclut pas la ligne d'intérêt de grâce)."""
+        self.ensure_one()
+        return self.installment_ids.sorted(lambda inst: (inst.due_date or fields.Date.today(), inst.sequence))
+
+    def get_contrat_guarantor(self):
+        """Garant (mpiantoka) à faire figurer sur le contrat : porté par le dossier
+        d'instruction (microfinance.loan.application.guarantor_partner_id), pas par
+        la fiche client ni par le crédit — constaté sur les données réelles
+        (docs_dev/contrat_credit/AUDIT.md §3.3, correction Micka). Un dossier
+        d'instruction n'a qu'un seul garant (guarantor_count vaut 0 ou 1, pas de
+        One2many). On prend application_ids[:1], même convention que
+        action_view_applications()/_check_committee_octroi_accepted(). Retourne un
+        res.partner vide si aucun garant — le template garde le bloc sous t-if."""
+        self.ensure_one()
+        return self.application_ids[:1].guarantor_partner_id
+
+    def get_amount_in_words(self):
+        """Montant emprunté (loan_amount) en toutes lettres françaises, capitalisé —
+        paragraphe 1 du contrat. Arrondi à l'ariary entier (devise sans subdivision
+        d'usage ici)."""
+        self.ensure_one()
+        if num2words is None:
+            return ''
+        words = num2words(int(round(self.loan_amount or 0.0)), lang='fr')
+        return words[:1].upper() + words[1:]
+
+    def get_total_interest(self):
+        """Total des intérêts sur toute la durée du crédit. Réutilise interest_total
+        (somme des interest_amount de l'échéancier, moteur interest-first déjà en
+        place) — aucun calcul dupliqué. Repli sur la formule flat uniquement si
+        l'échéancier n'existe pas encore (ne se produit pas à l'état 'approved')."""
+        self.ensure_one()
+        if self.installment_ids:
+            return self.interest_total
+        return self.loan_amount * (self.interest_rate / 100.0) * self._period_interest_factor() * self.term
+
+    def get_monthly_interest_rate(self):
+        """Taux d'intérêt mensuel = taux annuel du produit / 12 (décision Micka) —
+        paragraphe 2 du contrat (« zana-bola X% isam-bolana »)."""
+        self.ensure_one()
+        return (self.interest_rate or 0.0) / 12.0
+
+    def get_first_installment_date(self):
+        """Date (JJ/MM/AAAA) de la première échéance de l'échéancier."""
+        self.ensure_one()
+        return self._format_contrat_date(self._contrat_sorted_installments()[:1].due_date)
+
+    def get_last_installment_date(self):
+        """Date (JJ/MM/AAAA) de la dernière échéance de l'échéancier."""
+        self.ensure_one()
+        return self._format_contrat_date(self._contrat_sorted_installments()[-1:].due_date)
+
+    def get_guarantee_amount(self):
+        """Épargne de garantie exigée, recalculée depuis le pourcentage du produit
+        de crédit (guarantee_savings_percent) — décision Micka : toujours calculée,
+        jamais figée. Équivaut à guarantee_savings_required lorsque
+        microfinance_savings_management est installé ; getattr défensif pour rester
+        fonctionnel si ce module ne l'est pas."""
+        self.ensure_one()
+        percent = getattr(self.product_id, 'guarantee_savings_percent', 0.0) or 0.0
+        return (self.loan_amount or 0.0) * percent / 100.0
+
+    def get_signature_date(self):
+        """Date de signature du contrat = date d'approbation si renseignée, sinon
+        date du jour à l'impression. Format JJ/MM/AAAA."""
+        self.ensure_one()
+        return self._format_contrat_date(self.approval_date or fields.Date.context_today(self))
+
+    def action_print_contrat_to_chatter(self):
+        """Génère le contrat de crédit en PDF et le poste en pièce jointe dans le
+        chatter du crédit, sans jamais déclencher de téléchargement côté navigateur
+        (décision Micka) — même principe que action_print_repayment_schedule(). Le
+        PDF et son attachment restent rattachés à self.company_id (la société du
+        crédit), jamais à self.env.company, pour ne pas fuiter un document entre
+        agences si l'utilisateur courant a plusieurs sociétés sélectionnées."""
+        self.ensure_one()
+        report = self.env.ref('microfinance_loan_management.action_report_contrat_credit')
+        pdf_content, _report_format = report._render_qweb_pdf(report.report_name, self.ids)
+        attachment = self.env['ir.attachment'].create({
+            'name': _('Contrat de crédit - %s.pdf') % self.name,
+            'type': 'binary',
+            'datas': base64.b64encode(pdf_content),
+            'res_model': self._name,
+            'res_id': self.id,
+            'company_id': self.company_id.id,
+            'mimetype': 'application/pdf',
+        })
+        self.message_post(body=_('Contrat de crédit généré.'), attachment_ids=[attachment.id])
+        # Le rafraîchissement du chatter est pris en charge côté client par
+        # MicrofinanceLoanFormController.afterExecuteActionButton (MAIL:RELOAD-THREAD),
+        # exactement comme pour action_print_repayment_schedule - un seul mécanisme,
+        # sans recharger tout le formulaire (préserve une saisie en cours ailleurs).
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('Contrat de crédit'),
+                'message': _('Le document a été ajouté au fil de communication de ce crédit.'),
+                'type': 'success',
+                'sticky': False,
+            },
+        }
+
+    def _post_signed_contract_to_chatter(self):
+        """Poste une copie du contrat signé fraîchement téléversé dans le fil de
+        communication du dossier (comme « Contrat de crédit généré. » /
+        « Calendrier de remboursement généré. »). Copie indépendante (res_field
+        vide) : elle n'est pas soumise à la protection anti-suppression du champ
+        signed_contract lui-même et survit à un remplacement ultérieur du champ."""
+        self.ensure_one()
+        field_att = self.env['ir.attachment'].sudo().search([
+            ('res_model', '=', self._name),
+            ('res_id', '=', self.id),
+            ('res_field', '=', 'signed_contract'),
+        ], limit=1)
+        if not field_att:
+            return
+        chatter_att = self.env['ir.attachment'].create({
+            'name': self.signed_contract_filename or (_('Contrat signé - %s') % self.name),
+            'type': 'binary',
+            'datas': field_att.datas,
+            'res_model': self._name,
+            'res_id': self.id,
+            'company_id': self.company_id.id,
+            'mimetype': field_att.mimetype or 'application/octet-stream',
+        })
+        self.message_post(body=_('Contrat signé téléversé.'), attachment_ids=[chatter_att.id])
 
     def action_view_installments(self):
         self.ensure_one()

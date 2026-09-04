@@ -19,8 +19,13 @@ class TestSavingsPrincipalAccountOnPartnerCreate(SavingsCommon):
         accounts = partner.microfinance_savings_account_ids.filtered(lambda a: a.product_id == self.savings_product)
         self.assertEqual(len(accounts), 1)
         self.assertFalse(partner.microfinance_current_loan_application_id)
-        agency, suffix = partner.microfinance_account_number.split('/', 1)
-        self.assertEqual(accounts.name, '%s/I/%s' % (agency, suffix))
+        # Lot 1.3 (docs_dev/epargne_exigee_display/AUDIT_LOT0_conteneur_epargne.md) : le compte
+        # principal est un compte réel comme un autre, il tire désormais son numéro de la
+        # séquence partagée par type - plus jamais du numéro de compte permanent du client
+        # (réservé au conteneur épargne, Lot 1.4).
+        agency = partner.microfinance_account_number.split('/', 1)[0]
+        self.assertTrue(accounts.name.startswith('%s/I/' % agency))
+        self.assertNotEqual(accounts.name.rsplit('/', 1)[1], partner.microfinance_account_number.rsplit('/', 1)[1])
 
     def test_no_default_product_configured_skips_silently_at_creation(self):
         self.assertFalse(self.env.company.microfinance_savings_default_product_id)

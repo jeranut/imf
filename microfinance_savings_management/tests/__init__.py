@@ -15,3 +15,7 @@ from . import test_savings_account_number_derivation
 from . import test_savings_principal_account_on_create
 from . import test_caisse_pos
 from . import test_avis_epargne_exigee
+from . import test_savings_account_loan_link
+from . import test_savings_account_container
+from . import test_savings_container_creation
+from . import test_epargne_exigee_disponible

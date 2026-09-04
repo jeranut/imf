@@ -41,6 +41,8 @@ class TestLockedDossierFields(MicrofinanceCommon):
         loan.action_cdag_review()
         with self.assertRaises(ValidationError):
             loan.write({'loan_amount': 2000.0})
+        loan.action_view_applications()
+        loan.application_ids.write({'committee_first_decision': 'accepted'})
         loan.action_approve()
         with self.assertRaises(ValidationError):
             loan.write({'term': 10})
@@ -59,6 +61,8 @@ class TestLockedDossierFields(MicrofinanceCommon):
         normalement en 'approved'."""
         loan = self._loan_in_avis_ca()
         loan.action_cdag_review()
+        loan.action_view_applications()
+        loan.application_ids.write({'committee_first_decision': 'accepted'})
         loan.action_approve()
         self.assertEqual(loan.state, 'approved')
         loan.action_generate_schedule()

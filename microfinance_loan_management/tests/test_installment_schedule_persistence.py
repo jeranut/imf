@@ -71,21 +71,55 @@ class TestInstallmentSchedulePersistence(MicrofinanceCommon):
         f.save()
         self.assertAlmostEqual(sum(loan.installment_ids.mapped('principal_amount')), 800000.0, places=2)
 
-    def test_write_does_not_regenerate_before_first_generation(self):
-        """Ne force pas une première génération hors du wizard "Générer échéancier" (qui laisse
-        le choix du rounding_mode) : tant qu'installment_ids est vide, une écriture sur
-        loan_amount/term ne doit pas le peupler toute seule."""
+    def test_write_generates_first_schedule_on_save(self):
+        """Depuis le retrait du bouton "Générer échéancier" (docs_dev/retrait_bouton_generer_
+        echeancier/) : la première sauvegarde qui passe par write() sur un champ source (toute
+        ré-édition du formulaire d'un crédit modifiable) crée ET persiste l'échéancier, sans
+        geste manuel - write() n'exige plus qu'un échéancier existe déjà."""
         with Form(self.env['microfinance.loan']) as f:
             f.partner_id = self.partner
             f.product_id = self.product
             f.loan_amount = 500000.0
             f.term = 24
         loan = f.save()
+        # La création seule ne génère pas encore (installment_ids readonly non transmis, et le
+        # hook est sur write(), pas create()) - c'est la première ré-sauvegarde qui le fait.
         self.assertFalse(loan.installment_ids)
 
         with Form(loan) as f:
+            f.term = 12  # modifie un champ source -> write({'term': 12}) -> génération
+        f.save()
+        self.assertEqual(len(loan.installment_ids), 12)
+        self.assertAlmostEqual(sum(loan.installment_ids.mapped('principal_amount')), 500000.0, places=2)
+
+        # Et une modification ultérieure reste bien répercutée (non-régression Lot précédent) :
+        # term reste à 12, seul loan_amount change -> 12 lignes dont la somme suit 600 000.
+        with Form(loan) as f:
             f.loan_amount = 600000.0
         f.save()
+        self.assertEqual(len(loan.installment_ids), 12)
+        self.assertAlmostEqual(sum(loan.installment_ids.mapped('principal_amount')), 600000.0, places=2)
+
+    def test_write_first_generation_skipped_when_incomplete(self):
+        """La génération à la sauvegarde ne se déclenche que si les 3 champs essentiels sont
+        présents : sans périodicité de remboursement, sauvegarder un brouillon ne doit pas
+        planter (action_generate_schedule() lèverait un UserError) et laisse installment_ids
+        vide jusqu'à ce que la périodicité soit choisie."""
+        weekly = self.env.ref('microfinance_loan_management.repayment_frequency_weekly')
+        monthly = self.env.ref('microfinance_loan_management.repayment_frequency_monthly')
+        product_choice = self.product.copy({
+            'repayment_frequency_mode': 'client_choice',
+            'repayment_frequency_id': False,
+            'allowed_repayment_frequency_ids': [(6, 0, [weekly.id, monthly.id])],
+        })
+        loan = self.env['microfinance.loan'].create({
+            'partner_id': self.partner.id,
+            'product_id': product_choice.id,
+            'loan_amount': 500000.0,
+            'term': 24,
+        })
+        self.assertFalse(loan.repayment_frequency_id)
+        loan.write({'loan_amount': 600000.0})
         self.assertFalse(loan.installment_ids)
 
     def test_write_does_not_regenerate_once_active(self):

@@ -11,6 +11,7 @@
                 <field name="balance" sum="Total"/>
                 <field name="maturity_date"/>
                 <field name="state" widget="badge"/>
+                <field name="is_container" optional="hide"/>
             </tree>
         </field>
     </record>
@@ -25,6 +26,10 @@
                 <filter name="active" string="Actifs" domain="[('state','=','active')]"/>
                 <filter name="dormant" string="Dormants" domain="[('state','=','dormant')]"/>
                 <filter name="maturing_30d" string="Échéance sous 30 jours" domain="[('maturity_date','!=',False),('maturity_date','&lt;=',(context_today()+relativedelta(days=30)).strftime('%Y-%m-%d'))]"/>
+                <!-- Masque les conteneurs (Lot 1.2) des listes usuelles - filtre actif par défaut
+                     (context search_default_hide_containers sur les actions ci-dessous), mais
+                     retirable en un clic si besoin de les voir (ex. vérification technique). -->
+                <filter name="hide_containers" string="Masquer les conteneurs" domain="[('is_container','=',False)]"/>
                 <group expand="0" string="Regrouper par">
                     <filter name="group_state" string="État" context="{'group_by':'state'}"/>
                     <filter name="group_product" string="Produit" context="{'group_by':'product_id'}"/>
@@ -39,12 +44,13 @@
         <field name="arch" type="xml">
             <form string="Compte épargne">
                 <header>
-                    <button name="action_activate" string="Activer" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','dormant')"/>
-                    <field name="state" widget="statusbar" statusbar_visible="draft,active,dormant,closed"/>
+                    <button name="action_activate" string="Activer" type="object" class="btn-primary" invisible="state != 'draft' or is_container"/>
+                    <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','dormant') or is_container"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,active,dormant,closed" invisible="is_container"/>
                 </header>
                 <sheet>
-                    <div class="oe_button_box" name="button_box">
+                    <widget name="web_ribbon" title="Conteneur" invisible="not is_container"/>
+                    <div class="oe_button_box" name="button_box" invisible="is_container">
                         <button name="action_view_transactions" type="object" class="oe_stat_button" icon="fa-money">
                             <field name="transaction_count" widget="statinfo" string="Transactions"/>
                         </button>
@@ -56,12 +62,13 @@
                     <group>
                         <group string="Compte">
                             <field name="partner_id"/>
-                            <field name="product_id"/>
+                            <field name="is_container" invisible="1"/>
+                            <field name="product_id" invisible="is_container"/>
                             <field name="company_id" groups="base.group_multi_company"/>
-                            <field name="currency_id"/>
-                            <field name="microfinance_loan_id"/>
+                            <field name="currency_id" invisible="is_container"/>
+                            <field name="microfinance_loan_id" invisible="is_container"/>
                         </group>
-                        <group string="Suivi">
+                        <group string="Suivi" invisible="is_container">
                             <field name="opening_date" readonly="1"/>
                             <field name="closing_date" readonly="1"/>
                             <field name="maturity_date" readonly="1"/>
@@ -69,14 +76,14 @@
                             <field name="is_dormant" readonly="1"/>
                         </group>
                     </group>
-                    <group string="Solde">
+                    <group string="Solde" invisible="is_container">
                         <field name="balance" readonly="1"/>
                     </group>
-                    <group string="Clôture" invisible="state != 'closed'">
+                    <group string="Clôture" invisible="state != 'closed' or is_container">
                         <field name="closure_reason_type"/>
                         <field name="closure_reason_note"/>
                     </group>
-                    <notebook>
+                    <notebook invisible="is_container">
                         <page string="Transactions">
                             <field name="transaction_ids" readonly="1">
                                 <tree>
@@ -98,13 +105,13 @@
         <field name="name">Comptes épargne</field>
         <field name="res_model">microfinance.savings.account</field>
         <field name="view_mode">tree,form</field>
-        <field name="context">{'search_default_active': 1}</field>
+        <field name="context">{'search_default_active': 1, 'search_default_hide_containers': 1}</field>
     </record>
     <record id="action_microfinance_savings_balance_report" model="ir.actions.act_window">
         <field name="name">Balance épargne</field>
         <field name="res_model">microfinance.savings.account</field>
         <field name="view_mode">tree</field>
-        <field name="context">{'search_default_active': 1, 'search_default_group_product': 1}</field>
+        <field name="context">{'search_default_active': 1, 'search_default_group_product': 1, 'search_default_hide_containers': 1}</field>
         <field name="search_view_id" ref="view_microfinance_savings_account_search"/>
     </record>
 </odoo>

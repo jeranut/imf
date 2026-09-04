@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================================
+         RAPPORT « Contrat de Crédit » CEFOR
+         Reproduction fidèle de Contrat_de_Crédit_IS_02131.doc — Times New Roman,
+         marges serrées, tenue sur UNE seule page A4.
+         Décisions fonctionnelles : docs_dev/contrat_credit/AUDIT.md (validées Micka 2026-09-01).
+         Le bouton « Imprimer le contrat » est ajouté dans views/microfinance_loan_views.xml.
+         ============================================================================ -->
+
+    <!-- ==========================================================================
+         FORMAT PAPIER — A4 portrait, aucune bande d'en-tête/pied wkhtmltopdf (la mise
+         en page est 100 % dans le template, via web.basic_layout).
+         Marges resserrées (13 mm côtés, 8/6 mm haut/bas) pour que le contrat complet
+         + le tableau de signatures tiennent sur UNE seule page : avant ce lot les
+         marges Word d'origine (~2 cm côtés) rejetaient le bloc signatures seul en
+         page 2 (page-break-inside:avoid sur .cc-nowrap-block, cf. template).
+         Paperformat DÉDIÉ (default=False, référencé uniquement par
+         action_report_contrat_credit) — aucun impact sur les autres rapports du
+         dépôt mutualisé (EAT/MIIA).
+         ========================================================================== -->
+    <record id="paperformat_contrat_credit" model="report.paperformat">
+        <field name="name">Contrat de Crédit CEFOR (A4)</field>
+        <field name="default" eval="False"/>
+        <field name="format">A4</field>
+        <field name="orientation">Portrait</field>
+        <field name="margin_top">8</field>
+        <field name="margin_bottom">6</field>
+        <field name="margin_left">13</field>
+        <field name="margin_right">13</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">96</field>
+        <field name="disable_shrinking" eval="True"/>
+    </record>
+
+    <!-- ==========================================================================
+         ACTION DE RAPPORT
+         ========================================================================== -->
+    <record id="action_report_contrat_credit" model="ir.actions.report">
+        <field name="name">Contrat de Crédit</field>
+        <field name="model">microfinance.loan</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_contrat_credit_document</field>
+        <field name="report_file">microfinance_loan_management.report_contrat_credit_document</field>
+        <field name="print_report_name">'Contrat_de_Credit_%s' % (object.name or '').replace('/', '_')</field>
+        <field name="paperformat_id" ref="paperformat_contrat_credit"/>
+        <!-- Pas de binding_model_id / binding_type : le contrat ne doit PAS apparaître
+             dans le menu « Imprimer » standard d'Odoo. Il n'est déclenché que par le
+             bouton du formulaire (microfinance.loan.action_print_contrat_to_chatter),
+             qui rend ce template et poste le PDF dans le chatter. -->
+    </record>
+
+    <!-- ==========================================================================
+         TEMPLATE QWEB — mise en page codée en dur, calquée sur le .doc.
+         web.basic_layout (et non web.html_container brut) : fournit le
+         <div class="article" data-oe-lang="..."> attendu par le post-traitement
+         ir.actions.report._prepare_html() (encodage UTF-8 correct sous wkhtmltopdf +
+         pagination par enregistrement) SANS ajouter d'en-tête/pied société.
+         Toutes les relations potentiellement vides sont protégées par un t-if.
+         ========================================================================== -->
+    <template id="report_contrat_credit_document">
+        <t t-foreach="docs" t-as="o">
+            <t t-call="web.basic_layout">
+                <div class="contrat_credit">
+                    <style>
+                        .contrat_credit {
+                            font-family: 'Times New Roman', 'Liberation Serif', 'Nimbus Roman', serif;
+                            font-size: 11pt;
+                            line-height: 1.32;
+                            color: #000000;
+                            text-align: justify;
+                        }
+                        .contrat_credit p { margin: 0 0 4pt 0; }
+                        /* Ancien repère de calibrage jaune retiré (décision Micka) : ne reste
+                           que le gras là où il était déjà appliqué. */
+                        .contrat_credit .cc-hl { font-weight: bold; }
+                        .contrat_credit .cc-title {
+                            text-align: center; font-weight: bold; text-decoration: underline;
+                            font-size: 11pt; margin: 6pt 0 4pt 0;
+                        }
+                        .contrat_credit table.cc-head { width: 100%; border-collapse: collapse; margin-bottom: 3pt; }
+                        .contrat_credit table.cc-head td { padding: 0; vertical-align: top; }
+                        .contrat_credit hr.cc-rule { border: none; border-top: 1px solid #000; margin: 3pt 0 4pt 0; }
+                        /* Espace au-dessus du bloc signatures réduit (30pt -> 12pt). Le
+                           page-break-inside:avoid porté par .cc-nowrap-block sur la table
+                           elle-meme a ete retire : wkhtmltopdf le traite comme un saut force et
+                           rejetait la grille entiere en page 2 alors qu'il restait ~40 pourcent
+                           de page 1 libre (bug connu de wkhtmltopdf sur les tables). L'anti-
+                           coupure est reportee au niveau des lignes tr (bien supporte, lui) :
+                           aucune ligne de signature n'est scindee, mais la grille suit le texte
+                           sur la meme page. */
+                        .contrat_credit table.cc-sign {
+                            width: 100%; border-collapse: collapse; margin-top: 12pt;
+                            text-align: center; table-layout: fixed;
+                        }
+                        .contrat_credit table.cc-sign tr { page-break-inside: avoid; }
+                        .contrat_credit table.cc-sign td { border: 1px solid #000; padding: 3pt; }
+                        .contrat_credit table.cc-sign tr.cc-sign-blank td { height: 90px; }
+                    </style>
+
+                    <!-- ==================== EN-TÊTE : logo + infos agence ==================== -->
+                    <table class="cc-head">
+                        <tr>
+                            <td style="width:120px;">
+                                <img t-if="o.company_id.logo"
+                                     t-att-src="image_data_uri(o.company_id.logo)"
+                                     style="max-height:48px;max-width:115px;"/>
+                            </td>
+                            <td>
+                                <div>
+                                    <span>Agence : </span>
+                                    <span class="cc-hl" t-esc="o.company_id.street"/>
+                                    <span style="margin-left:20px;">Mpindrana laharana </span>
+                                    <span class="cc-hl" t-esc="o.partner_id.microfinance_account_number"/>
+                                    <span style="margin-left:20px;">Contrat N°: </span>
+                                    <span style="font-weight:bold;" t-esc="o.name"/>
+                                </div>
+                                <div style="margin-top:6pt;">
+                                    <span>CA mpikarakara: </span>
+                                    <span class="cc-hl" t-esc="o.officer_id.name"/>
+                                    <span style="margin-left:40px;">Agent BL: </span>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <hr class="cc-rule"/>
+
+                    <div class="cc-title">FIFANARAHANA</div>
+
+                    <p>
+                        Fifanarahana eo amin'ny ONG <b>CEFOR</b>, voasoratra ara-dalàna eo anivon'ny fahefana mahefa Malagasy,
+                        soloin'ny Chef d'agence tena, ny mpampindram-bola, ny mpindram-bola sy ny mpiantoka, feno taona.
+                    </p>
+
+                    <!-- ==================== MPINDRANA-BOLA (EMPRUNTEUR) ====================
+                         Adresse = concaténation street / microfinance_fokontany_id / city
+                         via get_contrat_address(). Identité scindée en 2 paragraphes : le CIN
+                         passe toujours à la ligne, quelle que soit la longueur de l'adresse. -->
+                    <p style="margin-top:3pt;"><b>Ny mpindrana-bola:</b></p>
+                    <t t-set="borrower_address" t-value="o.partner_id.get_contrat_address()"/>
+                    <p style="margin:0 0 1px 0;">
+                        <span style="font-weight:bold;text-decoration:underline;" t-esc="o.partner_id.name"/>,
+                        <t t-if="borrower_address">
+                            monina ao amin'ny
+                            <span style="font-weight:bold;" t-esc="borrower_address"/>,
+                        </t>
+                    </p>
+                    <p t-if="o.partner_id.microfinance_id_number_display" style="margin:0 0 4px 0;">
+                        kara-panondro laharana
+                        <span style="font-weight:bold;" t-esc="o.partner_id.microfinance_id_number_display"/>
+                    </p>
+
+                    <!-- ==================== MPIANTOKA (CAUTION / GARANT) ====================
+                         Garant porté par le dossier d'instruction
+                         (microfinance.loan.application.guarantor_partner_id), résolu via
+                         get_contrat_guarantor() — cf. AUDIT.md §3.3 (correction Micka).
+                         Bloc entier masqué si aucun garant renseigné. -->
+                    <t t-set="guarantor" t-value="o.get_contrat_guarantor()"/>
+                    <t t-if="guarantor">
+                        <p style="margin-top:3pt;"><b>Ny mpiantoka:</b></p>
+                        <t t-set="guarantor_address" t-value="guarantor.get_contrat_address()"/>
+                        <p style="margin:0 0 1px 0;">
+                            <span style="font-weight:bold;text-decoration:underline;" t-esc="guarantor.name"/>,
+                            <t t-if="guarantor_address">
+                                monina ao amin'ny
+                                <span style="font-weight:bold;" t-esc="guarantor_address"/>,
+                            </t>
+                        </p>
+                        <p t-if="guarantor.microfinance_id_number_display" style="margin:0 0 4px 0;">
+                            kara-panondro laharana
+                            <span style="font-weight:bold;" t-esc="guarantor.microfinance_id_number_display"/>
+                        </p>
+                    </t>
+
+                    <div class="cc-title">FEPETRA</div>
+
+                    <p>
+                        1 - Ny vola izay indramina mitentina
+                        <b class="cc-hl" t-esc="o.get_amount_in_words()"/> ariary
+                        (<b class="cc-hl" t-esc="'{:,.0f}'.format(o.loan_amount).replace(',', ' ')"/> Ar)
+                        dia natokana ampiasaina amin'ny asa fitadiavam-bola izay ataon'ny mpindrana, andoavana sarany
+                        <b t-esc="'{:,.0f}'.format(o.fee_amount_due).replace(',', ' ')"/> Ar<t t-if="o.product_id.fee_type == 'percentage'"> (<t t-esc="'{:g}'.format(o.product_id.fee_rate)"/>% n'ny vola nindramina)</t>
+                        sy vidin'ny karatra tahiry (500 Ar) raha findramana voalohany.
+                    </p>
+
+                    <p>
+                        2 - Ny vola izay indramina dia miteraka zana-bola
+                        <t t-esc="'{:g}'.format(o.get_monthly_interest_rate())"/>% isam-bolana izay mitotaly
+                        <b t-esc="'{:,.0f}'.format(o.get_total_interest()).replace(',', ' ')"/> Ar mandritra ny findramana.
+                    </p>
+
+                    <p>
+                        3 – <b t-esc="'{:,.0f}'.format(o.balance_total).replace(',', ' ')"/> Ar ny totalin'ny renivola sy ny
+                        zana-bola izay tsy maintsy averina, ka
+                        <b t-esc="'{:,.0f}'.format(o.installment_amount).replace(',', ' ')"/> Ar farafahakeliny no vola aloa
+                        <t t-if="o.repayment_frequency_id.code == 'monthly'">isam-bolana</t>
+                        <t t-elif="o.repayment_frequency_id.code == 'weekly'">isan-kerinandro</t>
+                        <t t-elif="o.repayment_frequency_id.code == 'daily'">isan'andro</t>
+                        <t t-else="">isaky ny fe-potoana voatondro</t>
+                        manomboka ny <b t-esc="o.get_first_installment_date()"/>
+                    </p>
+
+                    <p>
+                        Ny fepotoana farany hamerenana ny renivola sy ny zana-bola dia ny
+                        <b t-esc="o.get_last_installment_date()"/>
+                    </p>
+
+                    <p>
+                        Ny famerenam-bola dia isaky ny <b style="text-decoration:underline;">ALATSINAINY</b> maraina
+                        ao amin'ny masoivoho <span t-esc="o.company_id.street"/> nahazoana fampindramana.
+                    </p>
+
+                    <p>
+                        Ny mpiantoka no mandoa izay tsy voaloan'ny mpindrana raha toa ka misy ny olana.
+                    </p>
+
+                    <p>
+                        4 - <b t-esc="'{:,.0f}'.format(o.get_guarantee_amount()).replace(',', ' ')"/> Ar ny petra-bola tsy
+                        maintsy ataon'ny mpindrana amin'ny mpampindram-bola mandritry ny fe-potoana famerenana
+                    </p>
+
+                    <p>
+                        5- Azon'ny mpampindram-bola atao ny mamadika ny petra-bola voaangon'ny mpindrana entina handoavana ny
+                        ambim-bola raha ilaina izany.
+                    </p>
+                    <p>
+                        6 - Raha toa ka misy ny tsy fandoavan'ny mpindrana ny lela-vola tokony aloany amin'ny fizaram-potoana
+                        tokony handoavany azy, dia azo entina eo anoloan'ny sampan-draharaha ara-dalàna miandraikitra izany
+                        izy, na dia alohan'ny fe-potoana farany voatondro hamerenam-bola aza, ary ny mpindrana na ny
+                        mpiantoka no manefa manontolo ny vola lany amin'izany.
+                    </p>
+                    <p>
+                        7 - Ny mpampindram-bola dia manan-jo sy fahefana hitsidika sy hanara-maso ny fitantanana sy ny
+                        famokaran'ny mpindrana amin'ny fotoana rehetra
+                    </p>
+                    <p>
+                        8 - Araky ny lalàna laharana faha 2014-038 tamin'ny 09/01/2015 mikasika ny fitazomana tsiambaratelo,
+                        sy ny lalàna laharana faha 2017-045 tamin'ny 15/02/18 mifehy ny asa sy ny fanaraha-maso izay ataon'ny
+                        BIC (Bureau d'Information sur le Crédit), ny mpindrana sy ny mpiantoka dia manome alalana ny CEFOR
+                        hampita sy hikirakira ny mombamomba azy ireo any amin'ny manam-pahefana samihafa misahana ny sehatra
+                        fampindramam-bola.
+                    </p>
+                    <p>
+                        Azon'ny mpindrana sy ny mpiantoka atao ny mangataka mijery na manavao ny mombamomba azy izay
+                        nalefan'izy ireo taty amin'ny CEFOR, araka ny voalazan'ny andininy faha-23 amin'ny lalana voalaza eo
+                        ambony.
+                    </p>
+                    <p>
+                        9- Raha mifindra trano ny mpindrana na ny mpiantoka ao anatin'ny fe-potoana indramana dia tsy maintsy
+                        manavao ny fanamarinam-ponenany.
+                    </p>
+                    <p>
+                        10 - Ny mpindrana dia manaiky fa hanaraka ireo fiofanana izay ampanaovin'ny CEFOR, ary manaiky fa
+                        hiditra mpikambana AFAFI sy handoa latsakemboka mandritra ny fe-potoana hindramany.
+                    </p>
+                    <p>
+                        11 – Ny famerenam-bola rehetra izay atao dia tsy maintsy ahazoana rosia ary voadika ao anaty carnet.
+                        Noho izany dia
+                        <b>TSY TOMPON'ANDRAIKITRA AMIN'NY FANOMEZANA VOLA TSY NAHAZOANA ROSIA NY CEFOR</b>
+                    </p>
+                    <p>
+                        12 - Raha misy ny fifanolanana momba ity fifanarahana ity dia ny manam-pahefana mahefa no hitsara
+                        izany.
+                    </p>
+
+                    <p style="margin-top:8pt;">
+                        Natao ankahalalahana tsy misy faneriterena teto Antananarivo, anio
+                        <b t-esc="o.get_signature_date()"/>.
+                    </p>
+
+                    <!-- ==================== TABLEAU DE SIGNATURES (bas de page) ====================
+                         Plus de classe cc-nowrap-block ici : page-break-inside:avoid sur la table
+                         faisait sauter toute la grille en page 2 sous wkhtmltopdf (cf. <style>).
+                         L'anti-coupure vit maintenant sur table.cc-sign tr. -->
+                    <table class="cc-sign">
+                        <tr>
+                            <td colspan="2" style="font-weight:bold;">Ny mpindrana</td>
+                            <td colspan="2" style="font-weight:bold;">Ny mpiantoka</td>
+                            <td colspan="2" style="font-weight:bold;">Ny fokontany</td>
+                            <td colspan="2" style="font-weight:bold;">CEFOR</td>
+                        </tr>
+                        <tr>
+                            <td>Voavaky sy ekena</td>
+                            <td>Sonia</td>
+                            <td>Voavaky sy ekena</td>
+                            <td>Sonia</td>
+                            <td>Anarana</td>
+                            <td>Sonia</td>
+                            <td>Anarana</td>
+                            <td>Sonia</td>
+                        </tr>
+                        <tr class="cc-sign-blank">
+                            <td/><td/><td/><td/><td/><td/><td/><td/>
+                        </tr>
+                    </table>
+
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

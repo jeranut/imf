@@ -52,6 +52,9 @@
                             <group>
                                 <field name="interest_rate"/>
                                 <field name="interest_method"/>
+                                <field name="fee_type"/>
+                                <field name="fee_amount" invisible="fee_type != 'fixed'"/>
+                                <field name="fee_rate" invisible="fee_type != 'percentage'"/>
                                 <field name="repayment_frequency_mode"/>
                                 <field name="repayment_frequency_id" invisible="repayment_frequency_mode != 'fixed'" required="repayment_frequency_mode == 'fixed'"/>
                                 <field name="allowed_repayment_frequency_ids" widget="many2many_tags" invisible="repayment_frequency_mode != 'client_choice'"/>
@@ -83,10 +86,11 @@
                                 <field name="disbursement_limit_amount"/>
                                 <field name="check_cash_balance_at_disbursement"/>
                                 <field name="payment_journal_id"/>
-                                <field name="fee_type"/>
-                                <field name="fee_amount" invisible="fee_type != 'fixed'"/>
-                                <field name="fee_rate" invisible="fee_type != 'percentage'"/>
+                                <!-- fee_type / fee_amount / fee_rate déplacés dans l'onglet
+                                     "Calcul crédit" (près de "Taux intérêt annuel"). Restent ici
+                                     le journal d'encaissement et le moment de perception. -->
                                 <field name="fee_journal_id"/>
+                                <field name="fee_engagement_journal_id"/>
                                 <field name="fee_charged_before_disbursement"/>
                             </group>
                             <group string="Principal">
@@ -118,6 +122,7 @@
                                 <field name="account_revenu_penalites_avance_individuel_id"/>
                                 <field name="account_revenu_penalites_avance_groupe_id"/>
                                 <field name="account_commission_credit_id"/>
+                                <field name="account_fee_receivable_id"/>
                                 <field name="account_commissions_echues_individuel_id"/>
                                 <field name="account_commissions_echues_groupe_id"/>
                                 <field name="account_commissions_accumulees_individuel_id"/>

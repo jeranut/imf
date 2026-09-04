@@ -31,6 +31,8 @@ class TestCashBalanceCheck(MicrofinanceCommon):
         loan.action_start_enquete()
         loan.action_ca_review()
         loan.action_cdag_review()
+        loan.action_view_applications()
+        loan.application_ids.write({'committee_first_decision': 'accepted'})
         loan.action_approve()
         return loan
 

@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ============================================================================
+         RAPPORT « Contrat de Crédit » CEFOR
+         Reproduction fidèle de Contrat_de_Crédit_IS_02131.doc
+         Module : microfinance_loan_management
+         Fichier à placer dans : microfinance_loan_management/report/report_contrat_credit.xml
+         Et à déclarer dans __manifest__.py -> 'data': [..., 'report/report_contrat_credit.xml']
+         ============================================================================ -->
+
+    <!-- ==========================================================================
+         1. BOUTON « Imprimer le contrat » — visible uniquement à l'étape "Approuvé"
+         ⚠️ À VÉRIFIER (Micka) : le nom technique de la vue héritée et la valeur réelle
+         du champ state pour l'étape "approuvé" (ex: 'approuve', 'accorde', 'valide'...)
+         ========================================================================== -->
+    <record id="view_microfinance_loan_form_print_contrat" model="ir.ui.view">
+        <field name="name">microfinance.loan.form.print.contrat.inherit</field>
+        <field name="model">microfinance.loan</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header" position="inside">
+                <button name="%(action_report_contrat_credit)d"
+                        string="Imprimer le contrat"
+                        type="action"
+                        class="btn-primary"
+                        invisible="state != 'approuve'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- ==========================================================================
+         2. ACTION DE RAPPORT
+         ========================================================================== -->
+    <record id="action_report_contrat_credit" model="ir.actions.report">
+        <field name="name">Contrat de Crédit</field>
+        <field name="model">microfinance.loan</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_contrat_credit_document</field>
+        <field name="report_file">microfinance_loan_management.report_contrat_credit_document</field>
+        <field name="print_report_name">'Contrat_de_Credit_%s' % (object.name or '').replace('/', '_')</field>
+        <field name="binding_model_id" ref="model_microfinance_loan"/>
+        <field name="binding_type">report</field>
+    </record>
+
+    <!-- ==========================================================================
+         3. TEMPLATE QWEB — mise en page codée en dur, calquée sur le .doc
+         Pas d'héritage de web.external_layout : mise en page 100% custom pour
+         respecter exactement le visuel (logo haut-gauche, tableau bas de page).
+         ========================================================================== -->
+    <template id="report_contrat_credit_document">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <div class="page" style="font-family:'Times New Roman',Times,serif;font-size:11px;line-height:1.4;color:#000000;">
+
+                    <!-- ==================== EN-TÊTE : logo + infos agence ==================== -->
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:4px;">
+                        <tr>
+                            <td style="width:120px;vertical-align:top;padding:0;">
+                                <img t-if="o.company_id.logo"
+                                     t-att-src="image_data_uri(o.company_id.logo)"
+                                     style="height:52px;"/>
+                            </td>
+                            <td style="vertical-align:top;padding:0;">
+                                <div>
+                                    <span>Agence : </span>
+                                    <span style="background-color:#FFFF00;font-weight:bold;" t-esc="o.company_id.street"/>
+                                    <span style="margin-left:25px;">Mpindrana laharana </span>
+                                    <span style="background-color:#FFFF00;font-weight:bold;" t-esc="o.loan_account_id.name"/>
+                                    <span style="margin-left:25px;">Contrat N°: </span>
+                                    <span style="font-weight:bold;" t-esc="o.name"/>
+                                </div>
+                                <div style="margin-top:3px;">
+                                    <span>CA mpikarakara: </span>
+                                    <span style="background-color:#FFFF00;font-weight:bold;" t-esc="o.officer_id.name"/>
+                                    <span style="margin-left:50px;">Agent BL: </span>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <hr style="border-top:1px solid #000;margin:4px 0 8px 0;"/>
+
+                    <h3 style="text-align:center;text-decoration:underline;font-weight:bold;margin:6px 0;">FIFANARAHANA</h3>
+
+                    <p style="text-align:justify;margin:4px 0;">
+                        Fifanarahana eo amin'ny ONG <b>CEFOR</b>, voasoratra ara-dalàna eo anivon'ny fahefana mahefa Malagasy,
+                        soloin'ny Chef d'agence tena, ny mpampindram-bola, ny mpindram-bola sy ny mpiantoka, feno taona.
+                    </p>
+
+                    <!-- ==================== MPINDRANA-BOLA ==================== -->
+                    <p style="margin:6px 0 1px 0;"><b>Ny mpindrana-bola:</b></p>
+                    <p style="margin:0 0 4px 0;">
+                        <span style="background-color:#FFFF00;font-weight:bold;text-decoration:underline;" t-esc="o.partner_id.name"/>,
+                        monina ao amin'ny
+                        <span style="background-color:#FFFF00;font-weight:bold;" t-esc="o.partner_id.fokontany_id.name"/>,
+                        kara-panondro laharana
+                        <span style="font-weight:bold;" t-esc="o.partner_id.microfinance_id_number_display"/>
+                    </p>
+
+                    <!-- ==================== MPIANTOKA (CAUTION) ==================== -->
+                    <p style="margin:6px 0 1px 0;"><b>Ny mpiantoka:</b></p>
+                    <p style="margin:0 0 4px 0;">
+                        <span style="background-color:#FFFF00;font-weight:bold;text-decoration:underline;" t-esc="o.guarantor_id.name"/>,
+                        monina ao amin'ny
+                        <span style="background-color:#FFFF00;font-weight:bold;" t-esc="o.guarantor_id.fokontany_id.name"/>,
+                        kara-panondro laharana
+                        <span style="font-weight:bold;" t-esc="o.guarantor_id.microfinance_id_number_display"/>
+                    </p>
+
+                    <h3 style="text-align:center;text-decoration:underline;font-weight:bold;margin:8px 0 6px 0;">FEPETRA</h3>
+
+                    <p style="text-align:justify;margin:3px 0;">
+                        1 - Ny vola izay indramina mitentina
+                        <b style="background-color:#FFFF00;" t-esc="o.get_amount_in_words()"/> ariary
+                        (<b style="background-color:#FFFF00;" t-esc="'{:,.0f}'.format(o.loan_amount).replace(',', ' ')"/> Ar)
+                        dia natokana ampiasaina amin'ny asa fitadiavam-bola izay ataon'ny mpindrana, andoavana sarany
+                        <b t-esc="'{:,.0f}'.format(o.loan_amount * 0.05).replace(',', ' ')"/> Ar (5% n'ny vola nindramina)
+                        sy vidin'ny karatra tahiry (500 Ar) raha findramana voalohany.
+                    </p>
+
+                    <p style="text-align:justify;margin:3px 0;">
+                        2 - Ny vola izay indramina dia miteraka zana-bola 3% isam-bolana izay mitotaly
+                        <b t-esc="'{:,.0f}'.format(o.get_total_interest()).replace(',', ' ')"/> Ar mandritra ny findramana.
+                    </p>
+
+                    <p style="text-align:justify;margin:3px 0;">
+                        3 – <b t-esc="'{:,.0f}'.format(o.balance_total).replace(',', ' ')"/> Ar ny totalin'ny renivola sy ny
+                        zana-bola izay tsy maintsy averina, ka
+                        <b t-esc="'{:,.0f}'.format(o.installement_amount).replace(',', ' ')"/> Ar farafahakeliny no vola aloa
+                        <t t-if="o.repayment_frequency_id.name == 'Mensuel'">isam-bolana</t>
+                        <t t-elif="o.repayment_frequency_id.name == 'Hebdomadaire'">isan-kerinandro</t>
+                        <t t-elif="o.repayment_frequency_id.name == 'Journalier'">isan'andro</t>
+                        manomboka ny <b t-esc="o.get_first_installment_date()"/>
+                    </p>
+
+                    <p style="text-align:justify;margin:3px 0;">
+                        Ny fepotoana farany hamerenana ny renivola sy ny zana-bola dia ny
+                        <b t-esc="o.get_last_installment_date()"/>
+                    </p>
+
+                    <p style="text-align:justify;margin:3px 0;">
+                        Ny famerenam-bola dia isaky ny <b style="text-decoration:underline;">ALATSINAINY</b> maraina
+                        ao amin'ny masoivoho <span t-esc="o.company_id.street"/> nahazoana fampindramana.
+                    </p>
+
+                    <p style="text-align:justify;margin:3px 0;">
+                        Ny mpiantoka no mandoa izay tsy voaloan'ny mpindrana raha toa ka misy ny olana.
+                    </p>
+
+                    <p style="text-align:justify;margin:3px 0;">
+                        4 - <b t-esc="'{:,.0f}'.format(o.get_guarantee_amount()).replace(',', ' ')"/> Ar ny petra-bola tsy
+                        maintsy ataon'ny mpindrana amin'ny mpampindram-bola mandritry ny fe-potoana famerenana
+                    </p>
+
+                    <p style="text-align:justify;margin:3px 0;">
+                        5- Azon'ny mpampindram-bola atao ny mamadika ny petra-bola voaangon'ny mpindrana entina handoavana ny
+                        ambim-bola raha ilaina izany.
+                    </p>
+                    <p style="text-align:justify;margin:3px 0;">
+                        6 - Raha toa ka misy ny tsy fandoavan'ny mpindrana ny lela-vola tokony aloany amin'ny fizaram-potoana
+                        tokony handoavany azy, dia azo entina eo anoloan'ny sampan-draharaha ara-dalàna miandraikitra izany
+                        izy, na dia alohan'ny fe-potoana farany voatondro hamerenam-bola aza, ary ny mpindrana na ny
+                        mpiantoka no manefa manontolo ny vola lany amin'izany.
+                    </p>
+                    <p style="text-align:justify;margin:3px 0;">
+                        7 - Ny mpampindram-bola dia manan-jo sy fahefana hitsidika sy hanara-maso ny fitantanana sy ny
+                        famokaran'ny mpindrana amin'ny fotoana rehetra
+                    </p>
+                    <p style="text-align:justify;margin:3px 0;">
+                        8 - Araky ny lalàna laharana faha 2014-038 tamin'ny 09/01/2015 mikasika ny fitazomana tsiambaratelo,
+                        sy ny lalàna laharana faha 2017-045 tamin'ny 15/02/18 mifehy ny asa sy ny fanaraha-maso izay ataon'ny
+                        BIC (Bureau d'Information sur le Crédit), ny mpindrana sy ny mpiantoka dia manome alalana ny CEFOR
+                        hampita sy hikirakira ny mombamomba azy ireo any amin'ny manam-pahefana samihafa misahana ny sehatra
+                        fampindramam-bola.
+                    </p>
+                    <p style="text-align:justify;margin:3px 0;">
+                        Azon'ny mpindrana sy ny mpiantoka atao ny mangataka mijery na manavao ny mombamomba azy izay
+                        nalefan'izy ireo taty amin'ny CEFOR, araka ny voalazan'ny andininy faha-23 amin'ny lalana voalaza eo
+                        ambony.
+                    </p>
+                    <p style="text-align:justify;margin:3px 0;">
+                        9- Raha mifindra trano ny mpindrana na ny mpiantoka ao anatin'ny fe-potoana indramana dia tsy maintsy
+                        manavao ny fanamarinam-ponenany.
+                    </p>
+                    <p style="text-align:justify;margin:3px 0;">
+                        10 - Ny mpindrana dia manaiky fa hanaraka ireo fiofanana izay ampanaovin'ny CEFOR, ary manaiky fa
+                        hiditra mpikambana AFAFI sy handoa latsakemboka mandritra ny fe-potoana hindramany.
+                    </p>
+                    <p style="text-align:justify;margin:3px 0;">
+                        11 – Ny famerenam-bola rehetra izay atao dia tsy maintsy ahazoana rosia ary voadika ao anaty carnet.
+                        Noho izany dia
+                        <b>TSY TOMPON'ANDRAIKITRA AMIN'NY FANOMEZANA VOLA TSY NAHAZOANA ROSIA NY CEFOR</b>
+                    </p>
+                    <p style="text-align:justify;margin:3px 0;">
+                        12 - Raha misy ny fifanolanana momba ity fifanarahana ity dia ny manam-pahefana mahefa no hitsara
+                        izany.
+                    </p>
+
+                    <p style="margin:12px 0 0 0;">
+                        Natao ankahalalahana tsy misy faneriterena teto Antananarivo, anio
+                        <b t-esc="o.get_signature_date()"/>.
+                    </p>
+
+                    <!-- ==================== TABLEAU DE SIGNATURES (bas de page) ==================== -->
+                    <table style="width:100%;border-collapse:collapse;margin-top:18px;text-align:center;table-layout:fixed;">
+                        <tr>
+                            <td colspan="2" style="border:1px solid #000;padding:3px;font-weight:bold;">Ny mpindrana</td>
+                            <td colspan="2" style="border:1px solid #000;padding:3px;font-weight:bold;">Ny mpiantoka</td>
+                            <td colspan="2" style="border:1px solid #000;padding:3px;font-weight:bold;">Ny fokontany</td>
+                            <td colspan="2" style="border:1px solid #000;padding:3px;font-weight:bold;">CEFOR</td>
+                        </tr>
+                        <tr>
+                            <td style="border:1px solid #000;padding:3px;">Voavaky sy ekena</td>
+                            <td style="border:1px solid #000;padding:3px;">Sonia</td>
+                            <td style="border:1px solid #000;padding:3px;">Voavaky sy ekena</td>
+                            <td style="border:1px solid #000;padding:3px;">Sonia</td>
+                            <td style="border:1px solid #000;padding:3px;">Anarana</td>
+                            <td style="border:1px solid #000;padding:3px;">Sonia</td>
+                            <td style="border:1px solid #000;padding:3px;">Anarana</td>
+                            <td style="border:1px solid #000;padding:3px;">Sonia</td>
+                        </tr>
+                        <tr style="height:65px;">
+                            <td style="border:1px solid #000;"></td>
+                            <td style="border:1px solid #000;"></td>
+                            <td style="border:1px solid #000;"></td>
+                            <td style="border:1px solid #000;"></td>
+                            <td style="border:1px solid #000;"></td>
+                            <td style="border:1px solid #000;"></td>
+                            <td style="border:1px solid #000;"></td>
+                            <td style="border:1px solid #000;"></td>
+                        </tr>
+                    </table>
+
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

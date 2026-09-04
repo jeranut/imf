@@ -34,3 +34,4 @@ from . import microfinance_caisse_fiche_journee
 from . import microfinance_caisse_session
 from . import res_partner
 from . import res_config_settings
+from . import ir_attachment

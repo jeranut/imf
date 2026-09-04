@@ -62,6 +62,32 @@ class ResPartner(models.Model):
             'company_id': company.id,
         })
 
+    def _get_or_create_microfinance_savings_container(self):
+        """Ouvre (ou réutilise) le conteneur épargne de ce client pour sa société - appelée
+        depuis microfinance.loan.create() (microfinance_loan_extension.py), au 1er crédit,
+        symétrique de res.partner._get_or_create_microfinance_loan_account() (microfinance_
+        loan_management) côté crédit. Idempotent par recherche préalable (pas de contrainte SQL
+        dédiée comme côté crédit - microfinance.savings.account joue un double rôle, conteneur
+        ET compte réel, une contrainte unique(partner_id, company_id) plate casserait les
+        comptes réels multiples déjà supportés ; une contrainte partielle - WHERE is_container -
+        demanderait une migration SQL hors du patron déjà utilisé dans ce module, jugée
+        disproportionnée ici, cf. docs_dev/epargne_exigee_display/
+        AUDIT_LOT0_conteneur_epargne.md). Distinct du "compte principal"
+        (_get_or_create_microfinance_savings_principal_account ci-dessus, déclenché à la
+        création du client, un vrai compte sur le produit par défaut de l'agence) : les deux
+        coexistent (décision Micka, Option A), aucune dépendance entre eux."""
+        self.ensure_one()
+        company = self.company_id or self.env.company
+        Account = self.env['microfinance.savings.account']
+        existing = Account.search([
+            ('partner_id', '=', self.id), ('company_id', '=', company.id), ('is_container', '=', True),
+        ], limit=1)
+        if existing:
+            return existing
+        return Account.create({
+            'partner_id': self.id, 'company_id': company.id, 'is_container': True,
+        })
+
     def _notify_microfinance_savings_default_product_missing(self, company):
         self.ensure_one()
         message = _(

@@ -59,13 +59,16 @@
         <field name="name">microfinance.loan.form</field>
         <field name="model">microfinance.loan</field>
         <field name="arch" type="xml">
-            <form string="Crédit" js_class="microfinance_loan_form">
+            <form string="Crédit" js_class="microfinance_loan_form" class="o_microfinance_loan_form">
                 <header>
+                    <!-- Barre d'état sur sa propre ligne, au-dessus des boutons (rendu en
+                         segments accolés via static/src/scss/microfinance_loan_form.scss).
+                         clickable laissé au défaut Odoo (= cliquable pour un manager). -->
+                    <field name="state" widget="statusbar" statusbar_visible="draft,enquete,avis_ca,avis_cdag,approved,active,closed,defaulted,written_off"/>
                     <button name="action_start_enquete" string="Démarrer l'enquête" type="object" class="btn-primary" invisible="state != 'draft'"/>
                     <button name="action_ca_review" string="Avis CA" type="object" groups="microfinance_loan_management.group_microfinance_credit_committee" invisible="state != 'enquete'"/>
                     <button name="action_cdag_review" string="Avis CDAG" type="object" groups="microfinance_loan_management.group_microfinance_credit_committee" invisible="state != 'avis_ca'"/>
                     <button name="action_approve" string="Approuver" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'avis_cdag'"/>
-                    <button name="action_open_generate_schedule_wizard" string="Générer échéancier" type="object" invisible="state not in ('draft','enquete','avis_ca','avis_cdag','approved')"/>
                     <button name="action_charge_fee" string="Encaisser les frais de dossier" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved' or fee_paid or fee_amount_due &lt;= 0"/>
                     <button name="action_disburse" string="Activer / Décaisser" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
                     <button name="action_open_payment_wizard" string="Enregistrer remboursement" type="object" class="btn-primary" invisible="state not in ('active','defaulted')"/>
@@ -74,9 +77,33 @@
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
                     <button name="action_write_off" string="Radier" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state not in ('active','defaulted')"/>
                     <button name="%(action_report_microfinance_loan_disbursement_receipt)d" string="Imprimer le reçu" type="action" invisible="state in ('draft','enquete','avis_ca','avis_cdag','approved','cancelled')"/>
-                    <button name="action_print_repayment_schedule" string="Imprimer le calendrier de remboursement" type="object" invisible="installment_count == 0"/>
-                    <button name="action_recompute_risk" string="Recalculer le score" type="object"/>
-                    <field name="state" widget="statusbar" statusbar_visible="draft,enquete,avis_ca,avis_cdag,approved,active,closed,defaulted,written_off"/>
+                    <button name="action_print_repayment_schedule" type="object" class="btn-cefor-print" invisible="installment_count == 0">
+                        <i class="fa fa-print"/> Imprimer le calendrier
+                    </button>
+                    <!-- Contrat de crédit : visible uniquement à l'état "Approuvé", pour
+                         Agent crédit / Manager / Gestionnaire (group_microfinance_user est le
+                         socle impliqué par manager et gestionnaire). Appelle une méthode
+                         (type="object") qui poste le PDF dans le chatter — pas de
+                         téléchargement, pas d'action de rapport directe. Même classe verte
+                         btn-cefor-print + icône que "Imprimer le calendrier". -->
+                    <button name="action_print_contrat_to_chatter" type="object" class="btn-cefor-print" groups="microfinance_loan_management.group_microfinance_user" invisible="state != 'approved'">
+                        <i class="fa fa-print"/> Imprimer le contrat
+                    </button>
+                    <!-- Génération manuelle de l'échéancier : remède au trou laissé par le
+                         retrait du bouton historique (docs_dev/retrait_bouton_generer_echeancier/,
+                         docs_dev/bouton_generation_echeancier/) - un dossier créé puis approuvé
+                         sans ré-écriture d'un champ source (_SCHEDULE_TRIGGER_FIELDS) ni flux
+                         avis ni décaissement n'a jamais d'échéancier persisté (cas IS/003362).
+                         Toujours visible tant que le crédit est modifiable et que le calcul est
+                         possible (montant + nb échéances + périodicité) : permet aussi un
+                         recalcul forcé sur un échéancier existant (décision Micka). Le garde-fou
+                         loan_amount/term est doublé côté serveur dans
+                         action_generate_schedule_button(). -->
+                    <button name="action_generate_schedule_button" type="object"
+                            groups="microfinance_loan_management.group_microfinance_user"
+                            invisible="state not in ('draft','enquete','avis_ca','avis_cdag','approved') or not loan_amount or not term or not repayment_frequency_id">
+                        <i class="fa fa-calendar-plus-o"/> Générer l'échéancier
+                    </button>
                 </header>
                 <sheet>
                     <div class="oe_button_box" name="button_box">
@@ -127,6 +154,15 @@
                             <field name="finance_user_id"/>
                             <field name="collection_agent_id"/>
                             <field name="reschedule_count"/>
+                            <!-- Téléversement du contrat signé : disponible dès que le crédit
+                                 est approuvé (prérequis à l'activation - action_disburse() bloque
+                                 tant que ce champ est vide). Reste visible ensuite pour
+                                 consultation. À l'enregistrement, une copie est postée dans le
+                                 chatter (microfinance.loan.write -> _post_signed_contract_to_chatter)
+                                 et la pièce jointe du champ devient non supprimable
+                                 (ir.attachment.unlink) - un remplacement reste possible. -->
+                            <field name="signed_contract_filename" invisible="1"/>
+                            <field name="signed_contract" widget="binary" filename="signed_contract_filename" invisible="state not in ('approved', 'active', 'closed', 'defaulted', 'written_off')"/>
                         </group>
                     </group>
                     <group string="Résumé financier">
@@ -137,12 +173,34 @@
                         <field name="balance_total" readonly="1"/>
                         <field name="overdue_amount" readonly="1"/>
                         <field name="overdue_installment_count" readonly="1"/>
-                        <field name="internal_score" widget="progressbar" readonly="1"/>
+                        <!-- Score + bouton "Recalculer le score" sur la même ligne.
+                             Le couple <label> + <div class="o_row"> forme une paire
+                             label/valeur normale de la grille du <group> : un <button> nu
+                             enfant direct ne consommerait qu'une demi-paire et décalerait
+                             tout l'alignement en dessous. name/type du bouton inchangés.
+                             NB : internal_score n'est plus enfant direct du <group> ->
+                             la vue héritée scoring cible ancestor::group[1] (voir
+                             microfinance_scoring_views.xml). -->
+                        <label for="internal_score" string="Score"/>
+                        <div class="o_row">
+                            <field name="internal_score" widget="progressbar" readonly="1" nolabel="1"/>
+                            <button name="action_recompute_risk" string="Recalculer le score" type="object" class="btn-secondary btn-sm" icon="fa-refresh"/>
+                        </div>
                         <field name="provision_amount" readonly="1"/>
                         <field name="provision_posted_amount" readonly="1"/>
                         <field name="guarantee_total" readonly="1"/>
                         <field name="fee_amount_due" readonly="1"/>
-                        <field name="fee_paid" readonly="1"/>
+                        <!-- Badge état frais (vert payé / rouge non payé), style calqué sur le
+                             badge risk_level du scoring. fee_paid reste dans la vue (invisible)
+                             car le bouton "Encaisser les frais de dossier" l'utilise dans son
+                             modifier invisible=. -->
+                        <field name="fee_payment_state" widget="badge" readonly="1"
+                               decoration-success="fee_payment_state == 'paid'"
+                               decoration-danger="fee_payment_state == 'unpaid'"
+                               decoration-muted="fee_payment_state == 'none'"
+                               invisible="fee_payment_state == 'none'"/>
+                        <field name="fee_paid" invisible="1"/>
+                        <field name="fee_receivable_move_id" readonly="1" invisible="not fee_receivable_move_id"/>
                         <field name="fee_move_id" readonly="1"/>
                         <field name="net_disbursed_amount" readonly="1"/>
                         <field name="bypass_cash_balance" invisible="state != 'approved'"/>
@@ -175,10 +233,12 @@
                             </group>
                         </page>
                         <!-- readonly="1" : empêche l'édition manuelle des lignes, pas un obstacle
-                             à la persistance - write() régénère réellement ce champ à chaque
-                             modification de loan_amount/term/etc. (cf. _SCHEDULE_TRIGGER_FIELDS,
-                             microfinance_loan.py), l'aperçu onchange seul ne suffisait pas (cf.
-                             docs_dev/echeancier_obsolete_readonly/AUDIT.md). -->
+                             à la persistance - write() (re)génère réellement ce champ à chaque
+                             sauvegarde tant que le crédit est modifiable, y compris la première
+                             fois (cf. _SCHEDULE_TRIGGER_FIELDS, microfinance_loan.py) ; l'aperçu
+                             onchange seul ne suffisait pas (cf. docs_dev/echeancier_obsolete_
+                             readonly/AUDIT.md). Il n'y a plus de bouton "Générer échéancier" :
+                             cf. docs_dev/retrait_bouton_generer_echeancier/. -->
                         <page string="Échéancier"><field name="installment_ids" readonly="1"/></page>
                         <page string="Remboursements"><field name="payment_ids" readonly="1"/></page>
                         <page string="Garanties"><field name="guarantee_ids" context="{'default_loan_id': id}"/></page>

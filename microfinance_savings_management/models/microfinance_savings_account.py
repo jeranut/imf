@@ -2,7 +2,7 @@
 from dateutil.relativedelta import relativedelta
 
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 
 class MicrofinanceSavingsAccount(models.Model):
@@ -13,7 +13,20 @@ class MicrofinanceSavingsAccount(models.Model):
 
     name = fields.Char(string='Référence', default='Nouveau', copy=False, readonly=True, tracking=True)
     partner_id = fields.Many2one('res.partner', string='Titulaire', required=True, tracking=True)
-    product_id = fields.Many2one('microfinance.savings.product', string="Produit d'épargne", required=True, tracking=True)
+    # Conteneur épargne (Lot 1.2, docs_dev/epargne_exigee_display/AUDIT_LOT0_conteneur_epargne.md)
+    # : un enregistrement strictement vide (pas de produit, jamais de solde/transaction),
+    # symétrique de microfinance.loan.account côté crédit - un par client, créé automatiquement
+    # au 1er crédit (Lot 1.4, pas encore implémenté à ce stade). product_id n'est donc plus
+    # `required=True` au niveau champ (un conteneur n'en a pas) : la contrainte devient
+    # conditionnelle, cf. _check_product_required_unless_container ci-dessous.
+    is_container = fields.Boolean(
+        string='Conteneur (sans produit)', default=False, copy=False, readonly=True,
+        help="Coché uniquement pour l'enregistrement conteneur créé automatiquement par client "
+             "(référence de base synchronisée avec le compte crédit) - jamais de produit, de "
+             "solde, ni de transaction. Les comptes épargne réels du client sont rattachés en "
+             "dessous dans la référence (séquence par type), pas sur ce champ.",
+    )
+    product_id = fields.Many2one('microfinance.savings.product', string="Produit d'épargne", tracking=True)
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True, tracking=True)
     currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)
     state = fields.Selection([
@@ -27,7 +40,7 @@ class MicrofinanceSavingsAccount(models.Model):
     closing_date = fields.Date(string='Date de clôture', readonly=True)
     maturity_date = fields.Date(compute='_compute_maturity_date', store=True, string='Date d\'échéance')
     microfinance_loan_id = fields.Many2one(
-        'microfinance.loan', string='Crédit lié',
+        'microfinance.loan', string='Crédit lié', domain="[('partner_id', '=', partner_id)]",
         help="Renseigné quand ce compte est une épargne obligatoire constituée pour un crédit précis.",
     )
     transaction_ids = fields.One2many('microfinance.savings.transaction', 'account_id', string='Transactions')
@@ -63,38 +76,44 @@ class MicrofinanceSavingsAccount(models.Model):
                 # agency_code est obligatoire sur res.company (NOT NULL) : toute société valide
                 # en possède un, pas besoin de re-vérifier ici.
                 company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
-                partner = self.env['res.partner'].browse(vals.get('partner_id'))
-                product = self.env['microfinance.savings.product'].browse(vals.get('product_id'))
-                type_code = self._get_account_type_code(product)
-                vals['name'] = self._get_savings_account_name(company, partner, type_code)
+                if vals.get('is_container'):
+                    partner = self.env['res.partner'].browse(vals.get('partner_id'))
+                    vals['name'] = self._get_savings_container_name(company, partner)
+                else:
+                    product = self.env['microfinance.savings.product'].browse(vals.get('product_id'))
+                    type_code = self._get_account_type_code(product)
+                    vals['name'] = self._get_savings_account_name(company, type_code)
         return super().create(vals_list)
 
-    def _get_savings_account_name(self, company, partner, type_code):
-        """Le 1er compte épargne d'un type donné pour un client reprend le numéro de compte
-        permanent du client (AGENCE/TYPE/NNNNNN, même suffixe numérique que
-        partner.microfinance_account_number : IS/000001 -> IS/I/000001) — synchronisé
-        mécaniquement, sans séquence propre, cf. correctif numérotation à trois niveaux.
-        Un compte supplémentaire du même type pour le même client (cas réel : épargne
-        obligatoire liée à un crédit en parallèle d'une épargne volontaire, ou plusieurs
-        comptes volontaires) ne peut pas reprendre ce même numéro sans collision : il garde
-        l'ancienne numérotation par séquence indépendante, propre à ce type, pour rester
-        unique.
-
-        Les deux mécanismes (dérivation directe et séquence indépendante) partagent le même
-        espace de numéros AGENCE/TYPE/NNNNNN sans se coordonner entre eux : sans vérification,
-        rien n'empêche qu'un numéro déjà pris par l'un soit retiré par l'autre (dans les deux
-        sens, pas seulement à la toute première utilisation) — cf. bug détecté par
-        test_second_account_same_type_falls_back_to_independent_sequence. D'où la vérification
-        d'unicité explicite ci-dessous avant de retenir un candidat, avec repli sur la séquence
-        indépendante (en boucle si besoin) tant que le nom dérivé est déjà pris."""
-        existing_same_type = self.search([('partner_id', '=', partner.id)]).filtered(
-            lambda a: self._get_account_type_code(a.product_id) == type_code
-        )
-        if not existing_same_type and partner.microfinance_account_number:
+    def _get_savings_container_name(self, company, partner):
+        """Conteneur épargne (Lot 1.4, docs_dev/epargne_exigee_display/
+        AUDIT_LOT0_conteneur_epargne.md) : réutilise directement le numéro de compte permanent
+        du client, préfixé 'I' (AGENCE/I/SUFFIXE) - même procédé que microfinance.loan.account.
+        _get_loan_account_name() côté crédit (microfinance_loan_management), à qui ce numéro
+        doit rester synchronisé (même suffixe numérique). Repli sur la séquence indépendante du
+        type 'I' (comme un compte réel classique) si le client n'a pas encore de numéro
+        permanent - résiduel après le Lot 1.1 (tout partenaire empruntant en obtient un dès son
+        1er crédit, avant l'appel à cette méthode)."""
+        if partner.microfinance_account_number:
             agency, suffix = partner.microfinance_account_number.split('/', 1)
-            candidate = '%s/%s/%s' % (agency, type_code, suffix)
+            candidate = '%s/I/%s' % (agency, suffix)
             if not self.search_count([('name', '=', candidate)]):
                 return candidate
+        return self._get_next_available_savings_account_name(company, 'I')
+
+    def _get_savings_account_name(self, company, type_code):
+        """Tout compte épargne réel - le premier d'un type donné pour un client comme les
+        suivants - tire désormais son numéro de la séquence partagée par type
+        (AGENCE/TYPE/NNNNNN, indépendante par type_code, partagée entre tous les clients de
+        l'agence), plus jamais du numéro de compte permanent du client.
+
+        Changement de comportement assumé (Lot 1.3, docs_dev/epargne_exigee_display/
+        AUDIT_LOT0_conteneur_epargne.md, validé par Micka le 31/08/2026) : avant ce Lot, le 1er
+        compte d'un type donné reprenait directement ce numéro (IS/000001 -> IS/I/000001,
+        cf. historique dans test_savings_account_number_derivation.py, réécrit en conséquence).
+        Le numéro de compte permanent devient exclusivement réservé au conteneur épargne (Lot
+        1.4, pas encore implémenté à ce stade - aucune dépendance technique entre les deux
+        méthodes ici)."""
         return self._get_next_available_savings_account_name(company, type_code)
 
     def _get_next_available_savings_account_name(self, company, type_code):
@@ -161,6 +180,10 @@ class MicrofinanceSavingsAccount(models.Model):
                              bypass_withdrawal_limit=False, bypass_cash_balance=False,
                              related_loan_payment_id=False, date=None, payment_method='cash'):
         self.ensure_one()
+        if self.is_container:
+            raise UserError(_(
+                "Un conteneur épargne (%s) ne peut recevoir aucune transaction."
+            ) % self.name)
         transaction = self.env['microfinance.savings.transaction'].create({
             'account_id': self.id,
             'transaction_type': transaction_type,
@@ -176,8 +199,42 @@ class MicrofinanceSavingsAccount(models.Model):
         transaction.action_post()
         return transaction
 
+    @api.constrains('microfinance_loan_id', 'partner_id')
+    def _check_microfinance_loan_partner_match(self):
+        # Le domain= posé sur le champ (ci-dessus) ne protège que la sélection depuis le
+        # formulaire - un import, un appel ORM direct ou un menu de création sans contexte crédit
+        # le contournent sans effort. Cf. docs_dev/epargne_exigee_display/
+        # AUDIT_COMPLEMENT_credit_lie.md : rien ne garantissait jusqu'ici que le crédit lié
+        # appartienne bien au titulaire du compte.
+        for account in self:
+            if account.microfinance_loan_id and account.microfinance_loan_id.partner_id != account.partner_id:
+                raise ValidationError(_(
+                    "Le crédit lié (%(loan)s) appartient à %(loan_partner)s, pas à %(account_partner)s "
+                    "(titulaire de ce compte épargne)."
+                ) % {
+                    'loan': account.microfinance_loan_id.name,
+                    'loan_partner': account.microfinance_loan_id.partner_id.name,
+                    'account_partner': account.partner_id.name,
+                })
+
+    @api.constrains('is_container', 'product_id')
+    def _check_product_required_unless_container(self):
+        # product_id n'est plus required=True au niveau champ (cf. commentaire sur le champ) -
+        # cette contrainte reproduit l'ancienne garantie pour tout compte réel, tout en
+        # l'exemptant explicitement pour un conteneur.
+        for account in self:
+            if not account.is_container and not account.product_id:
+                raise ValidationError(_(
+                    "Le produit d'épargne est obligatoire, sauf pour un enregistrement conteneur."
+                ))
+
     def action_activate(self):
         for account in self:
+            if account.is_container:
+                raise UserError(_(
+                    "Un conteneur épargne (%s) ne peut pas être activé - ce n'est pas un compte "
+                    "réel, seuls les comptes rattachés en dessous le sont."
+                ) % account.name)
             if account.state != 'draft':
                 raise UserError(_('Seul un compte en brouillon peut être activé.'))
             if account.product_id.min_opening_amount and account.balance < account.product_id.min_opening_amount:
@@ -189,6 +246,11 @@ class MicrofinanceSavingsAccount(models.Model):
 
     def action_close(self, reason_type=None, reason_note=None):
         for account in self:
+            if account.is_container:
+                raise UserError(_(
+                    "Un conteneur épargne (%s) ne peut pas être clôturé - ce n'est pas un compte "
+                    "réel, seuls les comptes rattachés en dessous le sont."
+                ) % account.name)
             if account.state == 'closed':
                 continue
             if (account.microfinance_loan_id and account.microfinance_loan_id.state == 'active'

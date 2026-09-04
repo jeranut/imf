@@ -549,6 +549,15 @@ class ResPartner(models.Model):
             else:
                 partner.microfinance_id_number = value
 
+    def get_contrat_address(self):
+        """Adresse « monina ao amin'ny … » du contrat de crédit : concaténation de
+        `street`, du fokontany (`microfinance_fokontany_id.name`) et de `city`, dans
+        cet ordre, segments vides ignorés, séparés par « , ». Chaîne vide si aucun
+        segment — le template garde le fragment sous t-if."""
+        self.ensure_one()
+        parts = (self.street, self.microfinance_fokontany_id.name, self.city)
+        return ', '.join(part for part in parts if part)
+
     @api.depends('microfinance_blacklist_ids.active', 'microfinance_blacklist_ids.date_end')
     def _compute_microfinance_is_blacklisted(self):
         today = fields.Date.context_today(self)

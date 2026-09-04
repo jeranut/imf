@@ -687,10 +687,21 @@ class MicrofinanceLoanApplication(models.Model):
         help='Reprend automatiquement le montant du crédit lié — non modifiable depuis le '
              'dossier, à ajuster sur le crédit (microfinance.loan) si besoin.',
     )
+    # Chantier "Épargne exigée/disponible" (docs_dev/epargne_exigee_disponible/AUDIT.md) :
+    # anciennement en saisie libre (aucun related=), redevenu related= comme requested_amount
+    # ci-dessus - vers guarantee_savings_required/guarantee_savings_balance, champs qui
+    # n'existent que si microfinance_savings_management est installé (module de base seul n'a
+    # aucune notion d'épargne garantie) - même situation déjà assumée par ca_required_savings/
+    # cdag_required_savings plus bas (related vers avis_ca_epargne_exigee/avis_cdag_epargne_
+    # exigee, définis eux aussi dans l'extension épargne). Le champ DOIT rester déclaré ici (pas
+    # dans l'extension épargne) : la vue de ce module de base le référence directement, et un
+    # champ related dont la CIBLE n'existe pas encore au chargement (résolution paresseuse,
+    # setup_related) n'est pas un problème - un champ absent l'est (erreur de validation de vue
+    # au chargement du module de base, avant même que l'extension épargne ne soit traitée -
+    # constaté en le déplaçant par erreur, cf. historique de ce Lot).
     required_savings = fields.Monetary(
-        string='Épargne exigée (demande)',
-        help="Saisie libre : aucun champ équivalent sur microfinance.loan à refléter (pas de "
-             "notion d'épargne exigée pour la demande initiale, avant tout avis CA/CDAG).")
+        related='loan_id.guarantee_savings_required', string='Épargne exigée (demande)', readonly=True,
+    )
     repayment_amount = fields.Monetary(
         related='loan_id.installment_amount', string='Remboursement (demande)', readonly=True,
         help="Reprend automatiquement l'échéance du crédit lié (avant tout avis CA/CDAG - une "
@@ -701,10 +712,13 @@ class MicrofinanceLoanApplication(models.Model):
     period = fields.Integer(
         related='loan_id.term', string='Durée demandée (échéances)', readonly=True,
         help='Reprend automatiquement la durée du crédit lié — mêmes règles que requested_amount.')
+    # Même remarque que required_savings ci-dessus. guarantee_savings_balance (contrairement à
+    # savings_amount, déjà défini ailleurs dans l'extension épargne) est filtré sur le produit
+    # d'épargne garantie spécifique du crédit, pas la somme globale des comptes du client - ne
+    # pas confondre les deux à une future relecture.
     available_savings = fields.Monetary(
-        string='Épargne disponible',
-        help="Saisie libre : aucun champ équivalent sur microfinance.loan (information externe, "
-             "pas une valeur dérivée du crédit).")
+        related='loan_id.guarantee_savings_balance', string='Épargne disponible', readonly=True,
+    )
     ca_amount = fields.Monetary(
         related='loan_id.avis_ca_amount', string='Montant avis CA', readonly=True, tracking=True,
         help='Reprend automatiquement avis_ca_amount du crédit lié — à modifier sur le crédit '
@@ -751,26 +765,102 @@ class MicrofinanceLoanApplication(models.Model):
     second_committee_review_id = fields.Many2one(
         'microfinance.credit.committee.review', string='2ème comité d\'octroi', readonly=True, copy=False)
 
+    # Ex-champs `related=` (cf. docs_dev/blocage_approbation_comite_octroi/
+    # DIAGNOSTIC_refus_silencieux.md) : un `related=` writable utilise TOUJOURS
+    # Field._inverse_related comme inverse, quel que soit un `inverse=` fourni en argument -
+    # odoo/fields.py:setup_related l'écrase inconditionnellement sauf si le champ est
+    # `readonly=True` (précédent réel dans Odoo core :
+    # base_automation.model_name/_inverse_model_name, mais justement readonly=True, jamais édité
+    # depuis un formulaire). Un readonly=True ici aurait recréé le "même piège" déjà documenté
+    # sur le chantier Avis CA/CDAG (docs_dev/workflow_avis_ca_cdag/STATUS.md, écart n°4) : le
+    # client web n'envoie jamais la valeur d'un champ readonly au save, même après onchange -
+    # inacceptable puisque ces champs sont saisis directement dans le formulaire (widget=radio).
+    #
+    # Solution retenue, plus radicale qu'un simple `inverse=` : PAS d'inverse du tout sur ces
+    # champs (simples `compute=`, en lecture) - l'écriture est interceptée en amont, directement
+    # dans write() ci-dessous, qui route les valeurs vers le(s) enregistrement(s) enfant en UN
+    # SEUL write() par slot. Un premier essai avec `inverse=` partagée entre les 5/3 champs d'un
+    # même comité (pour que decision+comment posés ensemble n'aient pas à passer par 2 write()
+    # séparés sur l'enfant - _check_comment_required_if_refused lèverait sinon prématurément,
+    # cf. write() ci-dessous) s'est heurté à un piège Odoo distinct et plus sournois : les champs
+    # d'un même groupe `compute` NON présents dans les vals d'origine ne sont PAS recalculés au
+    # moment où l'inverse partagée les relit (seuls ceux explicitement écrits sont rafraîchis) -
+    # une simple lecture de committee_first_review_date à cet instant pouvait donc renvoyer une
+    # valeur vide et l'écraser en base (constaté : NotNullViolation sur review_date, y compris
+    # sur un test préexistant qui ne touchait qu'à committee_first_decision seul). Contourné en
+    # ne lisant plus JAMAIS ces champs depuis l'intérieur d'un inverse - write() ci-dessous
+    # travaille uniquement à partir du dict `vals` reçu, sans repasser par l'ORM du parent.
+    # readonly=False explicite obligatoire sur les 8 champs ci-dessous : un compute= sans
+    # inverse= ET sans readonly= explicite devient automatiquement readonly=True côté framework
+    # (odoo/fields.py::Field._get_attrs(), attrs['readonly'] = attrs.get('readonly', not
+    # attrs.get('inverse'))) - régression réelle découverte après coup (cf. docs_dev/
+    # blocage_approbation_comite_octroi/AUDIT_readonly_1er_comite.md) : sans ce readonly=False,
+    # le client web ne renvoie jamais ces champs à la sauvegarde (il les croit readonly), donc
+    # l'interception dans write() ci-dessous n'est jamais atteinte depuis le formulaire - les
+    # tests ORM directs (write() appelé en Python) ne détectent pas cette différence, seul un
+    # vrai formulaire (ou une assertion explicite sur .readonly) la révèle.
     committee_first_review_date = fields.Date(
-        related='first_committee_review_id.review_date', string='Date', readonly=False)
+        string='Date', compute='_compute_committee_first_fields', readonly=False)
     committee_first_decision = fields.Selection(
-        related='first_committee_review_id.decision', string='Décision', readonly=False)
+        [('accepted', 'Accepté'), ('refused', 'Refusé'), ('postponed', 'Reporté')],
+        string='Décision', compute='_compute_committee_first_fields', readonly=False)
     committee_first_postpone_reason = fields.Selection(
-        related='first_committee_review_id.postpone_reason', string='Raison du report', readonly=False)
+        [('vad', 'VAD'), ('vav', 'VAV'), ('incomplete_file', 'Dossier incomplet'),
+         ('activity_analysis', 'Analyse activité'),
+         ('prior_repayment_issue', 'Problème remboursement prêt précédent')],
+        string='Raison du report', compute='_compute_committee_first_fields', readonly=False)
     committee_first_complement = fields.Text(
-        related='first_committee_review_id.complement', string='Complément', readonly=False,
+        string='Complément', compute='_compute_committee_first_fields', readonly=False,
         help="Libellé de la fiche papier tronqué (\"Complément sur ...\") - implémenté comme "
              "texte libre générique faute de précision. Cf. question ouverte n°2 de "
              "docs_dev/comite_octroi/AUDIT.md, toujours sans réponse au moment de ce lot.")
     committee_first_comment = fields.Text(
-        related='first_committee_review_id.comment', string='Commentaires', readonly=False)
+        string='Commentaires', compute='_compute_committee_first_fields', readonly=False)
 
     committee_second_review_date = fields.Date(
-        related='second_committee_review_id.review_date', string='Date', readonly=False)
+        string='Date', compute='_compute_committee_second_fields', readonly=False)
     committee_second_decision = fields.Selection(
-        related='second_committee_review_id.decision', string='Décision', readonly=False)
+        [('accepted', 'Accepté'), ('refused', 'Refusé'), ('postponed', 'Reporté')],
+        string='Décision', compute='_compute_committee_second_fields', readonly=False)
     committee_second_comment = fields.Text(
-        related='second_committee_review_id.comment', string='Commentaires', readonly=False)
+        string='Commentaires', compute='_compute_committee_second_fields', readonly=False)
+
+    # Table de correspondance champ parent -> champ réel sur microfinance.credit.committee.review,
+    # utilisée par write() ci-dessous (seul point d'écriture de ces champs, cf. commentaire plus
+    # haut sur le bloc de champs).
+    _COMMITTEE_FIRST_FIELD_MAP = {
+        'committee_first_review_date': 'review_date',
+        'committee_first_decision': 'decision',
+        'committee_first_postpone_reason': 'postpone_reason',
+        'committee_first_complement': 'complement',
+        'committee_first_comment': 'comment',
+    }
+    _COMMITTEE_SECOND_FIELD_MAP = {
+        'committee_second_review_date': 'review_date',
+        'committee_second_decision': 'decision',
+        'committee_second_comment': 'comment',
+    }
+
+    @api.depends('first_committee_review_id.review_date', 'first_committee_review_id.decision',
+                 'first_committee_review_id.postpone_reason', 'first_committee_review_id.complement',
+                 'first_committee_review_id.comment')
+    def _compute_committee_first_fields(self):
+        for application in self:
+            review = application.first_committee_review_id
+            application.committee_first_review_date = review.review_date
+            application.committee_first_decision = review.decision
+            application.committee_first_postpone_reason = review.postpone_reason
+            application.committee_first_complement = review.complement
+            application.committee_first_comment = review.comment
+
+    @api.depends('second_committee_review_id.review_date', 'second_committee_review_id.decision',
+                 'second_committee_review_id.comment')
+    def _compute_committee_second_fields(self):
+        for application in self:
+            review = application.second_committee_review_id
+            application.committee_second_review_date = review.review_date
+            application.committee_second_decision = review.decision
+            application.committee_second_comment = review.comment
 
     def action_add_second_committee_review(self):
         """Crée le 2ème comité d'octroi (bouton, visible en vue seulement si le 1er comité a
@@ -792,9 +882,16 @@ class MicrofinanceLoanApplication(models.Model):
 
     def _ensure_committee_review_slot(self):
         """Garantit la présence du 1er emplacement de comité d'octroi, même patron que
-        _ensure_field_visit_slots (Section VI) - appelée uniquement depuis create(), jamais
-        depuis read(). Le 2ème emplacement n'est PAS créé ici (cf. commentaire du bloc de champs
-        ci-dessus) : action_add_second_committee_review() s'en charge, à la demande."""
+        _ensure_field_visit_slots (Section VI) - appelée depuis create() (bootstrap, ligne vide)
+        ET, depuis ce Lot, depuis write() ci-dessus (création à la volée dès qu'une décision est
+        saisie sur un dossier qui n'a pas encore de slot - cf. docs_dev/
+        blocage_approbation_comite_octroi/DIAGNOSTIC_refus_silencieux.md). Jamais appelée depuis
+        read() (cf. limite de concurrence documentée sur _ensure_default_financial_lines plus
+        haut dans ce fichier - non applicable ici, write() s'exécute dans un flux unique, pas
+        d'un read() potentiellement parallèle). Idempotente (recherche puis create seulement si
+        rien n'existe) : sûre à appeler à chaque write() concerné, sans risque de doublon. Le
+        2ème emplacement n'est PAS créé ici (cf. commentaire du bloc de champs ci-dessus) :
+        action_add_second_committee_review() s'en charge, à la demande."""
         self.ensure_one()
         if self.first_committee_review_id:
             return
@@ -818,6 +915,7 @@ class MicrofinanceLoanApplication(models.Model):
                 'application_id': self.id,
                 'committee_number': 'first',
             })
+
 
     # ------------------------------------------------------------------
     # Calculs
@@ -1448,10 +1546,32 @@ class MicrofinanceLoanApplication(models.Model):
             self.income_line_ids = [(0, 0, vals) for vals in new_line_vals]
 
     def write(self, vals):
+        # committee_first_*/committee_second_* : interceptés ici plutôt que via un inverse=
+        # (cf. commentaire sur le bloc de champs Section VIII) - retirés de `vals` et routés en
+        # UN SEUL write() vers le slot comité concerné (créé à la volée si besoin), pour ne
+        # jamais reproduire l'échec silencieux diagnostiqué ni déclencher prématurément
+        # _check_comment_required_if_refused (qui validerait 'decision' avant que 'comment' n'ait
+        # été posé si on les séparait en deux write() successifs sur l'enfant).
+        first_vals = {self._COMMITTEE_FIRST_FIELD_MAP[k]: v for k, v in vals.items()
+                      if k in self._COMMITTEE_FIRST_FIELD_MAP}
+        second_vals = {self._COMMITTEE_SECOND_FIELD_MAP[k]: v for k, v in vals.items()
+                       if k in self._COMMITTEE_SECOND_FIELD_MAP}
+        if first_vals or second_vals:
+            vals = {k: v for k, v in vals.items() if k not in self._COMMITTEE_FIRST_FIELD_MAP
+                    and k not in self._COMMITTEE_SECOND_FIELD_MAP}
         if 'state' in vals:
             for application in self:
                 application._check_state_transition(application.state, vals['state'])
-        return super().write(vals)
+        result = super().write(vals) if vals else True
+        if first_vals:
+            for application in self:
+                application._ensure_committee_review_slot()
+                application.first_committee_review_id.write(first_vals)
+        if second_vals:
+            for application in self:
+                application.action_add_second_committee_review()
+                application.second_committee_review_id.write(second_vals)
+        return result
 
     def _check_state_transition(self, current, new):
         self.ensure_one()

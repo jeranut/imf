@@ -75,3 +75,35 @@ class TestPartnerAccountNumber(MicrofinanceCommon):
         })
         self.assertNotEqual(partner.microfinance_account_number, 'XX/999999')
         self.assertTrue(partner.microfinance_account_number)
+
+    # --- Extension Lot 1.1 (conteneur épargne) : tout partenaire empruntant doit obtenir un
+    # numéro permanent, plus seulement microfinance_partner_type == 'client' - cas réels
+    # constatés sur SEFOR (BM, type 'bailleur', et un partenaire de type vide, tous deux avec un
+    # crédit mais sans numéro permanent), cf. docs_dev/epargne_exigee_display/
+    # AUDIT_LOT0_conteneur_epargne.md, section 6.
+
+    def test_borrower_without_client_type_gets_account_number_on_first_loan(self):
+        partner = self.env['res.partner'].create({'name': 'Bailleur Emprunteur Test', 'microfinance_partner_type': 'bailleur'})
+        self.assertFalse(partner.microfinance_account_number)
+        self._create_loan(partner_id=partner.id)
+        self.assertTrue(partner.microfinance_account_number)
+
+    def test_borrower_without_any_partner_type_gets_account_number_on_first_loan(self):
+        partner = self.env['res.partner'].create({'name': 'Partenaire Sans Type Test'})
+        self.assertFalse(partner.microfinance_partner_type)
+        self._create_loan(partner_id=partner.id)
+        self.assertTrue(partner.microfinance_account_number)
+
+    def test_partner_without_loan_still_gets_no_account_number(self):
+        # Non-régression : ne pas numéroter systématiquement tout partenaire, seulement ceux qui
+        # empruntent réellement (déclencheur = création d'un microfinance.loan, pas juste
+        # l'existence du partenaire).
+        partner = self.env['res.partner'].create({'name': 'Bailleur Non Emprunteur Test', 'microfinance_partner_type': 'bailleur'})
+        self.assertFalse(partner.microfinance_account_number)
+
+    def test_second_loan_does_not_reassign_account_number(self):
+        partner = self.env['res.partner'].create({'name': 'Bailleur Deux Crédits Test', 'microfinance_partner_type': 'bailleur'})
+        self._create_loan(partner_id=partner.id)
+        first_number = partner.microfinance_account_number
+        self._create_loan(partner_id=partner.id)
+        self.assertEqual(partner.microfinance_account_number, first_number)

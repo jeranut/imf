@@ -34,6 +34,10 @@ LOAN_NEW_SUBACCOUNTS = {
     '208002': ('Produits à recevoir - Intérêts échus groupe', 'asset_current', False),
     '208003': ('Produits à recevoir - Intérêts échus à recevoir individuel', 'asset_current', False),
     '208004': ('Produits à recevoir - Intérêts échus à recevoir groupe', 'asset_current', False),
+    # Créance "frais de dossier à recevoir" (flux Option A : engagement à l'approbation, soldé
+    # à l'encaissement) - docs_dev/frais_dossier_creance_pcec/. reconcile=True (lettrage
+    # engagement <-> règlement), contrairement aux 208001-004 (intérêts, jamais lettrés).
+    '208005': ('Produits à recevoir - Frais de dossier sur crédit', 'asset_current', True),
     '325001': ("Produits reçus ou constatés d'avance - Pénalités comptabilisées d'avance individuel", 'liability_current', False),
     '325002': ("Produits reçus ou constatés d'avance - Pénalités comptabilisées d'avance groupe", 'liability_current', False),
     '326101': ('Produits réservés sur échéances de crédit non imputées - Revenu pénalités avance individuel', 'income', False),

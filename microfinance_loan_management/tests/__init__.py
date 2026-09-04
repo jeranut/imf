@@ -61,3 +61,5 @@ from . import test_credit_committee_review
 from . import test_installment_schedule_persistence
 from . import test_schedule_negative_reliquat_guard
 from . import test_locked_dossier_fields
+from . import test_committee_octroi_approval_guard
+from . import test_committee_review_lazy_slot

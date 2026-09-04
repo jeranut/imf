@@ -29,3 +29,9 @@ class MicrofinanceLoanApplication(models.Model):
     guarantee_savings_required = fields.Monetary(
         related='loan_id.guarantee_savings_required', string='Épargne garantie requise (crédit)', readonly=True,
     )
+    # required_savings/available_savings (chantier "Épargne exigée/disponible", docs_dev/
+    # epargne_exigee_disponible/AUDIT.md) : redéfinis directement dans microfinance_loan_
+    # management/models/microfinance_loan_application.py (pas ici) - un champ related= dont la
+    # CIBLE n'existe pas encore au chargement se résout paresseusement sans problème, mais le
+    # CHAMP lui-même doit exister dès le chargement du module de base (sa propre vue le
+    # référence) - cf. commentaire détaillé sur ces deux champs dans ce fichier.

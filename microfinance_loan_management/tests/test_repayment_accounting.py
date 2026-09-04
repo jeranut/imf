@@ -118,6 +118,8 @@ class TestRepaymentAccounting(MicrofinanceCommon):
         loan_b.action_start_enquete()
         loan_b.action_ca_review()
         loan_b.action_cdag_review()
+        loan_b.action_view_applications()
+        loan_b.application_ids.write({'committee_first_decision': 'accepted'})
         loan_b.action_approve()
         loan_b.action_disburse()
 

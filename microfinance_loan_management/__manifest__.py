@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Loan Management',
-    'version': '17.0.1.10.0',
+    'version': '17.0.1.11.0',
     'summary': 'Gestion des crédits clients pour institutions de microfinance',
     'description': 'Produits de crédit, demandes, approbations, échéanciers, remboursements, pénalités, recouvrement et risque.',
     'category': 'Accounting/Finance',
@@ -25,6 +25,7 @@
         'report/microfinance_loan_disbursement_receipt.xml',
         'report/microfinance_loan_repayment_schedule_report.xml',
         'report/microfinance_caisse_fiche_journee_report.xml',
+        'report/report_contrat_credit.xml',
         'views/microfinance_res_company_views.xml',
         'views/microfinance_loan_product_views.xml',
         'views/microfinance_loan_progressive_program_views.xml',
@@ -50,7 +51,6 @@
         'wizard/microfinance_loan_reschedule_wizard_views.xml',
         'wizard/microfinance_loan_writeoff_wizard_views.xml',
         'wizard/microfinance_loan_payment_cancel_wizard_views.xml',
-        'wizard/microfinance_loan_schedule_rounding_wizard_views.xml',
         'views/microfinance_dashboard_views.xml',
         'views/microfinance_partner_views.xml',
         'views/microfinance_client_blacklist_views.xml',
@@ -76,6 +76,7 @@
             'microfinance_loan_management/static/src/xml/microfinance_caisse_pos.xml',
             'microfinance_loan_management/static/src/scss/microfinance_loan_dashboard.scss',
             'microfinance_loan_management/static/src/scss/microfinance_loan_application_form.scss',
+            'microfinance_loan_management/static/src/scss/microfinance_loan_form.scss',
             'microfinance_loan_management/static/src/scss/microfinance_caisse_pos.scss',
         ],
     },

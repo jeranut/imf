@@ -179,7 +179,11 @@
                     <field name="scoring_line_count" widget="statinfo" string="Scoring"/>
                 </button>
             </xpath>
-            <xpath expr="//field[@name='internal_score']/parent::group" position="after">
+            <!-- ancestor::group[1] (et non parent::group) : internal_score peut être
+                 imbriqué dans un <div class="o_row"> à l'intérieur du groupe "Résumé
+                 financier" (bouton "Recalculer le score" sur la même ligne) - parent::group
+                 ne le localiserait alors plus. -->
+            <xpath expr="//field[@name='internal_score']/ancestor::group[1]" position="after">
                 <group string="Scoring interne">
                     <field name="scoring_profile_id"/>
                     <field name="risk_level" widget="badge" readonly="1" decoration-success="risk_level == 'low'" decoration-warning="risk_level == 'medium'" decoration-danger="risk_level in ('high','critical')"/>

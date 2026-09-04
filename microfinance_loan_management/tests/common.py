@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import base64
+
 from odoo.tests.common import TransactionCase
 
 
@@ -104,6 +106,12 @@ class MicrofinanceCommon(TransactionCase):
             'product_id': self.product.id,
             'loan_amount': 1200.0,
             'term': 6,
+            # Contrat signé factice : action_disburse() l'exige désormais comme
+            # prérequis d'activation (cf. microfinance.loan.action_disburse). Sans
+            # rapport avec ce que testent les appelants ; surchargeable via kwargs
+            # (ex. signed_contract=False) si un test veut en vérifier l'absence.
+            'signed_contract': base64.b64encode(b'test signed contract'),
+            'signed_contract_filename': 'contrat_signe_test.pdf',
         }
         vals.update(kwargs)
         return self.env['microfinance.loan'].create(vals)
@@ -114,6 +122,12 @@ class MicrofinanceCommon(TransactionCase):
         loan.action_start_enquete()
         loan.action_ca_review()
         loan.action_cdag_review()
+        # Comité d'octroi accepté (filet de sécurité action_approve, docs_dev/blocage_
+        # approbation_comite_octroi/) : ce helper sert des tests sans rapport avec le comité
+        # lui-même, on prend donc le chemin "accepté" le plus direct plutôt que de forcer chaque
+        # appelant à le faire.
+        loan.action_view_applications()
+        loan.application_ids.write({'committee_first_decision': 'accepted'})
         loan.action_approve()
         loan.action_disburse()
         return loan
