@@ -32,6 +32,9 @@ from . import microfinance_fond_credit
 from . import microfinance_fond_contribution
 from . import microfinance_caisse_fiche_journee
 from . import microfinance_caisse_session
+from . import microfinance_caisse_denomination
+from . import microfinance_caisse_comptage
+from . import microfinance_portfolio_snapshot
 from . import res_partner
 from . import res_config_settings
 from . import ir_attachment

@@ -32,4 +32,13 @@
         <field name="tag">microfinance_loan_dashboard</field>
         <field name="target">current</field>
     </record>
+    <!-- Même composant OWL que le Tableau de bord ; le contexte demande seulement d'ouvrir
+         directement sur l'onglet "Mon portefeuille" (le composant lit action.context.
+         dashboard_topic au montage). Aucune autre différence : mêmes vues, contrôleur, données. -->
+    <record id="action_microfinance_agent_portfolio" model="ir.actions.client">
+        <field name="name">Mon portefeuille</field>
+        <field name="tag">microfinance_loan_dashboard</field>
+        <field name="target">current</field>
+        <field name="context">{'dashboard_topic': 'portefeuille'}</field>
+    </record>
 </odoo>

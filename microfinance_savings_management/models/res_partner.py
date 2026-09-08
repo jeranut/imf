@@ -163,6 +163,11 @@ class ResPartner(models.Model):
                 'balance_total': loan.balance_total,
                 'next_due_date': next_installment.due_date if next_installment else False,
                 'next_due_amount': next_installment.residual_amount if next_installment else 0.0,
+                # Onglet « Frais de dossier » du guichet : sélectionne les crédits dont les
+                # frais ont été envoyés en caisse et restent à encaisser, montant figé.
+                'fee_sent_to_cashier': loan.fee_sent_to_cashier,
+                'fee_paid': loan.fee_paid,
+                'fee_amount_due': loan.fee_amount_due,
             })
         return {
             'savings_accounts': [{

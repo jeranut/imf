@@ -116,7 +116,8 @@ class MicrofinanceCommon(TransactionCase):
         vals.update(kwargs)
         return self.env['microfinance.loan'].create(vals)
 
-    def _activate_loan(self, **kwargs):
+    def _approve_loan(self, **kwargs):
+        """Amène un crédit jusqu'à l'état 'approved' (sans activation ni décaissement)."""
         loan = self._create_loan(**kwargs)
         loan.action_generate_schedule()
         loan.action_start_enquete()
@@ -129,5 +130,30 @@ class MicrofinanceCommon(TransactionCase):
         loan.action_view_applications()
         loan.application_ids.write({'committee_first_decision': 'accepted'})
         loan.action_approve()
-        loan.action_disburse()
         return loan
+
+    def _activate_loan_without_disbursement(self, **kwargs):
+        """Crédit 'active' mais PAS encore décaissé (disbursement_date vide) — état transitoire
+        introduit par le découplage activation / décaissement (docs_dev/guichet_caisse/
+        AUDIT_decaissement.md). Pour les tests qui vérifient explicitement ce cas ; ne pas
+        détourner _activate_loan, qui doit continuer à produire un crédit réellement décaissé."""
+        loan = self._approve_loan(**kwargs)
+        loan.action_activate()
+        return loan
+
+    def _activate_loan(self, **kwargs):
+        loan = self._activate_loan_without_disbursement(**kwargs)
+        loan.action_process_disbursement()
+        return loan
+
+
+class MicrofinanceNoFundMixin:
+    """À mixer AVANT MicrofinanceCommon dans les classes de test qui activent un crédit sans
+    fond_credit_id : neutralise les fonds bailleurs actifs de la base réelle (SEFOR), sinon
+    action_activate() lève « Un fonds de crédit rotatif actif existe pour cette agence ».
+    TransactionCase => rollback, aucune donnée réelle touchée. Même mécanisme que le
+    _NoFundMixin local de test_disbursement_decouple_aggregates."""
+
+    def setUp(self):
+        super().setUp()
+        self.env['microfinance.fond.credit'].sudo().search([('active', '=', True)]).write({'active': False})

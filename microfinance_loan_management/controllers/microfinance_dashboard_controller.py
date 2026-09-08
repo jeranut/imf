@@ -24,10 +24,16 @@ class MicrofinanceDashboardController(http.Controller):
         Payment = env['microfinance.loan.payment']
 
         company_domain = [('company_id', '=', company.id)]
-        active_domain = company_domain + [('state', '=', 'active')]
+        # 'active' ne prouve plus qu'un crédit a été décaissé (découplage activation /
+        # décaissement, docs_dev/guichet_caisse/AUDIT_decaissement.md) : les agrégats de
+        # portefeuille (encours, impayés, montant décaissé, nombre d'actifs, taux de défaut)
+        # exigent disbursement_date renseigné. defaulted_domain n'a pas besoin du filtre : un
+        # crédit en défaut a forcément été décaissé.
+        disbursed_only = [('disbursement_date', '!=', False)]
+        active_domain = company_domain + [('state', '=', 'active')] + disbursed_only
         defaulted_domain = company_domain + [('state', '=', 'defaulted')]
-        disbursed_domain = company_domain + [('state', 'in', ('active', 'closed', 'defaulted'))]
-        portfolio_domain = company_domain + [('state', 'in', ('active', 'defaulted'))]
+        disbursed_domain = company_domain + [('state', 'in', ('active', 'closed', 'defaulted'))] + disbursed_only
+        portfolio_domain = company_domain + [('state', 'in', ('active', 'defaulted'))] + disbursed_only
 
         active_loans = Loan.search(active_domain)
         defaulted_count = Loan.search_count(defaulted_domain)

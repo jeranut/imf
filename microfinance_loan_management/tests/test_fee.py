@@ -61,6 +61,7 @@ class TestFee(MicrofinanceCommon):
         loan = self._approve_loan(loan_amount=1000.0, term=3)
         self.assertEqual(loan.fee_payment_state, 'unpaid')
 
+        loan.action_send_fee_to_cashier()
         loan.action_charge_fee()
         self.assertEqual(loan.fee_payment_state, 'paid')
 
@@ -89,6 +90,7 @@ class TestFee(MicrofinanceCommon):
         self.assertEqual(eng_credit.account_id, self.fee_account)
         self.assertEqual(sum(eng_debit.mapped('debit')), 25.0)
 
+        loan.action_send_fee_to_cashier()
         loan.action_charge_fee()
 
         # Écriture de règlement : débit caisse / crédit créance (solde), le produit ayant déjà
@@ -129,6 +131,7 @@ class TestFee(MicrofinanceCommon):
         loan.fee_receivable_move_id.unlink()
         loan.fee_receivable_move_id = False
 
+        loan.action_send_fee_to_cashier()
         loan.action_charge_fee()
 
         self.assertTrue(loan.fee_receivable_move_id, "engagement créé en rattrapage à l'encaissement")
@@ -150,6 +153,7 @@ class TestFee(MicrofinanceCommon):
         loan = self._approve_loan(loan_amount=1000.0, term=3)
         self.assertFalse(loan.fee_receivable_move_id)
 
+        loan.action_send_fee_to_cashier()
         loan.action_charge_fee()
 
         self.assertFalse(loan.fee_receivable_move_id)
@@ -159,6 +163,7 @@ class TestFee(MicrofinanceCommon):
     def test_charge_fee_twice_blocked(self):
         self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0})
         loan = self._approve_loan(loan_amount=1000.0, term=3)
+        loan.action_send_fee_to_cashier()
         loan.action_charge_fee()
         with self.assertRaises(UserError):
             loan.action_charge_fee()
@@ -175,6 +180,7 @@ class TestFee(MicrofinanceCommon):
         self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0})
         loan = self._approve_loan(loan_amount=1000.0, term=3)
 
+        loan.action_send_fee_to_cashier()
         loan.action_charge_fee()
         first_move = loan.fee_move_id
         self.assertTrue(first_move)
@@ -240,3 +246,89 @@ class TestFee(MicrofinanceCommon):
         # nouveau dossier créé après le changement : nouveau taux
         new_loan = self._create_loan(loan_amount=1000.0)
         self.assertEqual(new_loan.fee_amount_due, 30.0)
+
+    # --- Lot 1 étendu : envoi des frais au guichet caisse (sous-lot A) ---
+
+    def test_send_fee_to_cashier_sets_flag(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        self.assertFalse(loan.fee_sent_to_cashier)
+        loan.action_send_fee_to_cashier()
+        self.assertTrue(loan.fee_sent_to_cashier)
+        # Le marqueur ne comptabilise rien : ni règlement, ni fee_paid.
+        self.assertFalse(loan.fee_paid)
+        self.assertFalse(loan.fee_move_id)
+        self.assertEqual(loan.fee_payment_state, 'unpaid')
+
+    def test_send_fee_to_cashier_twice_blocked(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        loan.action_send_fee_to_cashier()
+        with self.assertRaises(UserError):
+            loan.action_send_fee_to_cashier()
+
+    def test_send_fee_to_cashier_rejected_for_netted_product(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': False})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        with self.assertRaises(UserError):
+            loan.action_send_fee_to_cashier()
+
+    def test_send_fee_to_cashier_rejected_when_not_approved(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._create_loan(loan_amount=1000.0, term=3)
+        with self.assertRaises(UserError):
+            loan.action_send_fee_to_cashier()
+
+    def test_charge_fee_blocked_without_send(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        with self.assertRaises(UserError):
+            loan.action_charge_fee()
+        self.assertFalse(loan.fee_paid)
+        self.assertFalse(loan.fee_move_id)
+
+    def test_send_fee_to_cashier_rejected_after_paid(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        loan.action_send_fee_to_cashier()
+        loan.action_charge_fee()
+        self.assertTrue(loan.fee_paid)
+        with self.assertRaises(UserError):
+            loan.action_send_fee_to_cashier()
+
+    def test_get_pending_fees_nominal_and_payload(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        # Pas encore envoyé : absent.
+        self.assertNotIn(
+            loan.id, [r['id'] for r in self.env['microfinance.loan'].get_pending_fees(self.env.company.id)])
+        loan.action_send_fee_to_cashier()
+        rows = self.env['microfinance.loan'].get_pending_fees(self.env.company.id)
+        row = next((r for r in rows if r['id'] == loan.id), None)
+        self.assertIsNotNone(row)
+        self.assertEqual(row['partner_id'], loan.partner_id.id)
+        self.assertEqual(row['dossier'], loan.name)
+        self.assertEqual(row['product_name'], loan.product_id.name)
+        self.assertAlmostEqual(row['amount'], 25.0, places=2)
+        self.assertEqual(row['company_name'], self.env.company.name)
+        # Après encaissement : disparaît.
+        loan.action_charge_fee()
+        self.assertNotIn(
+            loan.id, [r['id'] for r in self.env['microfinance.loan'].get_pending_fees(self.env.company.id)])
+
+    def test_get_pending_fees_scoped_by_company(self):
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        loan.action_send_fee_to_cashier()
+        other_company = self.env['res.company'].create({'name': 'Autre agence frais (test)', 'agency_code': 'ZF1'})
+        self.assertEqual(self.env['microfinance.loan'].get_pending_fees(other_company.id), [])
+
+    def test_get_pending_fees_excludes_netted_product(self):
+        # Un produit "frais nettés" ne peut pas être envoyé en caisse (garde), mais on force
+        # le flag pour vérifier que get_pending_fees l'exclut aussi par son propre filtre.
+        self.product.write({'fee_type': 'fixed', 'fee_amount': 25.0, 'fee_charged_before_disbursement': True})
+        loan = self._approve_loan(loan_amount=1000.0, term=3)
+        loan.action_send_fee_to_cashier()
+        self.product.write({'fee_charged_before_disbursement': False})
+        self.assertNotIn(
+            loan.id, [r['id'] for r in self.env['microfinance.loan'].get_pending_fees(self.env.company.id)])

@@ -9,4 +9,20 @@
         <field name="category_id" ref="microfinance_loan_management.module_category_microfinance"/>
         <field name="implied_ids" eval="[(4, ref('group_savings_agent'))]"/>
     </record>
+
+    <!-- Guichet caisse (Lot 1.1) : le caissier doit pouvoir lire et servir l'épargne au
+         guichet (get_client_accounts_summary lit microfinance.savings.account ;
+         register_operation crée des microfinance.savings.transaction). group_microfinance_cashier
+         est défini dans microfinance_loan_management, mais l'implication est ajoutée ICI et non
+         dans microfinance_loan_management/security/groups.xml : ce dernier est chargé AVANT
+         microfinance_savings_management (dépendance inverse : c'est le module épargne qui
+         dépend du module crédit), donc l'external id group_savings_agent n'y est pas encore
+         résolvable. Le manifest reste inchangé (aucune dépendance circulaire) : seule une
+         donnée de sécurité de ce module référence l'external id complet du groupe crédit,
+         comme le fait déjà security/ir.model.access.csv (lignes microfinance_loan_management.*).
+         (4, id) AJOUTE l'implication sans retirer group_microfinance_user déjà impliqué côté
+         module crédit (groups.xml:38). -->
+    <record id="microfinance_loan_management.group_microfinance_cashier" model="res.groups">
+        <field name="implied_ids" eval="[(4, ref('group_savings_agent'))]"/>
+    </record>
 </odoo>

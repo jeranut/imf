@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from odoo import fields
 
-from .common import MicrofinanceCommon
+from .common import MicrofinanceCommon, MicrofinanceNoFundMixin
 
 
-class TestScoring(MicrofinanceCommon):
+class TestScoring(MicrofinanceNoFundMixin, MicrofinanceCommon):
     """The former hardcoded _compute_risk_score() has been retired: a single unified score
     (internal_score) is now produced by the configurable microfinance.scoring.profile/rule
     engine, seeded with default rules reproducing the old weights."""

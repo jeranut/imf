@@ -12,10 +12,13 @@ export class MicrofinanceLoanDashboard extends Component {
     // besoin depuis qu'il recoit les graphiques fonds bailleurs deplaces hors de "analyses").
     static TOPICS = [
         { id: "apercu", label: "Vue d'ensemble", icon: "fa-tachometer" },
+        { id: "portefeuille", label: "Mon portefeuille", icon: "fa-briefcase", hasCharts: true },
         { id: "analyses", label: "Analyses", icon: "fa-bar-chart", hasCharts: true },
         { id: "fonds", label: "Fonds bailleurs", icon: "fa-university", hasCharts: true },
         { id: "activite", label: "Activite recente", icon: "fa-history" },
     ];
+
+    static PAGE_SIZE = 20;
 
     setup() {
         this.rpc = useService("rpc");
@@ -25,7 +28,31 @@ export class MicrofinanceLoanDashboard extends Component {
         // activeTopic : vrai systeme d'onglets (un seul topic rendu a la fois via t-if dans le
         // template, pas juste une ancre/scroll) - "apercu" (Vue d'ensemble) est le topic par
         // defaut au chargement.
-        this.state = useState({ loading: true, error: false, data: null, activeTopic: "apercu" });
+        this.state = useState({
+            loading: true,
+            error: false,
+            data: null,
+            activeTopic: "apercu",
+            // --- Onglet "Mon portefeuille" (Lot 2) : chargé paresseusement à la 1re activation
+            // et rafraîchi à chaque changement d'agent dans le sélecteur d'en-tête. Données
+            // servies par des méthodes @api.model dédiées de microfinance.loan (scope validé
+            // serveur), pas par l'endpoint /microfinance/dashboard/data.
+            agent: {
+                loaded: false,
+                loading: false,
+                agents: [],
+                selectedOfficerId: null,
+                kpis: {},
+                monthly: {},
+                par: null,
+                cumulPar: null,
+                dueDates: null,
+                history: { labels: [], has_data: false },
+                table: { rows: [], total: 0, offset: 0 },
+                tableLoading: false,
+                search: "",
+            },
+        });
         this.charts = [];
         this.shouldRenderCharts = false;
         this.stateChartRef = useRef("stateChart");
@@ -35,9 +62,19 @@ export class MicrofinanceLoanDashboard extends Component {
         this.parChartRef = useRef("parChart");
         this.fondMultiChartRef = useRef("fondMultiChart");
         this.fondSingleChartRef = useRef("fondSingleChart");
+        this.agentDonutRef = useRef("agentDonut");
+        this.agentCumulParRef = useRef("agentCumulPar");
+        this.agentHistoryRef = useRef("agentHistory");
+        this._agentSearchTimer = null;
 
         onMounted(async () => {
             await this.loadDashboard();
+            // Ouverture directe sur un onglet donné (action "Mon portefeuille" : contexte
+            // {'dashboard_topic': 'portefeuille'}). Sans contexte -> onglet "apercu" par défaut.
+            const initialTopic = this.props.action?.context?.dashboard_topic;
+            if (initialTopic && this.topics.some((t) => t.id === initialTopic)) {
+                this.setActiveTopic(initialTopic);
+            }
         });
 
         onPatched(() => {
@@ -93,6 +130,178 @@ export class MicrofinanceLoanDashboard extends Component {
         if (nextTopic?.hasCharts) {
             this.shouldRenderCharts = true;
         }
+        if (topic === "portefeuille" && !this.state.agent.loaded) {
+            this.loadAgentPortfolio();
+        }
+    }
+
+    // ================================================================
+    // Onglet "Mon portefeuille"
+    // ================================================================
+
+    async loadAgentPortfolio() {
+        const agent = this.state.agent;
+        agent.loading = true;
+        try {
+            if (!agent.agents.length) {
+                agent.agents = await this.orm.call("microfinance.loan", "get_available_agents", []);
+            }
+            if (agent.selectedOfficerId === null && agent.agents.length) {
+                agent.selectedOfficerId = agent.agents[0].officer_id;
+            }
+            const officerId = agent.selectedOfficerId;
+            if (officerId === null) {
+                // Aucun agent dans le périmètre : rien à charger.
+                agent.loaded = true;
+                return;
+            }
+            const [kpis, monthly, parList, cumulList, dueDates, history] = await Promise.all([
+                this.orm.call("microfinance.loan", "get_agent_portfolio_kpis", [officerId]),
+                this.orm.call("microfinance.loan", "get_agent_monthly_kpis", [officerId]),
+                this.orm.call("microfinance.loan", "get_par_buckets_by_agent", [officerId]),
+                this.orm.call("microfinance.loan", "get_cumulative_par_by_agent", [officerId]),
+                this.orm.call("microfinance.loan", "get_agent_due_dates_panel", [officerId]),
+                this.orm.call("microfinance.loan", "get_par_history_by_agent", [officerId]),
+            ]);
+            agent.kpis = kpis;
+            agent.monthly = monthly;
+            agent.par = parList[0] || null;
+            agent.cumulPar = cumulList[0] || null;
+            agent.dueDates = dueDates;
+            agent.history = history;
+            agent.loaded = true;
+            await this.loadAgentTable(0);
+            // Re-rendu des graphiques de cet onglet avec les nouvelles séries.
+            if (this.state.activeTopic === "portefeuille") {
+                this.shouldRenderCharts = true;
+            }
+        } catch (error) {
+            console.error("Microfinance dashboard: agent portfolio loading failed", error);
+        } finally {
+            agent.loading = false;
+        }
+    }
+
+    async loadAgentTable(offset) {
+        const agent = this.state.agent;
+        if (agent.selectedOfficerId === null) {
+            return;
+        }
+        agent.tableLoading = true;
+        try {
+            const result = await this.orm.call("microfinance.loan", "get_agent_portfolio_table", [
+                agent.selectedOfficerId,
+                agent.search || null,
+                offset || 0,
+                MicrofinanceLoanDashboard.PAGE_SIZE,
+            ]);
+            agent.table = { rows: result.rows, total: result.total, offset: result.offset };
+        } finally {
+            agent.tableLoading = false;
+        }
+    }
+
+    onSelectAgent(ev) {
+        const value = parseInt(ev.target.value, 10);
+        this.state.agent.selectedOfficerId = Number.isNaN(value) ? null : value;
+        this.state.agent.search = "";
+        this.loadAgentPortfolio();
+    }
+
+    onAgentSearchInput(ev) {
+        this.state.agent.search = ev.target.value;
+        if (this._agentSearchTimer) {
+            clearTimeout(this._agentSearchTimer);
+        }
+        this._agentSearchTimer = setTimeout(() => this.loadAgentTable(0), 300);
+    }
+
+    get agentTablePages() {
+        const total = this.state.agent.table.total;
+        const size = MicrofinanceLoanDashboard.PAGE_SIZE;
+        const pageCount = Math.max(1, Math.ceil(total / size));
+        const current = Math.floor((this.state.agent.table.offset || 0) / size) + 1;
+        const pages = [];
+        for (let p = 1; p <= pageCount; p++) {
+            if (p === 1 || p === pageCount || Math.abs(p - current) <= 2) {
+                pages.push(p);
+            } else if (pages[pages.length - 1] !== "…") {
+                pages.push("…");
+            }
+        }
+        return { pages, current, pageCount };
+    }
+
+    goToAgentPage(page) {
+        if (typeof page !== "number") {
+            return;
+        }
+        this.loadAgentTable((page - 1) * MicrofinanceLoanDashboard.PAGE_SIZE);
+    }
+
+    get agentSelectorVisible() {
+        return this.state.agent.agents.length > 1;
+    }
+
+    get selectedAgentLabel() {
+        const found = this.state.agent.agents.find(
+            (a) => a.officer_id === this.state.agent.selectedOfficerId
+        );
+        return found ? found.officer_name : "";
+    }
+
+    _openList(model, name, domain) {
+        this.actionService.doAction({
+            type: "ir.actions.act_window",
+            res_model: model,
+            name,
+            domain,
+            views: [[false, "list"], [false, "form"]],
+            target: "current",
+        });
+    }
+
+    /** Raccourci de la barre "Mon portefeuille" : ouvre la vue liste existante filtrée sur
+     *  l'agent actuellement affiché dans le sélecteur (pas sur l'utilisateur courant). */
+    openAgentShortcut(kind) {
+        const officerId = this.state.agent.selectedOfficerId;
+        if (kind === "new_client") {
+            this.actionService.doAction({
+                type: "ir.actions.act_window",
+                res_model: "res.partner",
+                name: "Nouveau client",
+                views: [[false, "form"]],
+                target: "current",
+                context: { default_microfinance_partner_type: "client" },
+            });
+            return;
+        }
+        if (kind === "new_application") {
+            this.actionService.doAction("microfinance_loan_management.action_microfinance_loan_application");
+            return;
+        }
+        const shortcuts = {
+            my_clients: ["res.partner", "Mes clients", [["microfinance_loan_ids.officer_id", "=", officerId]]],
+            my_loans: ["microfinance.loan", "Mes crédits", [["officer_id", "=", officerId]]],
+            my_payments: ["microfinance.loan.payment", "Mes remboursements", [["officer_id", "=", officerId]]],
+            my_overdue: ["microfinance.loan", "Mes impayés", [["officer_id", "=", officerId], ["overdue_amount", ">", 0]]],
+            my_installments: ["microfinance.loan.installment", "Mes échéances", [["officer_id", "=", officerId]]],
+            my_visits: ["microfinance.collection.visit", "Mes visites", [["agent_id", "=", officerId]]],
+        };
+        const spec = shortcuts[kind];
+        if (spec) {
+            this._openList(spec[0], spec[1], spec[2]);
+        }
+    }
+
+    openLoanRecord(loanId) {
+        this.actionService.doAction({
+            type: "ir.actions.act_window",
+            res_model: "microfinance.loan",
+            res_id: loanId,
+            views: [[false, "form"]],
+            target: "current",
+        });
     }
 
     get kpis() {
@@ -339,6 +548,65 @@ export class MicrofinanceLoanDashboard extends Component {
             dataLabels: { enabled: false },
             grid: { borderColor: "#e2e8f0" },
         });
+
+        this.renderAgentCharts(baseChart);
+    }
+
+    renderAgentCharts(baseChart) {
+        const agent = this.state.agent;
+        if (!agent.loaded) {
+            return;
+        }
+        // Donut : répartition de l'encours à risque par tranche d'ancienneté (mesure
+        // EXCLUSIVE - un crédit tombe dans une seule tranche).
+        const par = agent.par || { labels: [], values: [] };
+        this.mountChart(this.agentDonutRef, {
+            chart: { ...baseChart, type: "donut", height: 300 },
+            series: (par.values || []).map((v) => Number((v || 0).toFixed(1))),
+            labels: par.labels || [],
+            colors: ["#22c55e", "#eab308", "#f97316", "#ef4444"],
+            legend: { position: "bottom" },
+            dataLabels: { enabled: true, formatter: (v) => `${Number(v).toFixed(1)}%` },
+            plotOptions: { pie: { donut: { size: "68%" } } },
+        });
+        // Barres : PAR cumulatif (mesure CUMULATIVE - % de l'encours en retard de >= t jours,
+        // distincte du donut, monotone décroissante).
+        const cumul = agent.cumulPar || { thresholds: [30, 60, 90, 120], values: [] };
+        this.mountChart(this.agentCumulParRef, {
+            chart: { ...baseChart, type: "bar", height: 280 },
+            series: [{ name: "PAR cumulatif", data: (cumul.values || []).map((v) => Number((v || 0).toFixed(1))) }],
+            xaxis: { categories: (cumul.thresholds || []).map((t) => `PAR ${t}`) },
+            colors: ["#ef4444"],
+            plotOptions: { bar: { borderRadius: 5, columnWidth: "45%", dataLabels: { position: "top" } } },
+            dataLabels: {
+                enabled: true,
+                formatter: (v) => `${v}%`,
+                offsetY: -20,
+                style: { colors: ["#475569"] },
+            },
+            legend: { show: false },
+            yaxis: { labels: { formatter: (v) => `${v}%` } },
+            grid: { borderColor: "#e2e8f0" },
+        });
+        // Ligne : évolution du PAR cumulatif dans le temps (instantanés mensuels).
+        if (agent.history?.has_data) {
+            this.mountChart(this.agentHistoryRef, {
+                chart: { ...baseChart, type: "line", height: 300 },
+                series: [
+                    { name: "PAR 30", data: agent.history.par30 || [] },
+                    { name: "PAR 60", data: agent.history.par60 || [] },
+                    { name: "PAR 90", data: agent.history.par90 || [] },
+                    { name: "PAR 120", data: agent.history.par120 || [] },
+                ],
+                xaxis: { categories: agent.history.labels || [] },
+                colors: ["#f59e0b", "#f97316", "#ef4444", "#7c3aed"],
+                stroke: { width: 2, curve: "smooth" },
+                dataLabels: { enabled: false },
+                markers: { size: 3 },
+                yaxis: { labels: { formatter: (v) => `${Number(v).toFixed(1)}%` } },
+                grid: { borderColor: "#e2e8f0" },
+            });
+        }
     }
 }
 

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_contract_signature_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.contract.signature.wizard.form</field>
+        <field name="model">microfinance.loan.contract.signature.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Téléverser le contrat signé">
+                <group>
+                    <field name="loan_id" readonly="1"/>
+                    <field name="signature_date"/>
+                    <field name="signed_contract_filename" invisible="1"/>
+                    <field name="signed_contract" filename="signed_contract_filename"/>
+                </group>
+                <footer>
+                    <button name="action_confirm" string="Confirmer" type="object" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

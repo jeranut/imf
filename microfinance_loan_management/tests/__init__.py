@@ -63,3 +63,12 @@ from . import test_schedule_negative_reliquat_guard
 from . import test_locked_dossier_fields
 from . import test_committee_octroi_approval_guard
 from . import test_committee_review_lazy_slot
+from . import test_guichet_backend_lists
+from . import test_disbursement_schedule_recalc
+from . import test_disbursement_decouple_aggregates
+from . import test_disbursement_decouple_guards
+from . import test_disbursement_concurrent_guard
+from . import test_caisse_comptage
+from . import test_caisse_close_wizard
+from . import test_caisse_session_security
+from . import test_agent_portfolio_dashboard

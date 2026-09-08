@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- VALEURS PAR DÉFAUT, NON VALIDÉES — proposition de coupures usuelles en Ariary (MGA).
+         Destinées à être ajustées par le manager/finance depuis
+         Configuration > Caisse > Coupures de caisse (ajout, désactivation via `active`,
+         modification de valeur). Ne pas les traiter comme une liste définitive.
+         noupdate="1" : une mise à jour du module ne réécrit pas ces enregistrements si Micka
+         les a modifiés. -->
+
+    <!-- Billets -->
+    <record id="caisse_denomination_billet_20000" model="microfinance.caisse.denomination">
+        <field name="name">Billet 20 000 Ar</field>
+        <field name="value">20000</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+    <record id="caisse_denomination_billet_10000" model="microfinance.caisse.denomination">
+        <field name="name">Billet 10 000 Ar</field>
+        <field name="value">10000</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+    <record id="caisse_denomination_billet_5000" model="microfinance.caisse.denomination">
+        <field name="name">Billet 5 000 Ar</field>
+        <field name="value">5000</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+    <record id="caisse_denomination_billet_2000" model="microfinance.caisse.denomination">
+        <field name="name">Billet 2 000 Ar</field>
+        <field name="value">2000</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+    <record id="caisse_denomination_billet_1000" model="microfinance.caisse.denomination">
+        <field name="name">Billet 1 000 Ar</field>
+        <field name="value">1000</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+    <record id="caisse_denomination_billet_500" model="microfinance.caisse.denomination">
+        <field name="name">Billet 500 Ar</field>
+        <field name="value">500</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+    <record id="caisse_denomination_billet_200" model="microfinance.caisse.denomination">
+        <field name="name">Billet 200 Ar</field>
+        <field name="value">200</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+    <record id="caisse_denomination_billet_100" model="microfinance.caisse.denomination">
+        <field name="name">Billet 100 Ar</field>
+        <field name="value">100</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+
+    <!-- Pièces -->
+    <record id="caisse_denomination_piece_200" model="microfinance.caisse.denomination">
+        <field name="name">Pièce 200 Ar</field>
+        <field name="value">200</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+    <record id="caisse_denomination_piece_100" model="microfinance.caisse.denomination">
+        <field name="name">Pièce 100 Ar</field>
+        <field name="value">100</field>
+        <field name="currency_id" ref="base.MGA"/>
+    </record>
+</odoo>

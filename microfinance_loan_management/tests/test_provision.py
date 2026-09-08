@@ -2,10 +2,10 @@
 from odoo import fields
 from odoo.exceptions import UserError, ValidationError
 
-from .common import MicrofinanceCommon
+from .common import MicrofinanceCommon, MicrofinanceNoFundMixin
 
 
-class TestProvision(MicrofinanceCommon):
+class TestProvision(MicrofinanceNoFundMixin, MicrofinanceCommon):
 
     def setUp(self):
         super().setUp()
@@ -48,6 +48,15 @@ class TestProvision(MicrofinanceCommon):
         self.assertAlmostEqual(loan.provision_amount, loan.balance_total, places=2)
 
     def test_post_provisions_requires_product_accounts_configured(self):
+        # Le produit hérite de comptes de provision par défaut du plan PCEC
+        # (microfinance.loan.product : default=_pcec_default('293001'/'682201')) dès que le
+        # plan mg_pcec est installé, ce qui est le cas sur la base réelle de test. On les vide
+        # explicitement pour vérifier ce que ce test couvre : action_post_provisions() refuse
+        # un produit sans comptes de provision configurés.
+        self.product.write({
+            'account_provision_cout_individuel_id': False,
+            'account_provision_individuel_id': False,
+        })
         loan = self._activate_loan(loan_amount=1000.0, term=4)
         first = loan.installment_ids.sorted('sequence')[0]
         first.due_date = fields.Date.subtract(fields.Date.context_today(loan), days=45)

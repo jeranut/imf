@@ -70,8 +70,37 @@ class MicrofinanceCaisseSession(models.Model):
             session.write({'fiche_journee_id': fiche.id, 'state': 'open'})
             session.message_post(body=_('Session ouverte par %s.') % session.cashier_id.name)
 
+    def action_open_close_wizard(self):
+        """Ouvre l'assistant de clôture avec comptage de billetage (sous-lot B). Seul point
+        d'entrée UI de la clôture depuis la fiche session : le bouton appelant directement
+        action_close_session a été remplacé par celui-ci. action_close_session reste appelée,
+        inchangée, par le wizard (et par le chemin guichet / les tests)."""
+        self.ensure_one()
+        if self.state != 'open':
+            raise UserError(_('Seule une session ouverte peut être clôturée.'))
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Clôturer la session'),
+            'res_model': 'microfinance.caisse.close.session.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_session_id': self.id},
+        }
+
     def action_close_session(self):
         for session in self:
+            if session.state != 'open':
+                raise UserError(_('Seule une session ouverte peut être clôturée.'))
+            # Verrou pessimiste ligne (FOR UPDATE) posé AVANT la relecture de state : sérialise
+            # deux clôtures concurrentes de la même session (bouton fiche via le wizard de
+            # comptage + éventuel appel guichet), sur le modèle exact de action_charge_fee /
+            # action_process_disbursement (docs_dev/guichet_caisse/AUDIT_session_billetage.md
+            # §4). La transaction perdante attend le commit de la gagnante sur ce SELECT, puis
+            # invalide son cache et retombe sur la garde ci-dessous — au lieu de rejouer
+            # action_close_day() et de réécrire state='closed'. Verrou relâché au commit/rollback.
+            session.env.cr.execute(
+                "SELECT id FROM microfinance_caisse_session WHERE id = %s FOR UPDATE", (session.id,))
+            session.invalidate_recordset(['state'])
             if session.state != 'open':
                 raise UserError(_('Seule une session ouverte peut être clôturée.'))
             # Ne redéclenche aucun contrôle ici : action_close_day() porte déjà la

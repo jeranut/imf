@@ -10,6 +10,16 @@
         <field name="numbercall">-1</field>
         <field name="active">True</field>
     </record>
+    <record id="ir_cron_microfinance_portfolio_par_snapshot" model="ir.cron">
+        <field name="name">Microfinance: instantané mensuel du PAR par agent</field>
+        <field name="model_id" ref="model_microfinance_loan"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_snapshot_portfolio_par()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">months</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
     <record id="ir_cron_microfinance_post_provisions" model="ir.cron">
         <field name="name">Microfinance: comptabilisation mensuelle des provisions</field>
         <field name="model_id" ref="model_microfinance_loan"/>

@@ -12,6 +12,7 @@
                 <field name="amount"/>
                 <field name="payment_method"/>
                 <field name="cheque_state" widget="badge" optional="show"/>
+                <field name="move_id" optional="show"/>
                 <field name="state" widget="badge"/>
             </tree>
         </field>
@@ -38,7 +39,12 @@
                             <field name="account_id"/>
                             <field name="partner_id" readonly="1"/>
                             <field name="transaction_type"/>
-                            <field name="amount"/>
+                            <!-- readonly dès qu'une écriture existe (move_id), pas state=='posted' :
+                                 un chèque rejeté repasse state à 'cancelled' tout en conservant
+                                 move_id (le move d'origine, annulé) - docs_dev/
+                                 savings_readonly_amount_history_button/AUDIT.md §2. Doublé d'une
+                                 garde serveur (write()) contre une écriture API/import. -->
+                            <field name="amount" readonly="move_id"/>
                             <field name="date"/>
                             <field name="payment_method"/>
                             <field name="cheque_state" invisible="payment_method != 'cheque' or transaction_type != 'deposit'"/>

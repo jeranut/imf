@@ -279,6 +279,32 @@ class MicrofinanceSavingsAccount(models.Model):
             'view_mode': 'tree,form', 'domain': [('account_id', '=', self.id)], 'context': {'default_account_id': self.id},
         }
 
+    @api.model
+    def get_account_transactions(self, account_id, company_id=False):
+        """Historique des transactions d'un compte épargne, pour le panneau des onglets
+        « Dépôt épargne » / « Retrait épargne » du guichet (affiché sous le compte
+        sélectionné). Même présentation que la page « Transactions » de la fiche compte, sans
+        la colonne « Écriture comptable ». Trié par date décroissante.
+
+        Réutilise les champs deposit_amount / withdrawal_amount déjà calculés sur la
+        transaction (aucun recalcul ici). `company_id` optionnel, vérifié en défense en
+        profondeur (comme get_loan_schedule / get_pending_or_late de ce chantier) : renvoie []
+        si le compte n'appartient pas à l'agence de la session."""
+        account = self.browse(account_id)
+        if not account.exists() or (company_id and account.company_id.id != company_id):
+            return []
+        method_labels = dict(
+            self.env['microfinance.savings.transaction']._fields['payment_method'].selection)
+        transactions = account.transaction_ids.sorted(key=lambda t: (t.date, t.id), reverse=True)
+        return [{
+            'id': txn.id,
+            'date': txn.date,
+            'deposit_amount': txn.deposit_amount,
+            'withdrawal_amount': txn.withdrawal_amount,
+            'payment_method': txn.payment_method,
+            'payment_method_label': method_labels.get(txn.payment_method, txn.payment_method or ''),
+        } for txn in transactions]
+
     _CAPITALIZATION_PERIOD = {
         'monthly': relativedelta(months=1),
         'quarterly': relativedelta(months=3),

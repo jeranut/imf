@@ -16,8 +16,18 @@ class MicrofinanceDashboard(models.Model):
     @api.depends_context('company')
     def _compute_dashboard(self):
         Loan = self.env['microfinance.loan']
-        active = Loan.search([('company_id', '=', self.env.company.id), ('state', '=', 'active')])
-        all_loans = Loan.search([('company_id', '=', self.env.company.id), ('state', 'in', ('active', 'closed', 'defaulted'))])
+        # disbursement_date renseigné : depuis le découplage activation / décaissement
+        # (docs_dev/guichet_caisse/AUDIT_decaissement.md), un crédit 'active' peut ne pas être
+        # encore décaissé — il n'a alors ni montant décaissé ni encours réel.
+        active = Loan.search([
+            ('company_id', '=', self.env.company.id), ('state', '=', 'active'),
+            ('disbursement_date', '!=', False),
+        ])
+        all_loans = Loan.search([
+            ('company_id', '=', self.env.company.id),
+            ('state', 'in', ('active', 'closed', 'defaulted')),
+            ('disbursement_date', '!=', False),
+        ])
         defaulted = all_loans.filtered(lambda l: l.state == 'defaulted')
         for rec in self:
             rec.active_loan_count = len(active)

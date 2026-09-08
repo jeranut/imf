@@ -1,5 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
+    <!-- Calendrier d'échéance (lecture seule) partagé par les onglets « Décaissement crédit »
+         et « Remboursement crédit ». Attend `schedule` (liste des lignes get_loan_schedule)
+         dans le contexte de rendu. N'embarque aucun verrou de pavé numérique : l'état
+         actif/inactif du clavier est géré indépendamment par numpadDisabled. -->
+    <t t-name="microfinance_loan_management.CaisseLoanSchedule">
+        <div class="o_microfinance_pos__accounts_section">
+            <p class="o_microfinance_pos__accounts_title">Calendrier d'échéance</p>
+            <div t-if="!schedule.length" class="o_microfinance_pos__placeholder_small">Aucune échéance générée.</div>
+            <div t-else="" class="o_microfinance_pos__list_scroll">
+                <table class="o_microfinance_pos__list_table">
+                    <thead>
+                        <tr><th>N°</th><th>Échéance</th><th class="o_microfinance_pos__num">Montant</th><th class="o_microfinance_pos__num">Restant dû</th><th>Statut</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr t-foreach="schedule" t-as="inst" t-key="inst.id"
+                            t-attf-class="{{ inst.state === 'overdue' ? 'o_microfinance_pos__schedule_row--overdue' : '' }}">
+                            <td t-esc="inst.sequence"/>
+                            <td t-esc="inst.due_date"/>
+                            <td class="o_microfinance_pos__num" t-esc="formatMoney(inst.total_amount)"/>
+                            <td class="o_microfinance_pos__num" t-esc="formatMoney(inst.residual_amount)"/>
+                            <td t-esc="inst.state_label"/>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </t>
+
     <t t-name="microfinance_loan_management.MicrofinanceCaissePos">
         <div class="o_microfinance_pos">
             <t t-if="state.loadingSession">
@@ -27,61 +55,58 @@
                 </div>
 
                 <div class="o_microfinance_pos__body">
-                    <!-- Colonne 1 : client / comptes -->
-                    <div class="o_microfinance_pos__col o_microfinance_pos__col--client">
-                        <div class="o_microfinance_pos__search">
-                            <input type="text" placeholder="Nom ou numéro de compte..."
-                                   t-att-value="state.searchQuery" t-on-input="onSearchInput"/>
-                            <div t-if="state.searchResults.length" class="o_microfinance_pos__search_results">
-                                <div t-foreach="state.searchResults" t-as="result" t-key="result.id"
-                                     class="o_microfinance_pos__search_result" t-on-click="() => this.selectClient(result.id)">
-                                    <strong t-esc="result.name"/>
-                                    <span t-if="result.account_number" t-esc="result.account_number"/>
-                                </div>
+                    <!-- Colonne 1 : pavé numérique (gauche, style POS). Bloc repris tel quel
+                         de l'ancienne colonne opération (aperçu ventilation + affichage montant
+                         + clavier + Effacer + Valider) — simple déplacement DOM, aucune logique
+                         numpad modifiée (cf. AUDIT §6.4). -->
+                    <div class="o_microfinance_pos__col o_microfinance_pos__col--numpad">
+                        <t t-if="state.ventilation">
+                            <div class="o_microfinance_pos__ventilation">
+                                <div><span>Intérêt</span><strong t-esc="formatMoney(state.ventilation.interest_amount)"/></div>
+                                <div><span>Principal</span><strong t-esc="formatMoney(state.ventilation.principal_amount)"/></div>
+                                <div><span>Pénalité</span><strong t-esc="formatMoney(state.ventilation.penalty_amount)"/></div>
                             </div>
+                        </t>
+
+                        <div class="o_microfinance_pos__amount_display" t-esc="formatMoney(effectiveAmount)"/>
+
+                        <div t-if="numpadDisabled" class="o_microfinance_pos__hint" t-esc="numpadHint"/>
+
+                        <div t-attf-class="o_microfinance_pos__keypad {{ numpadDisabled ? 'o_microfinance_pos__keypad--disabled' : '' }}">
+                            <button type="button" t-att-disabled="numpadDisabled" t-foreach="['1','2','3','4','5','6','7','8','9']" t-as="d" t-key="d" t-on-click="() => this.pressDigit(d)" t-esc="d"/>
+                            <button type="button" t-att-disabled="numpadDisabled" t-on-click="pressDecimal">,</button>
+                            <button type="button" t-att-disabled="numpadDisabled" t-on-click="() => this.pressDigit('0')">0</button>
+                            <button type="button" t-att-disabled="numpadDisabled" t-on-click="pressBackspace" class="o_microfinance_pos__keypad_backspace">&#x232B;</button>
                         </div>
+                        <button type="button" class="o_microfinance_pos__clear_btn" t-att-disabled="numpadDisabled" t-on-click="pressClear">Effacer</button>
 
-                        <t t-if="state.loadingClient">
-                            <div class="o_microfinance_pos__placeholder">Chargement du client...</div>
-                        </t>
-                        <t t-elif="!state.client">
-                            <div class="o_microfinance_pos__placeholder">Recherchez un client pour commencer.</div>
-                        </t>
-                        <t t-else="">
-                            <div class="o_microfinance_pos__client_card">
-                                <div class="o_microfinance_pos__client_header">
-                                    <strong t-esc="state.client.name"/>
-                                    <button type="button" class="o_microfinance_pos__client_clear" t-on-click="clearClient">&#x2715;</button>
-                                </div>
-                                <span class="o_microfinance_pos__client_account" t-esc="state.client.account_number"/>
-
-                                <div class="o_microfinance_pos__accounts_section">
-                                    <p class="o_microfinance_pos__accounts_title">Comptes épargne</p>
-                                    <div t-if="!state.client.savings_accounts.length" class="o_microfinance_pos__placeholder_small">Aucun compte épargne actif.</div>
-                                    <div t-foreach="state.client.savings_accounts" t-as="account" t-key="account.id"
-                                         t-attf-class="o_microfinance_pos__account_row {{ activeTabKind === 'savings' &amp;&amp; state.selectedAccountId === account.id ? 'o_microfinance_pos__account_row--selected' : '' }}"
-                                         t-on-click="() => activeTabKind === 'savings' ? this.selectAccount(account.id) : null">
-                                        <span t-esc="account.name"/>
-                                        <span t-esc="formatMoney(account.balance)"/>
-                                    </div>
-                                </div>
-
-                                <div class="o_microfinance_pos__accounts_section">
-                                    <p class="o_microfinance_pos__accounts_title">Crédits</p>
-                                    <div t-if="!state.client.loans.length" class="o_microfinance_pos__placeholder_small">Aucun crédit actionnable.</div>
-                                    <div t-foreach="state.client.loans" t-as="loan" t-key="loan.id"
-                                         t-attf-class="o_microfinance_pos__account_row {{ activeTabKind === 'loan' &amp;&amp; state.selectedAccountId === loan.id ? 'o_microfinance_pos__account_row--selected' : '' }}"
-                                         t-on-click="() => activeTabKind === 'loan' ? this.selectAccount(loan.id) : null">
-                                        <span t-esc="loan.name"/>
-                                        <span t-esc="formatMoney(loan.balance_total)"/>
-                                    </div>
-                                </div>
-                            </div>
-                        </t>
+                        <button type="button" class="btn btn-primary o_microfinance_pos__submit"
+                                t-att-disabled="!canSubmit" t-on-click="submitOperation">
+                            <t t-if="state.submitting">Enregistrement...</t>
+                            <t t-else="">Valider</t>
+                        </button>
                     </div>
 
-                    <!-- Colonne 2 : opération + pavé numérique -->
-                    <div class="o_microfinance_pos__col o_microfinance_pos__col--operation">
+                    <!-- Colonne 2 : recherche + opérations + listes (ou panneau client
+                         sélectionné). Le câblage des données (chargement des listes, double
+                         comportement de la recherche, "Autres clients", rafraîchissement après
+                         validation). -->
+                    <div class="o_microfinance_pos__col o_microfinance_pos__col--center">
+                        <div class="o_microfinance_pos__search">
+                            <input type="text" placeholder="Nom ou numéro de dossier / de compte..."
+                                   t-att-value="state.searchQuery" t-on-input="onSearchInput"/>
+                        </div>
+
+                        <!-- Retour à la liste : bouton icône en haut, visible uniquement
+                             quand un client / crédit est sélectionné (panneau de sélection ou
+                             calendrier d'échéance affiché). Remplace l'ancien lien texte en
+                             bas de panneau. Même reset que clearClient. -->
+                        <button t-if="state.client" type="button" class="o_microfinance_pos__home_btn"
+                                t-on-click="clearClient" title="Retour à la liste">
+                            <i class="fa fa-home" role="img" aria-label="Retour à la liste"/>
+                            <span>Liste</span>
+                        </button>
+
                         <nav class="o_microfinance_pos__tabs">
                             <button t-foreach="tabs" t-as="tab" t-key="tab.id" type="button"
                                     t-attf-class="o_microfinance_pos__tab {{ state.activeTab === tab.id ? 'o_microfinance_pos__tab--active' : '' }}"
@@ -92,38 +117,210 @@
                         </nav>
 
                         <div t-if="activeTabKind === 'savings'" class="o_microfinance_pos__hint">
-                            Sélectionnez un compte épargne dans la colonne de gauche.
+                            Sélectionnez un compte épargne ci-dessous.
                         </div>
-                        <div t-if="activeTabKind === 'loan' &amp;&amp; !actionableLoans.length" class="o_microfinance_pos__hint">
-                            Aucun crédit de ce client n'est actionnable pour cette opération.
+                        <div t-if="isLoanSelectionKind &amp;&amp; state.client &amp;&amp; !state.disbursementFlow &amp;&amp; !actionableLoans.length" class="o_microfinance_pos__hint">
+                            <t t-if="activeTabKind === 'fee'">Aucun frais de dossier en attente d'encaissement pour ce client.</t>
+                            <t t-else="">Aucun crédit de ce client n'est actionnable pour cette opération.</t>
                         </div>
 
-                        <t t-if="state.ventilation">
-                            <div class="o_microfinance_pos__ventilation">
-                                <div><span>Intérêt</span><strong t-esc="formatMoney(state.ventilation.interest_amount)"/></div>
-                                <div><span>Principal</span><strong t-esc="formatMoney(state.ventilation.principal_amount)"/></div>
-                                <div><span>Pénalité</span><strong t-esc="formatMoney(state.ventilation.penalty_amount)"/></div>
+                        <t t-if="state.loadingClient">
+                            <div class="o_microfinance_pos__placeholder">Chargement du client...</div>
+                        </t>
+                        <t t-elif="!state.client">
+                            <!-- Bloc liste : 3 onglets -->
+                            <div class="o_microfinance_pos__list">
+                                <nav class="o_microfinance_pos__list_tabs">
+                                    <button type="button"
+                                            t-attf-class="o_microfinance_pos__list_tab {{ state.centralTab === 'decaissements' ? 'o_microfinance_pos__list_tab--active' : '' }}"
+                                            t-on-click="() => this.setCentralTab('decaissements')">Décaissements en attente<span t-if="filteredDisbursements.length" class="o_microfinance_pos__list_tab_badge" t-esc="filteredDisbursements.length"/></button>
+                                    <button type="button"
+                                            t-attf-class="o_microfinance_pos__list_tab {{ state.centralTab === 'echeances' ? 'o_microfinance_pos__list_tab--active' : '' }}"
+                                            t-on-click="() => this.setCentralTab('echeances')">Échéances du jour<span t-if="filteredInstallments.length" class="o_microfinance_pos__list_tab_badge" t-esc="filteredInstallments.length"/></button>
+                                    <button type="button"
+                                            t-attf-class="o_microfinance_pos__list_tab {{ state.centralTab === 'epargne' ? 'o_microfinance_pos__list_tab--active' : '' }}"
+                                            t-on-click="() => this.setCentralTab('epargne')">Épargne en attente</button>
+                                    <button type="button"
+                                            t-attf-class="o_microfinance_pos__list_tab {{ state.centralTab === 'frais' ? 'o_microfinance_pos__list_tab--active' : '' }}"
+                                            t-on-click="() => this.setCentralTab('frais')">Frais<span t-if="filteredFees.length" class="o_microfinance_pos__list_tab_badge" t-esc="filteredFees.length"/></button>
+                                </nav>
+
+                                <div class="o_microfinance_pos__list_body">
+                                    <t t-if="state.listLoading">
+                                        <div class="o_microfinance_pos__placeholder">Chargement...</div>
+                                    </t>
+                                    <t t-elif="state.centralTab === 'decaissements'">
+                                        <div class="o_microfinance_pos__list_scroll">
+                                            <table class="o_microfinance_pos__list_table">
+                                                <thead>
+                                                    <tr><th>Client</th><th>Dossier</th><th>Produit</th><th class="o_microfinance_pos__num">Montant</th><th>Agence</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr t-if="!filteredDisbursements.length">
+                                                        <td colspan="5" class="o_microfinance_pos__placeholder_small">Aucun décaissement en attente.</td>
+                                                    </tr>
+                                                    <tr t-foreach="filteredDisbursements" t-as="row" t-key="row.id"
+                                                        class="o_microfinance_pos__list_row" t-on-click="() => this.selectDisbursement(row)">
+                                                        <td t-esc="row.partner_name"/>
+                                                        <td t-esc="row.dossier"/>
+                                                        <td t-esc="row.product_name"/>
+                                                        <td class="o_microfinance_pos__num" t-esc="formatMoney(row.amount)"/>
+                                                        <td t-esc="row.company_name"/>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </t>
+                                    <t t-elif="state.centralTab === 'echeances'">
+                                        <div class="o_microfinance_pos__list_scroll">
+                                            <table class="o_microfinance_pos__list_table">
+                                                <thead>
+                                                    <tr><th>Client</th><th>Dossier</th><th>Échéance</th><th class="o_microfinance_pos__num">Montant</th><th>État</th><th>Agence</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr t-if="!filteredInstallments.length">
+                                                        <td colspan="6" class="o_microfinance_pos__placeholder_small">Aucune échéance du jour ni en retard.</td>
+                                                    </tr>
+                                                    <tr t-foreach="filteredInstallments" t-as="row" t-key="row.id"
+                                                        t-attf-class="o_microfinance_pos__list_row {{ row.is_late ? 'o_microfinance_pos__list_row--late' : '' }}"
+                                                        t-on-click="() => this.selectClient(row.partner_id)">
+                                                        <td t-esc="row.partner_name"/>
+                                                        <td t-esc="row.dossier"/>
+                                                        <td t-esc="row.due_date"/>
+                                                        <td class="o_microfinance_pos__num" t-esc="formatMoney(row.amount)"/>
+                                                        <td t-esc="row.state"/>
+                                                        <td t-esc="row.company_name"/>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </t>
+                                    <t t-elif="state.centralTab === 'frais'">
+                                        <div class="o_microfinance_pos__list_scroll">
+                                            <table class="o_microfinance_pos__list_table">
+                                                <thead>
+                                                    <tr><th>Client</th><th>Dossier</th><th>Produit</th><th class="o_microfinance_pos__num">Montant</th><th>Agence</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr t-if="!filteredFees.length">
+                                                        <td colspan="5" class="o_microfinance_pos__placeholder_small">Aucun frais de dossier en attente.</td>
+                                                    </tr>
+                                                    <tr t-foreach="filteredFees" t-as="row" t-key="row.id"
+                                                        class="o_microfinance_pos__list_row" t-on-click="() => this.selectClient(row.partner_id)">
+                                                        <td t-esc="row.partner_name"/>
+                                                        <td t-esc="row.dossier"/>
+                                                        <td t-esc="row.product_name"/>
+                                                        <td class="o_microfinance_pos__num" t-esc="formatMoney(row.amount)"/>
+                                                        <td t-esc="row.company_name"/>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </t>
+                                    <t t-else="">
+                                        <div class="o_microfinance_pos__placeholder">Cette liste sera disponible prochainement.</div>
+                                    </t>
+
+                                    <div t-if="state.otherClients.length" class="o_microfinance_pos__other_clients">
+                                        <p class="o_microfinance_pos__accounts_title">Autres clients</p>
+                                        <div t-foreach="state.otherClients" t-as="result" t-key="result.id"
+                                             class="o_microfinance_pos__search_result" t-on-click="() => this.selectClient(result.id)">
+                                            <strong t-esc="result.name"/>
+                                            <span t-if="result.account_number" t-esc="result.account_number"/>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </t>
+                        <t t-else="">
+                            <!-- Client sélectionné : sélection de compte (blocs repris tels
+                                 quels de l'ancienne colonne gauche, mêmes handlers). -->
+                            <div class="o_microfinance_pos__client_card">
+                                <div class="o_microfinance_pos__client_header">
+                                    <strong t-esc="state.client.name"/>
+                                    <button type="button" class="o_microfinance_pos__client_clear" t-on-click="clearClient">&#x2715;</button>
+                                </div>
+                                <span class="o_microfinance_pos__client_account" t-esc="state.client.account_number"/>
 
-                        <div class="o_microfinance_pos__amount_display" t-esc="formatMoney(amount)"/>
+                                <!-- Flux "Décaissements en attente" : le crédit est déjà
+                                     identifié par la ligne cliquée. Pas de sélection de compte
+                                     ; on affiche le calendrier d'échéance et le montant net
+                                     figé (verrou pavé numérique côté colonne gauche). -->
+                                <t t-if="state.disbursementFlow">
+                                    <div class="o_microfinance_pos__accounts_section">
+                                        <p class="o_microfinance_pos__accounts_title">Montant à décaisser</p>
+                                        <div class="o_microfinance_pos__account_row o_microfinance_pos__account_row--selected">
+                                            <span>Montant net remis au client</span>
+                                            <span t-esc="formatMoney(state.disbursementAmount)"/>
+                                        </div>
+                                    </div>
+                                    <t t-set="schedule" t-value="state.loanSchedule"/>
+                                    <t t-call="microfinance_loan_management.CaisseLoanSchedule"/>
+                                </t>
+                                <t t-else="">
+                                    <div class="o_microfinance_pos__accounts_section">
+                                        <p class="o_microfinance_pos__accounts_title">Comptes épargne</p>
+                                        <div t-if="!state.client.savings_accounts.length" class="o_microfinance_pos__placeholder_small">Aucun compte épargne actif.</div>
+                                        <div t-foreach="state.client.savings_accounts" t-as="account" t-key="account.id"
+                                             t-attf-class="o_microfinance_pos__account_row {{ activeTabKind === 'savings' &amp;&amp; state.selectedAccountId === account.id ? 'o_microfinance_pos__account_row--selected' : '' }}"
+                                             t-on-click="() => activeTabKind === 'savings' ? this.selectAccount(account.id) : null">
+                                            <span t-esc="account.name"/>
+                                            <span t-esc="formatMoney(account.balance)"/>
+                                        </div>
+                                    </div>
 
-                        <div class="o_microfinance_pos__keypad">
-                            <button type="button" t-foreach="['1','2','3','4','5','6','7','8','9']" t-as="d" t-key="d" t-on-click="() => this.pressDigit(d)" t-esc="d"/>
-                            <button type="button" t-on-click="pressDecimal">,</button>
-                            <button type="button" t-on-click="() => this.pressDigit('0')">0</button>
-                            <button type="button" t-on-click="pressBackspace" class="o_microfinance_pos__keypad_backspace">&#x232B;</button>
-                        </div>
-                        <button type="button" class="o_microfinance_pos__clear_btn" t-on-click="pressClear">Effacer</button>
+                                    <!-- Onglets épargne : historique des transactions du compte
+                                         sélectionné (même présentation que la page "Transactions"
+                                         de la fiche compte, sans "Écriture comptable"). Le pavé
+                                         reste éditable : c'est une info, pas une restriction. -->
+                                    <div t-if="activeTabKind === 'savings' &amp;&amp; state.selectedAccountId"
+                                         class="o_microfinance_pos__accounts_section">
+                                        <p class="o_microfinance_pos__accounts_title">Historique des transactions</p>
+                                        <div t-if="!state.accountTransactions.length" class="o_microfinance_pos__placeholder_small">Aucune transaction sur ce compte.</div>
+                                        <div t-else="" class="o_microfinance_pos__list_scroll">
+                                            <table class="o_microfinance_pos__list_table">
+                                                <thead>
+                                                    <tr><th>Date</th><th class="o_microfinance_pos__num">Dépôt</th><th class="o_microfinance_pos__num">Retrait</th><th>Moyen de paiement</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr t-foreach="state.accountTransactions" t-as="txn" t-key="txn.id">
+                                                        <td t-esc="txn.date"/>
+                                                        <td class="o_microfinance_pos__num" t-esc="txn.deposit_amount ? formatMoney(txn.deposit_amount) : ''"/>
+                                                        <td class="o_microfinance_pos__num" t-esc="txn.withdrawal_amount ? formatMoney(txn.withdrawal_amount) : ''"/>
+                                                        <td t-esc="txn.payment_method_label"/>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
 
-                        <button type="button" class="btn btn-primary o_microfinance_pos__submit"
-                                t-att-disabled="!canSubmit" t-on-click="submitOperation">
-                            <t t-if="state.submitting">Enregistrement...</t>
-                            <t t-else="">Valider</t>
-                        </button>
+                                    <div class="o_microfinance_pos__accounts_section">
+                                        <p class="o_microfinance_pos__accounts_title"><t t-if="activeTabKind === 'fee'">Frais de dossier</t><t t-else="">Crédits</t></p>
+                                        <div t-if="!displayedLoans.length" class="o_microfinance_pos__placeholder_small">Aucun crédit actionnable.</div>
+                                        <div t-foreach="displayedLoans" t-as="loan" t-key="loan.id"
+                                             t-attf-class="o_microfinance_pos__account_row {{ isLoanSelectionKind &amp;&amp; state.selectedAccountId === loan.id ? 'o_microfinance_pos__account_row--selected' : '' }}"
+                                             t-on-click="() => isLoanSelectionKind ? this.selectAccount(loan.id) : null">
+                                            <span t-esc="loan.name"/>
+                                            <span t-esc="formatMoney(activeTabKind === 'fee' ? loan.fee_amount_due : loan.balance_total)"/>
+                                        </div>
+                                    </div>
+
+                                    <!-- Remboursement crédit : une fois le crédit choisi dans
+                                         la liste "Crédits" ci-dessus, on affiche le même
+                                         calendrier d'échéance que le décaissement. Le pavé
+                                         numérique reste actif (numpadDisabled inchangé) et la
+                                         ventilation continue de se mettre à jour à chaque
+                                         frappe : cet ajout est purement informatif. -->
+                                    <t t-if="state.activeTab === 'remboursement_credit' &amp;&amp; state.selectedAccountId">
+                                        <t t-set="schedule" t-value="state.loanSchedule"/>
+                                        <t t-call="microfinance_loan_management.CaisseLoanSchedule"/>
+                                    </t>
+                                </t>
+                            </div>
+                        </t>
                     </div>
 
-                    <!-- Colonne 3 : ticket de session -->
+                    <!-- Colonne 3 : ticket de session (INCHANGÉ) -->
                     <div class="o_microfinance_pos__col o_microfinance_pos__col--ticket">
                         <p class="o_microfinance_pos__ticket_title">Ticket de session</p>
                         <div class="o_microfinance_pos__ticket_totals">
@@ -131,6 +328,7 @@
                             <div><span>Retraits</span><strong t-esc="formatMoney(ticketTotals.retrait_epargne)"/></div>
                             <div><span>Remboursements</span><strong t-esc="formatMoney(ticketTotals.remboursement_credit)"/></div>
                             <div><span>Décaissements</span><strong t-esc="formatMoney(ticketTotals.decaissement_credit)"/></div>
+                            <div><span>Frais de dossier</span><strong t-esc="formatMoney(ticketTotals.frais_dossier)"/></div>
                         </div>
                         <div class="o_microfinance_pos__ticket_list">
                             <div t-if="!state.mouvements.length" class="o_microfinance_pos__placeholder_small">Aucune opération enregistrée pour l'instant.</div>

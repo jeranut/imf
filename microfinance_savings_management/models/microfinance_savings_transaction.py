@@ -24,6 +24,15 @@ class MicrofinanceSavingsTransaction(models.Model):
         ('transfer', 'Virement entre comptes'),
     ], string='Type de transaction', required=True, tracking=True)
     amount = fields.Monetary(string='Montant', required=True)
+    # Ventilation du montant en deux colonnes séparées pour la liste des transactions du
+    # compte (page "Transactions" de la fiche épargne) : "Dépôt" = tout crédit du compte
+    # (CREDIT_TYPES : dépôt + intérêt crédité), "Retrait" = tout débit (DEBIT_TYPES : retrait
+    # + frais + prélèvement automatique + virement). Stockés pour permettre les sommes en pied
+    # de liste, comme `amount`. N'affectent aucun calcul de solde (balance reste sur `amount`).
+    deposit_amount = fields.Monetary(
+        string='Dépôt', compute='_compute_split_amounts', store=True)
+    withdrawal_amount = fields.Monetary(
+        string='Retrait', compute='_compute_split_amounts', store=True)
     date = fields.Date(string='Date', default=fields.Date.context_today, required=True)
     payment_method = fields.Selection([
         ('cash', 'Espèces'),
@@ -80,11 +89,33 @@ class MicrofinanceSavingsTransaction(models.Model):
     currency_id = fields.Many2one(related='account_id.currency_id', readonly=True)
     product_id = fields.Many2one(related='account_id.product_id', readonly=True)
 
+    def write(self, vals):
+        # Garde serveur en plus du readonly de vue (amount readonly="move_id") :
+        # readonly= seul ne protège pas contre une écriture API/import - docs_dev/
+        # savings_readonly_amount_history_button/AUDIT.md §3, même philosophie que
+        # microfinance.loan._check_locked_dossier_fields(). Contrôle sur l'état AVANT
+        # cette écriture (move_id déjà présent), donc sans effet sur action_post() lui-même
+        # qui pose move_id pour la première fois. Aucun chemin interne ne réécrit amount
+        # après coup (action_clear_cheque/action_reject_cheque ne touchent jamais amount).
+        if 'amount' in vals:
+            locked = self.filtered('move_id')
+            if locked:
+                raise ValidationError(_(
+                    "Impossible de modifier le montant : une écriture comptable existe déjà "
+                    "pour cette transaction (%s).") % ', '.join(locked.mapped('move_id.name')))
+        return super().write(vals)
+
     @api.constrains('amount')
     def _check_amount(self):
         for txn in self:
             if txn.amount <= 0:
                 raise ValidationError(_('Le montant de la transaction doit être positif.'))
+
+    @api.depends('amount', 'transaction_type')
+    def _compute_split_amounts(self):
+        for txn in self:
+            txn.deposit_amount = txn.amount if txn.transaction_type in CREDIT_TYPES else 0.0
+            txn.withdrawal_amount = txn.amount if txn.transaction_type in DEBIT_TYPES else 0.0
 
     @api.constrains('transaction_type', 'amount', 'bypass_min_balance', 'account_id')
     def _check_minimum_balance(self):

@@ -2,10 +2,10 @@
 from odoo import fields
 from odoo.exceptions import UserError
 
-from .common import MicrofinanceCommon
+from .common import MicrofinanceCommon, MicrofinanceNoFundMixin
 
 
-class TestReschedule(MicrofinanceCommon):
+class TestReschedule(MicrofinanceNoFundMixin, MicrofinanceCommon):
 
     def _make_active_loan(self, **kwargs):
         loan = self._create_loan(**kwargs)

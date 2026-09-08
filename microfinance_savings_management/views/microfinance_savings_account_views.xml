@@ -86,11 +86,19 @@
                     <notebook invisible="is_container">
                         <page string="Transactions">
                             <field name="transaction_ids" readonly="1">
-                                <tree>
+                                <tree default_order="date desc, id desc">
                                     <field name="date"/>
-                                    <field name="transaction_type"/>
-                                    <field name="amount"/>
+                                    <!-- currency_id chargé (colonne masquée) : requis pour que
+                                         l'agrégat "sum" des colonnes monétaires ci-dessous
+                                         s'affiche (Odoo 17 : sans champ devise actif, le pied
+                                         de liste montre "—", cf. list_renderer getAggregates).
+                                         Même patron que income_line_*_ids dans
+                                         microfinance_loan_application_views.xml. -->
+                                    <field name="currency_id" column_invisible="1"/>
+                                    <field name="deposit_amount" sum="Total dépôts"/>
+                                    <field name="withdrawal_amount" sum="Total retraits"/>
                                     <field name="payment_method"/>
+                                    <field name="move_id"/>
                                     <field name="state" widget="badge"/>
                                 </tree>
                             </field>

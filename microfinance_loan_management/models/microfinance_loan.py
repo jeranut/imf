@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 try:
     from num2words import num2words
@@ -58,6 +58,11 @@ class MicrofinanceLoan(models.Model):
     term = fields.Integer(string='Nombre échéances', required=True, default=1, tracking=True)
     application_date = fields.Date(string='Date de demande', default=fields.Date.context_today, required=True)
     approval_date = fields.Date(string="Date d'approbation", readonly=True)
+    # Découplage activation / décaissement (docs_dev/guichet_caisse/AUDIT_decaissement.md) :
+    # date du passage à 'active' (clic « Activer »), distincte de disbursement_date (sortie de
+    # caisse effective au guichet). Sert de clé de file d'attente FIFO pour l'onglet
+    # « Décaissements en attente » (get_pending_disbursements).
+    activation_date = fields.Date(string="Date d'activation", readonly=True, copy=False)
     disbursement_date = fields.Date(string='Date de décaissement', readonly=True)
     closed_date = fields.Date(string='Date de clôture', readonly=True, copy=False)
     interest_rate = fields.Float(string='Taux intérêt annuel (%)', related='product_id.interest_rate', readonly=False, store=True)
@@ -67,6 +72,12 @@ class MicrofinanceLoan(models.Model):
     )
     allowed_repayment_frequency_ids = fields.Many2many(
         related='product_id.allowed_repayment_frequency_ids', string='Périodicités autorisées (produit)',
+    )
+    # Exposé pour les modifiers de vue (bouton « Envoyer les frais en caisse ») : les
+    # expressions invisible= ne savent pas suivre product_id.xxx, il faut un champ du modèle.
+    fee_charged_before_disbursement = fields.Boolean(
+        related='product_id.fee_charged_before_disbursement', string='Frais exigés avant décaissement (produit)',
+        readonly=True,
     )
     repayment_frequency_id = fields.Many2one(
         'microfinance.repayment.frequency', string='Périodicité de remboursement',
@@ -181,6 +192,11 @@ class MicrofinanceLoan(models.Model):
     balance_total = fields.Monetary(string='Solde restant', compute='_compute_totals', store=True)
     overdue_amount = fields.Monetary(string='Montant en retard', compute='_compute_totals', store=True)
     overdue_installment_count = fields.Integer(string="Nombre d'échéances en retard", compute='_compute_totals', store=True)
+    # Instantané figé : écrit par cron_update_overdue_and_penalties (quotidien) via
+    # _get_max_overdue_days(), PAS un compute réactif (installment.state -> 'overdue' dépend
+    # déjà du même cron). Permet le calcul du PAR par agent en pur read_group (dashboard
+    # portefeuille, Lot 1) sans itérer les échéances de chaque crédit à chaque requête HTTP.
+    max_days_overdue = fields.Integer(string='Jours de retard (max)', readonly=True, default=0, copy=False)
     provision_amount = fields.Monetary(compute='_compute_provision', store=True, string='Provision requise')
     provision_posted_amount = fields.Monetary(copy=False, readonly=True, default=0.0, string='Provision comptabilisée')
     scoring_profile_id = fields.Many2one(
@@ -228,6 +244,14 @@ class MicrofinanceLoan(models.Model):
     )
     fee_amount_due = fields.Monetary(compute='_compute_fee_amount', store=True, string='Frais de dossier dus')
     fee_paid = fields.Boolean(string='Frais payés', default=False, readonly=True, copy=False)
+    # Marqueur "envoyé au guichet caisse" (docs_dev/guichet_caisse/AUDIT_frais.md + prompt
+    # "Lot 1 étendu - Onglet Frais") : posé par action_send_fee_to_cashier() depuis la fiche
+    # crédit (group_microfinance_finance), fait apparaître le dossier dans l'onglet "Frais" du
+    # guichet. L'encaissement comptable réel a lieu au passage en caisse (action_charge_fee
+    # via register_operation). Champ historique : jamais remis à False - une fois fee_paid,
+    # c'est fee_paid qui garde contre un second envoi/encaissement.
+    fee_sent_to_cashier = fields.Boolean(
+        string='Frais envoyés en caisse', default=False, copy=False, readonly=True)
     # Flux Option A (docs_dev/frais_dossier_creance_pcec/) : deux écritures distinctes.
     # fee_receivable_move_id = engagement créé à l'approbation (débit "frais à recevoir" 208005 /
     # crédit commission 717003), uniquement pour les produits "frais exigés avant décaissement".
@@ -263,10 +287,25 @@ class MicrofinanceLoan(models.Model):
              "approuvé et constitue un prérequis à l'activation : action_disburse() refuse "
              "le décaissement tant que ce champ est vide. À l'enregistrement, le fichier est "
              "aussi posté dans le fil de communication du dossier. Sa pièce jointe ne peut "
-             "plus être supprimée depuis le chatter (cf. ir.attachment.unlink) - un "
-             "remplacement par une nouvelle version reste possible en re-téléversant.",
+             "plus être supprimée depuis le chatter (cf. ir.attachment.unlink). Se dépose "
+             "exclusivement via le wizard microfinance.loan.contract.signature.wizard (bouton "
+             "\"Téléverser le contrat signé\") : une fois contract_signature_date renseigné, "
+             "ce champ est définitivement verrouillé, y compris pour un remplacement (cf. "
+             "_check_contract_signature_locked()).",
     )
     signed_contract_filename = fields.Char(string='Nom du fichier contrat signé', copy=False)
+    contract_signature_date = fields.Date(
+        string='Date de signature du contrat', copy=False,
+        help="Date à laquelle l'emprunteur a signé le contrat de crédit, saisie une seule "
+             "fois via le wizard de confirmation (bouton \"Téléverser le contrat signé\") au "
+             "moment du dépôt du fichier signé - pré-remplie à la date du jour dans le "
+             "wizard mais librement modifiable avant confirmation. Verrouillée "
+             "définitivement dès qu'elle est renseignée : ni cette date, ni signed_contract/ "
+             "signed_contract_filename ne peuvent plus être modifiés ensuite, quel que soit "
+             "l'état du dossier (y compris closed/defaulted/written_off) ou le groupe de "
+             "l'utilisateur (cf. _check_contract_signature_locked(), sans dérogation) - "
+             "décision Micka, docs_dev/date_signature_contrat/.",
+    )
 
     # États où le crédit reste modifiable avant activation (avant tout paiement possible) :
     # échéancier/échéance encore librement recalculables. Utilisée par action_generate_schedule
@@ -380,6 +419,32 @@ class MicrofinanceLoan(models.Model):
                 "encore nécessaire."
             ) % {'loan_name': loan.name, 'avis': avis_label, 'fields': field_labels})
 
+    # Champs verrouillés définitivement dès que contract_signature_date est renseigné une
+    # première fois - décision Micka, docs_dev/date_signature_contrat/. Volontairement
+    # DISTINCT de _LOCKED_DOSSIER_FIELDS/_check_locked_dossier_fields() ci-dessus : ce
+    # verrouillage-ci ne dépend pas de `state` (il s'applique aussi bien sur un dossier
+    # closed/defaulted/written_off que active), et n'admet AUCUNE dérogation (pas de
+    # contexte d'échappement comme `propagation_avis_ca_cdag` : une fois signé, même le
+    # wizard qui a posé la valeur ne peut plus la réécrire).
+    _CONTRACT_SIGNATURE_LOCKED_FIELDS = {'signed_contract', 'signed_contract_filename', 'contract_signature_date'}
+
+    def _check_contract_signature_locked(self, vals):
+        """Lève une UserError si `vals` touche signed_contract, signed_contract_filename ou
+        contract_signature_date sur un crédit dont contract_signature_date est déjà renseigné
+        (valeur AVANT écriture, cette méthode est appelée avant super().write()). Aucune
+        dérogation : contrairement à _check_locked_dossier_fields(), pas de contexte
+        d'échappement - la seule écriture légitime sur ces champs est la toute première,
+        effectuée par microfinance.loan.contract.signature.wizard.action_confirm() tant que
+        contract_signature_date est encore vide."""
+        if not (self._CONTRACT_SIGNATURE_LOCKED_FIELDS & set(vals)):
+            return
+        for loan in self:
+            if loan.contract_signature_date:
+                raise UserError(_(
+                    "Le contrat signé et sa date de signature ne peuvent plus être modifiés "
+                    "une fois confirmés."
+                ))
+
     def unlink(self):
         # La suppression d'un crédit purge ses pièces jointes (dont le contrat signé,
         # protégé par ir.attachment.unlink) : on lève ici la protection le temps de la
@@ -388,6 +453,7 @@ class MicrofinanceLoan(models.Model):
 
     def write(self, vals):
         self._check_locked_dossier_fields(vals)
+        self._check_contract_signature_locked(vals)
         result = super().write(vals)
         if self._AVIS_PROPAGATION_TRIGGER_FIELDS & set(vals):
             for loan in self:
@@ -648,7 +714,13 @@ class MicrofinanceLoan(models.Model):
         written_off/closed en sont donc déjà exclus). Extrait en méthode de modèle
         (plutôt que gardé dans le contrôleur HTTP) pour rester testable directement."""
         tranches = [('1-30', 1, 30), ('31-60', 31, 60), ('61-90', 61, 90), ('90+', 91, None)]
-        portfolio_loans = self.search([('company_id', '=', company_id), ('state', 'in', ('active', 'defaulted'))])
+        # disbursement_date renseigné : un crédit 'active' non encore décaissé (découplage
+        # activation / décaissement, docs_dev/guichet_caisse/AUDIT_decaissement.md) n'a pas de
+        # portefeuille à risque — ses échéances pré-générées ne représentent aucun impayé réel.
+        portfolio_loans = self.search([
+            ('company_id', '=', company_id), ('state', 'in', ('active', 'defaulted')),
+            ('disbursement_date', '!=', False),
+        ])
         outstanding_amount = sum(portfolio_loans.mapped('balance_total'))
         amounts = dict.fromkeys([label for label, _, _ in tranches], 0.0)
         for loan in portfolio_loans:
@@ -667,11 +739,373 @@ class MicrofinanceLoan(models.Model):
             ],
         }
 
-    @api.depends('state', 'balance_total', 'company_id', 'installment_ids.due_date', 'installment_ids.state')
+    # ==================================================================
+    # Dashboard « Portefeuille par agent de crédit » (Lot 1)
+    # Bloc entièrement ADDITIF : get_par_buckets et les panneaux existants du dashboard
+    # (get_due_today, top_overdue_loans, monthly_*) ne sont pas touchés.
+    # Décisions actées (docs_dev/dashboard_portefeuille_agent/) :
+    #  - base encours/PAR = balance_total ;
+    #  - portefeuille = state in ('active','defaulted') ET disbursement_date renseigné ;
+    #  - dossiers sans officer_id exclus ;
+    #  - scope : agent -> soi ; manager/gestionnaire -> agence active ; auditeur -> toutes ses
+    #    agences ; contrôle serveur du scope obligatoire (jamais de confiance au paramètre client).
+    # ==================================================================
+
+    _AGENT_PORTFOLIO_STATES = ('active', 'defaulted')
+
+    @api.model
+    def _get_agent_portfolio_scope(self):
+        """(company_ids, officer_id | None) selon le rôle de self.env.user. L'ordre des tests
+        fait le « test en négatif » (décision n°11) : manager+auditeur -> traité en auditeur ;
+        un pur agent tombe dans le else."""
+        user = self.env.user
+        mod = 'microfinance_loan_management.'
+        if user.has_group(mod + 'group_microfinance_auditor'):
+            return user.company_ids.ids, None
+        if user.has_group(mod + 'group_microfinance_manager') \
+                or user.has_group(mod + 'group_microfinance_gestionnaire'):
+            return [self.env.company.id], None
+        return [self.env.company.id], user.id
+
+    @api.model
+    def get_available_agents(self):
+        """Agents sélectionnables par l'utilisateur courant (sélecteur d'en-tête). Un agent ne
+        se voit que lui-même. Un manager/auditeur voit les officer_id ayant au moins un dossier
+        du portefeuille dans son périmètre ; en multi-société (auditeur) un même agent ressort
+        une ligne par agence."""
+        company_ids, forced_officer = self._get_agent_portfolio_scope()
+        if forced_officer:
+            user = self.env.user
+            return [{
+                'officer_id': user.id, 'officer_name': user.display_name,
+                'company_id': self.env.company.id, 'company_name': self.env.company.display_name,
+            }]
+        groups = self.read_group(
+            [
+                ('company_id', 'in', company_ids),
+                ('state', 'in', self._AGENT_PORTFOLIO_STATES),
+                ('disbursement_date', '!=', False),
+                ('officer_id', '!=', False),
+            ],
+            ['officer_id', 'company_id'], ['officer_id', 'company_id'], lazy=False,
+        )
+        agents = [{
+            'officer_id': row['officer_id'][0], 'officer_name': row['officer_id'][1],
+            'company_id': row['company_id'][0], 'company_name': row['company_id'][1],
+        } for row in groups if row['officer_id'] and row['company_id']]
+        agents.sort(key=lambda a: (a['company_name'], a['officer_name']))
+        return agents
+
+    @api.model
+    def _resolve_agent_request(self, officer_id_filter):
+        """Contrôle serveur du scope (décision n°11, non négociable). Retourne
+        (company_ids, officer_id_effectif). Lève AccessError si l'utilisateur demande un agent
+        hors de son périmètre. `company_ids` provient TOUJOURS du rôle serveur, jamais du client."""
+        company_ids, forced_officer = self._get_agent_portfolio_scope()
+        if forced_officer:
+            if officer_id_filter and officer_id_filter != forced_officer:
+                raise AccessError(_("Vous ne pouvez consulter que votre propre portefeuille."))
+            return company_ids, forced_officer
+        if officer_id_filter:
+            allowed = {a['officer_id'] for a in self.get_available_agents()}
+            if officer_id_filter not in allowed:
+                raise AccessError(_("Cet agent n'appartient pas à votre périmètre."))
+        return company_ids, officer_id_filter
+
+    @api.model
+    def _agent_portfolio_domain(self, company_ids, officer_id_filter=None):
+        domain = [
+            ('company_id', 'in', company_ids),
+            ('state', 'in', self._AGENT_PORTFOLIO_STATES),
+            ('disbursement_date', '!=', False),
+            ('officer_id', '!=', False),
+        ]
+        if officer_id_filter:
+            domain.append(('officer_id', '=', officer_id_filter))
+        return domain
+
+    @api.model
+    def get_agent_portfolio_kpis(self, officer_id_filter=None):
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        loans = self.search(self._agent_portfolio_domain(company_ids, officer))
+        inst_domain = [
+            ('company_id', 'in', company_ids),
+            ('loan_id.state', 'in', self._AGENT_PORTFOLIO_STATES),
+            ('loan_id.disbursement_date', '!=', False),
+            ('officer_id', '!=', False),
+        ]
+        pay_domain = [
+            ('company_id', 'in', company_ids),
+            ('state', '=', 'posted'),
+            ('loan_id.state', 'in', self._AGENT_PORTFOLIO_STATES),
+            ('loan_id.disbursement_date', '!=', False),
+            ('officer_id', '!=', False),
+        ]
+        if officer:
+            inst_domain.append(('officer_id', '=', officer))
+            pay_domain.append(('officer_id', '=', officer))
+        due = self.env['microfinance.loan.installment'].read_group(inst_domain, ['total_amount:sum'], [], lazy=False)
+        paid = self.env['microfinance.loan.payment'].read_group(pay_domain, ['amount:sum'], [], lazy=False)
+        total_due = (due and due[0].get('total_amount')) or 0.0
+        total_paid = (paid and paid[0].get('amount')) or 0.0
+        return {
+            'nb_clients': len(loans.mapped('partner_id')),
+            'encours': sum(loans.mapped('balance_total')),
+            'nb_dossiers_actifs': len(loans),
+            'nb_dossiers_en_retard': len(loans.filtered(lambda l: l.overdue_amount > 0)),
+            'montant_impaye': sum(loans.mapped('overdue_amount')),
+            'taux_remboursement': (total_paid / total_due * 100.0) if total_due else 0.0,
+        }
+
+    @api.model
+    def get_agent_monthly_kpis(self, officer_id_filter=None, month=None):
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        month_start = (fields.Date.to_date(month) if month
+                       else fields.Date.context_today(self.env.user)).replace(day=1)
+        next_month = month_start + relativedelta(months=1)
+
+        disb_domain = [
+            ('company_id', 'in', company_ids),
+            ('disbursement_date', '>=', month_start), ('disbursement_date', '<', next_month),
+            ('officer_id', '!=', False),
+        ]
+        inst_domain = [
+            ('company_id', 'in', company_ids),
+            ('due_date', '>=', month_start), ('due_date', '<', next_month),
+            ('loan_id.state', 'in', self._AGENT_PORTFOLIO_STATES),
+            ('loan_id.disbursement_date', '!=', False),
+            ('officer_id', '!=', False),
+        ]
+        pay_domain = [
+            ('company_id', 'in', company_ids),
+            ('state', '=', 'posted'),
+            ('payment_date', '>=', month_start), ('payment_date', '<', next_month),
+            ('officer_id', '!=', False),
+        ]
+        if officer:
+            for dom in (disb_domain, inst_domain, pay_domain):
+                dom.append(('officer_id', '=', officer))
+        disb = self.read_group(disb_domain, ['loan_amount:sum'], [], lazy=False)
+        inst = self.env['microfinance.loan.installment'].read_group(inst_domain, ['total_amount:sum'], [], lazy=False)
+        pay = self.env['microfinance.loan.payment'].read_group(pay_domain, ['amount:sum'], [], lazy=False)
+        portfolio = self.search(self._agent_portfolio_domain(company_ids, officer))
+        return {
+            'month': month_start.strftime('%Y-%m'),
+            'nb_credits_decaisses': (disb and disb[0].get('__count')) or 0,
+            'montant_decaisse': (disb and disb[0].get('loan_amount')) or 0.0,
+            'remboursement_attendu': (inst and inst[0].get('total_amount')) or 0.0,
+            'remboursement_encaisse': (pay and pay[0].get('amount')) or 0.0,
+            'montant_en_retard': sum(portfolio.mapped('overdue_amount')),
+        }
+
+    def _par_by_agent_raw(self, company_ids, officer_id_filter=None):
+        """{officer_id: {officer_name, total (=Σ balance_total), at_risk [(balance_total, max_days), ...]}}.
+        Lit le champ stocké max_days_overdue (un seul rafraîchissement par le cron quotidien),
+        pas de re-scan des échéances."""
+        loans = self.search(self._agent_portfolio_domain(company_ids, officer_id_filter))
+        raw = {}
+        for loan in loans:
+            entry = raw.setdefault(loan.officer_id.id, {
+                'officer_id': loan.officer_id.id,
+                'officer_name': loan.officer_id.display_name,
+                'total': 0.0, 'at_risk': [],
+            })
+            entry['total'] += loan.balance_total
+            if loan.max_days_overdue > 0:
+                entry['at_risk'].append((loan.balance_total, loan.max_days_overdue))
+        return raw
+
+    @api.model
+    def get_par_buckets_by_agent(self, officer_id_filter=None):
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        tranches = [('1-30', 1, 30), ('31-60', 31, 60), ('61-90', 61, 90), ('90+', 91, None)]
+        result = []
+        for entry in self._par_by_agent_raw(company_ids, officer).values():
+            amounts = dict.fromkeys([lbl for lbl, _, _ in tranches], 0.0)
+            for balance, days in entry['at_risk']:
+                for lbl, lo, hi in tranches:
+                    if days >= lo and (hi is None or days <= hi):
+                        amounts[lbl] += balance
+                        break
+            total = entry['total']
+            result.append({
+                'officer_id': entry['officer_id'],
+                'officer_name': entry['officer_name'],
+                'labels': ['PAR %s' % lbl for lbl, _, _ in tranches],
+                'values': [(amounts[lbl] / total * 100.0) if total else 0.0 for lbl, _, _ in tranches],
+            })
+        result.sort(key=lambda r: r['officer_name'])
+        return result
+
+    @api.model
+    def get_cumulative_par_by_agent(self, officer_id_filter=None, thresholds=(30, 60, 90, 120)):
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        result = []
+        for entry in self._par_by_agent_raw(company_ids, officer).values():
+            total = entry['total']
+            result.append({
+                'officer_id': entry['officer_id'],
+                'officer_name': entry['officer_name'],
+                'thresholds': list(thresholds),
+                'values': [
+                    (sum(bal for bal, days in entry['at_risk'] if days >= t) / total * 100.0)
+                    if total else 0.0
+                    for t in thresholds
+                ],
+                'outstanding_total': total,
+            })
+        result.sort(key=lambda r: r['officer_name'])
+        return result
+
+    @api.model
+    def get_agent_due_dates_panel(self, officer_id_filter=None):
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        today = fields.Date.context_today(self.env.user)
+        Installment = self.env['microfinance.loan.installment']
+        base = [
+            ('company_id', 'in', company_ids),
+            ('loan_id.state', 'in', self._AGENT_PORTFOLIO_STATES),
+            ('loan_id.disbursement_date', '!=', False),
+            ('officer_id', '!=', False),
+        ]
+        pay_domain = [
+            ('company_id', 'in', company_ids), ('state', '=', 'posted'),
+            ('payment_date', '=', today), ('officer_id', '!=', False),
+        ]
+        if officer:
+            base.append(('officer_id', '=', officer))
+            pay_domain.append(('officer_id', '=', officer))
+
+        today_insts = Installment.search(base + [('due_date', '=', today)])
+        attendu = sum(today_insts.mapped('total_amount'))
+        pay = self.env['microfinance.loan.payment'].read_group(pay_domain, ['amount:sum'], [], lazy=False)
+        encaisse = (pay and pay[0].get('amount')) or 0.0
+
+        next_insts = Installment.search(base + [
+            ('due_date', '>', today),
+            ('due_date', '<=', today + relativedelta(days=7)),
+        ])
+        return {
+            'today': {
+                'nb_clients': len(today_insts.mapped('partner_id')),
+                'montant_attendu': attendu,
+                'montant_encaisse': encaisse,
+                'reste_a_recouvrer': attendu - encaisse,
+            },
+            'next_7_days': {
+                'nb_echeances': len(next_insts),
+                'montant_a_recouvrer': sum(next_insts.mapped('residual_amount')),
+            },
+        }
+
+    @api.model
+    def get_agent_portfolio_table(self, officer_id_filter=None, search=None, offset=0, limit=20, order=None):
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        domain = self._agent_portfolio_domain(company_ids, officer)
+        if search:
+            domain = ['|', ('name', 'ilike', search), ('partner_id.name', 'ilike', search)] + domain
+        total = self.search_count(domain)
+        loans = self.search(domain, offset=offset or 0, limit=limit or 20, order=order or 'name asc')
+        rows = [{
+            'id': loan.id,
+            'name': loan.name,
+            'partner_id': loan.partner_id.id,
+            'partner_name': loan.partner_id.display_name,
+            'officer_name': loan.officer_id.display_name,
+            'company_name': loan.company_id.display_name,
+            'loan_amount': loan.loan_amount,
+            'balance_total': loan.balance_total,
+            'overdue_amount': loan.overdue_amount,
+            'max_days_overdue': loan.max_days_overdue,
+            'disbursement_date': loan.disbursement_date and loan.disbursement_date.isoformat(),
+            'state': loan.state,
+        } for loan in loans]
+        return {'rows': rows, 'total': total, 'offset': offset or 0, 'limit': limit or 20}
+
+    @api.model
+    def get_par_history_by_agent(self, officer_id_filter=None, months=12):
+        """Série mensuelle du PAR cumulatif lue depuis microfinance.portfolio.snapshot (§1.9).
+        `has_data` = False tant que le cron mensuel n'a jamais tourné -> le Lot 2 affiche un
+        état vide explicite plutôt qu'un graphe muet. En périmètre multi-agent/multi-agence,
+        moyenne pondérée par l'encours figé de chaque snapshot."""
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        Snapshot = self.env['microfinance.portfolio.snapshot']
+        start = (fields.Date.context_today(self.env.user).replace(day=1)
+                 - relativedelta(months=(months or 12) - 1))
+        domain = [('company_id', 'in', company_ids), ('date', '>=', start)]
+        if officer:
+            domain.append(('officer_id', '=', officer))
+        by_month = {}
+        for snap in Snapshot.search(domain, order='date asc'):
+            bucket = by_month.setdefault(snap.date.strftime('%Y-%m'),
+                                        {'w': 0.0, 30: 0.0, 60: 0.0, 90: 0.0, 120: 0.0})
+            weight = snap.outstanding_total or 0.0
+            bucket['w'] += weight
+            bucket[30] += snap.par30 * weight
+            bucket[60] += snap.par60 * weight
+            bucket[90] += snap.par90 * weight
+            bucket[120] += snap.par120 * weight
+        labels = sorted(by_month)
+
+        def _series(threshold):
+            return [(by_month[k][threshold] / by_month[k]['w']) if by_month[k]['w'] else 0.0
+                    for k in labels]
+
+        return {
+            'labels': labels,
+            'has_data': bool(labels),
+            'par30': _series(30), 'par60': _series(60),
+            'par90': _series(90), 'par120': _series(120),
+        }
+
+    @api.model
+    def cron_snapshot_portfolio_par(self):
+        """Fige le PAR cumulatif par (agent, agence) au 1ᵉʳ du mois courant. Upsert : ré-exécuté
+        le même mois, met à jour la ligne. À planifier APRÈS le cron quotidien des retards (pour
+        que max_days_overdue soit à jour). Tourne en superuser -> voit toutes les agences."""
+        Snapshot = self.env['microfinance.portfolio.snapshot']
+        capture_date = Snapshot._cron_capture_date()
+        for company in self.env['res.company'].search([]):
+            loans = self.search([
+                ('company_id', '=', company.id),
+                ('state', 'in', self._AGENT_PORTFOLIO_STATES),
+                ('disbursement_date', '!=', False),
+                ('officer_id', '!=', False),
+            ])
+            by_officer = defaultdict(lambda: {'total': 0.0, 'at_risk': []})
+            for loan in loans:
+                entry = by_officer[loan.officer_id.id]
+                entry['total'] += loan.balance_total
+                if loan.max_days_overdue > 0:
+                    entry['at_risk'].append((loan.balance_total, loan.max_days_overdue))
+            for officer_id, entry in by_officer.items():
+                total = entry['total']
+                vals = {
+                    'date': capture_date, 'officer_id': officer_id, 'company_id': company.id,
+                    'outstanding_total': total,
+                }
+                for threshold, key in ((30, 'par30'), (60, 'par60'), (90, 'par90'), (120, 'par120')):
+                    at_risk = sum(bal for bal, days in entry['at_risk'] if days >= threshold)
+                    vals[key] = (at_risk / total * 100.0) if total else 0.0
+                existing = Snapshot.search([
+                    ('date', '=', capture_date), ('officer_id', '=', officer_id),
+                    ('company_id', '=', company.id),
+                ], limit=1)
+                if existing:
+                    existing.write(vals)
+                else:
+                    Snapshot.create(vals)
+        return True
+
+    @api.depends('state', 'disbursement_date', 'balance_total', 'company_id',
+                 'installment_ids.due_date', 'installment_ids.state')
     def _compute_provision(self):
         Rule = self.env['microfinance.provision.rule']
         for loan in self:
-            if loan.state not in ('active', 'defaulted'):
+            # Pas de provision sur un crédit non encore décaissé (état 'active' transitoire du
+            # découplage activation / décaissement, AUDIT_decaissement.md) : aucun risque de
+            # crédit tant que les fonds ne sont pas sortis.
+            if loan.state not in ('active', 'defaulted') or not loan.disbursement_date:
                 loan.provision_amount = 0.0
                 continue
             max_days = loan._get_max_overdue_days()
@@ -1325,7 +1759,11 @@ class MicrofinanceLoan(models.Model):
         if not self.repayment_frequency_id or not self.loan_amount or not self.term:
             return []
         remaining = self.loan_amount
-        start = self.approval_date or self.application_date or fields.Date.context_today(self)
+        # Ancre de l'échéancier : la date de décaissement réelle si elle est connue (crédit
+        # déjà décaissé, régénération via _regenerate_schedule_from_disbursement), sinon
+        # approval_date -> application_date -> jour courant, comme avant le découplage
+        # activation / décaissement (docs_dev/guichet_caisse/AUDIT_decaissement.md §3).
+        start = self.disbursement_date or self.approval_date or self.application_date or fields.Date.context_today(self)
         delta = self._period_delta()
         interest_factor = self._period_interest_factor()
         grace_days = self.product_id.grace_period_days or 0
@@ -1482,6 +1920,13 @@ class MicrofinanceLoan(models.Model):
         self.ensure_one()
         if self.state != 'active':
             raise UserError(_('Le rééchelonnement n\'est possible que pour un crédit actif.'))
+        if not self.disbursement_date:
+            # Découplage activation / décaissement (AUDIT_decaissement.md) : rien à rééchelonner
+            # tant que le crédit n'est pas décaissé (l'échéancier est de toute façon recalé sur
+            # la date de décaissement effective).
+            raise UserError(_(
+                "Ce crédit n'est pas encore décaissé : le rééchelonnement n'a de sens "
+                "qu'après le décaissement effectif."))
         if not self.installment_ids.filtered(lambda inst: inst.state != 'paid'):
             raise UserError(_('Aucune échéance restante à rééchelonner.'))
         return {
@@ -1669,10 +2114,59 @@ class MicrofinanceLoan(models.Model):
             ]
         }
 
+    def action_send_fee_to_cashier(self):
+        """Remplace le rôle de l'ancien bouton « Encaisser les frais de dossier » sur la fiche
+        crédit : ne comptabilise RIEN, pose seulement le marqueur fee_sent_to_cashier qui fait
+        apparaître le dossier dans l'onglet « Frais » du guichet. L'encaissement comptable réel
+        (action_charge_fee) a lieu au passage en caisse. Mêmes gardes de garde-fou que
+        action_charge_fee, plus l'exclusion des produits « frais nettés au décaissement »."""
+        for loan in self:
+            if loan.state != 'approved':
+                raise UserError(_('Les frais de dossier ne peuvent être envoyés en caisse que sur un crédit approuvé.'))
+            if loan.fee_paid:
+                raise UserError(_('Les frais de dossier ont déjà été encaissés.'))
+            if loan.fee_amount_due <= 0:
+                raise UserError(_('Aucun frais de dossier à encaisser pour ce crédit.'))
+            if not loan.product_id.fee_charged_before_disbursement:
+                raise UserError(_("Les frais de ce produit sont nettés au décaissement, pas d'envoi en caisse nécessaire."))
+            if loan.fee_sent_to_cashier:
+                raise UserError(_('Ce dossier a déjà été envoyé en caisse.'))
+            loan.fee_sent_to_cashier = True
+            loan.message_post(body=_('Frais de dossier envoyés en caisse (%.2f).') % loan.fee_amount_due)
+        return True
+
+    @api.model
+    def get_pending_fees(self, company_id):
+        """Dossiers dont les frais ont été envoyés en caisse et restent à encaisser, pour
+        l'onglet « Frais » du guichet (docs_dev/guichet_caisse/AUDIT_frais.md). Périmètre acté :
+        approuvés, frais envoyés (fee_sent_to_cashier), non encore payés, frais dus > 0, et
+        produit en mode « frais exigés avant décaissement » (les frais nettés au décaissement
+        sont comptabilisés ailleurs, ils ne passent jamais en caisse). Filtre company_id
+        explicite - défense en profondeur (cf. AUDIT.md §5)."""
+        loans = self.search([
+            ('state', '=', 'approved'),
+            ('company_id', '=', company_id),
+            ('fee_sent_to_cashier', '=', True),
+            ('fee_paid', '=', False),
+            ('fee_amount_due', '>', 0),
+            ('product_id.fee_charged_before_disbursement', '=', True),
+        ], order='id asc')
+        return [{
+            'id': loan.id,
+            'partner_id': loan.partner_id.id,
+            'partner_name': loan.partner_id.name,
+            'dossier': loan.name,
+            'product_name': loan.product_id.name,
+            'amount': loan.fee_amount_due,
+            'company_name': loan.company_id.name,
+        } for loan in loans]
+
     def action_charge_fee(self):
         for loan in self:
             if loan.state != 'approved':
                 raise UserError(_('Les frais de dossier ne peuvent être encaissés que sur un crédit approuvé.'))
+            if not loan.fee_sent_to_cashier:
+                raise UserError(_("Les frais doivent d'abord être envoyés en caisse avant encaissement."))
             # Verrou pessimiste ligne (FOR UPDATE) posé AVANT la relecture de fee_paid /
             # fee_amount_due : sérialise deux requêtes « Encaisser les frais » concurrentes sur
             # le même dossier en prod multi-worker (docs_dev/refactor_frais_dossier_account_move/
@@ -1865,10 +2359,19 @@ class MicrofinanceLoan(models.Model):
                     '« %(journal)s » (disponible : %(balance).2f, demandé : %(amount).2f).'
                 ) % {'journal': journal.name, 'balance': account.current_balance, 'amount': loan.net_disbursed_amount})
 
-    def action_disburse(self):
+    def action_activate(self):
+        """Activation du crédit (bouton fiche « Activer ») : rejoue TOUS les contrôles
+        d'éligibilité de l'ancien action_disburse (contrat signé, frais payés, plafond de
+        décaissement, solde de caisse, disponibilité du fonds), puis fait passer le crédit à
+        'active' — SANS créer d'écriture comptable ni poser disbursement_date. Le décaissement
+        effectif (sortie de caisse) a lieu séparément via le Guichet Caisse
+        (action_process_disbursement, appelée par register_operation type decaissement_credit).
+        Décision Micka (docs_dev/guichet_caisse/AUDIT_decaissement.md) : découplage
+        activation / décaissement, contrôles conservés au clic « Activer » (même si l'argent ne
+        sort qu'ensuite), jamais rejoués au décaissement effectif."""
         for loan in self:
             if loan.state != 'approved':
-                raise UserError(_('Le crédit doit être approuvé avant décaissement.'))
+                raise UserError(_('Le crédit doit être approuvé avant activation.'))
             if not loan.signed_contract:
                 raise UserError(_(
                     "Le contrat signé doit être téléversé avant l'activation du crédit."
@@ -1880,19 +2383,120 @@ class MicrofinanceLoan(models.Model):
             loan._check_fond_disponibilite()
             if not loan.installment_ids:
                 loan.action_generate_schedule()
+            loan.write({'state': 'active', 'activation_date': fields.Date.context_today(loan)})
+            loan.message_post(body=_('Crédit activé, en attente de décaissement en caisse.'))
+        return True
+
+    def action_process_disbursement(self):
+        """Décaissement effectif : crée et poste l'écriture de sortie de caisse/banque
+        (_prepare_disbursement_move, inchangée), pose disbursement_date, puis re-cale
+        l'échéancier sur la date de décaissement réelle. Appelée depuis le Guichet Caisse
+        (register_operation type decaissement_credit, via _run_posting_sudo) — jamais depuis un
+        bouton de fiche. Ne rejoue AUCUN contrôle d'éligibilité : ils ont tous été passés à
+        action_activate (décision Micka, cf. AUDIT_decaissement.md)."""
+        for loan in self:
+            if loan.state != 'active':
+                raise UserError(_('Le crédit doit être activé avant le décaissement effectif.'))
+            # Verrou pessimiste ligne (FOR UPDATE) posé AVANT la relecture de state /
+            # disbursement_date : sérialise deux décaissements concurrents du même crédit en
+            # prod multi-worker (bouton fiche déprécié + guichet register_operation), sur le
+            # modèle exact de action_charge_fee (docs_dev/guichet_caisse/AUDIT_decaissement.md
+            # §4). La transaction perdante attend le commit de la gagnante sur ce SELECT, puis
+            # invalide son cache et retombe sur la garde disbursement_date ci-dessous - au lieu
+            # de créer un second account.move de décaissement. Verrou relâché au commit/rollback.
+            loan.env.cr.execute("SELECT id FROM microfinance_loan WHERE id = %s FOR UPDATE", (loan.id,))
+            loan.invalidate_recordset(['state', 'disbursement_date'])
+            if loan.state != 'active':
+                raise UserError(_('Le crédit doit être activé avant le décaissement effectif.'))
+            if loan.disbursement_date:
+                raise UserError(_('Ce crédit a déjà été décaissé.'))
             move = self.env['account.move'].with_context(
                 default_loan_id=False,
                 default_loan_line_id=False,
             ).create(loan._prepare_disbursement_move())
             move.action_post()
-            loan.write({'state': 'active', 'disbursement_date': fields.Date.context_today(loan)})
+            loan.write({'disbursement_date': fields.Date.context_today(loan)})
+            loan._regenerate_schedule_from_disbursement()
             loan.message_post(body=_('Crédit décaissé. Écriture : %s') % move.name)
         return True
+
+    def _regenerate_schedule_from_disbursement(self):
+        """Re-cale l'échéancier sur disbursement_date (qui vient d'être posé par
+        action_process_disbursement). Avant le découplage, l'échéancier généré à l'approbation
+        était ancré sur approval_date (_build_installment_commands) et jamais recalculé ; un
+        crédit resté « activé, non décaissé » plusieurs jours aurait donc des due_date déjà
+        échues au moment de la remise des fonds (docs_dev/guichet_caisse/AUDIT_decaissement.md
+        §3). Ici on régénère avec la même mécanique interne que action_generate_schedule()
+        (microfinance_loan.py, `installment_ids = [(5, 0, 0)] + _build_installment_commands(...)`),
+        mais sans son contrôle d'état public (_EDITABLE_SCHEDULE_STATES exclut 'active').
+
+        Garde anti-écrasement : action_generate_schedule() n'a pas de garde dédiée contre la
+        régénération d'un échéancier déjà remboursé (elle s'appuie sur _EDITABLE_SCHEDULE_STATES,
+        qui exclut tout état où un paiement est possible). En 'active' on la pose donc
+        explicitement, avec la même détection « de l'argent a déjà été imputé » que
+        _reschedule_installments (`inst.paid_principal or inst.paid_interest or inst.paid_penalty`)."""
+        self.ensure_one()
+        if any(inst.paid_principal or inst.paid_interest or inst.paid_penalty
+               for inst in self.installment_ids):
+            raise UserError(_(
+                "Impossible de recaler l'échéancier sur la date de décaissement : des "
+                "remboursements ont déjà été imputés sur ce crédit."))
+        commands = self._build_installment_commands(
+            rounding_mode='last_installment', raise_on_negative_reliquat=True)
+        if not commands:
+            # loan_amount / term / repayment_frequency_id manquants : ne pas vider un
+            # échéancier existant. Ne devrait pas arriver ici (échéancier déjà généré à
+            # l'approbation), garde défensive.
+            return
+        self.installment_ids = [(5, 0, 0)] + commands
+        return True
+
+    def action_disburse(self):
+        """DÉPRÉCIÉ (docs_dev/guichet_caisse/AUDIT_decaissement.md) : conservé uniquement comme
+        enchaînement action_activate() + action_process_disbursement() pour les appelants et
+        tests pas encore migrés vers le découplage. À supprimer une fois le sous-lot F et la
+        migration des tests directs (test_disbursement_limit, test_cash_balance_check,
+        test_fond_bailleur, test_fee, test_reschedule, test_repayment_accounting,
+        test_caisse_pos) terminés. Ne PAS l'utiliser dans du code nouveau."""
+        self.action_activate()
+        self.action_process_disbursement()
+        return True
+
+    @api.model
+    def get_pending_disbursements(self, company_id):
+        """Crédits activés en attente de décaissement effectif, pour l'onglet « Décaissements
+        en attente » du guichet (Lot 1.2). Depuis le découplage activation / décaissement
+        (docs_dev/guichet_caisse/AUDIT_decaissement.md) : state == 'active' ET
+        disbursement_date encore vide (seul cas accepté par action_process_disbursement).
+        Filtre société explicite (le caissier est mono-agence, mais l'ir.rule ne borne qu'aux
+        sociétés autorisées — défense en profondeur, cf. docs_dev/guichet_caisse/AUDIT.md §5).
+        Montant = net_disbursed_amount (net des frais nettés), décision actée. File FIFO sur
+        activation_date (date du clic « Activer »). Extraite en méthode de modèle pour rester
+        testable directement, comme get_par_buckets / get_due_today."""
+        loans = self.search([
+            ('state', '=', 'active'),
+            ('disbursement_date', '=', False),
+            ('company_id', '=', company_id),
+        ], order='activation_date asc, id asc')
+        return [{
+            'id': loan.id,
+            'partner_id': loan.partner_id.id,
+            'partner_name': loan.partner_id.name,
+            'dossier': loan.name,
+            'product_name': loan.product_id.name,
+            'amount': loan.net_disbursed_amount,
+            'approval_date': loan.approval_date,
+            'activation_date': loan.activation_date,
+            'company_name': loan.company_id.name,
+        } for loan in loans]
 
     def action_write_off(self):
         self.ensure_one()
         if self.state not in ('active', 'defaulted'):
             raise UserError(_('La radiation n\'est possible que pour un crédit actif ou en défaut.'))
+        if not self.disbursement_date:
+            raise UserError(_(
+                "Ce crédit n'est pas encore décaissé : il n'y a aucune créance à radier."))
         return {
             'type': 'ir.actions.act_window',
             'name': _('Radier le crédit'),
@@ -1928,6 +2532,11 @@ class MicrofinanceLoan(models.Model):
         self.ensure_one()
         if self.state not in ('active', 'defaulted'):
             raise UserError(_('La radiation n\'est possible que pour un crédit actif ou en défaut.'))
+        if not self.disbursement_date:
+            # Rempart serveur (le bouton action_write_off porte la même garde) : découplage
+            # activation / décaissement, AUDIT_decaissement.md.
+            raise UserError(_(
+                "Ce crédit n'est pas encore décaissé : il n'y a aucune créance à radier."))
         if self.balance_total <= 0.01:
             raise UserError(_('Aucun solde restant à radier. Utilisez la clôture normale.'))
         move = self.env['account.move'].with_context(
@@ -1988,7 +2597,9 @@ class MicrofinanceLoan(models.Model):
         une dans le chatter qu'une écriture consolidée, au prix d'un nombre d'écritures plus élevé
         lors d'une campagne mensuelle sur tout le portefeuille."""
         as_of_date = as_of_date or fields.Date.context_today(self)
-        for loan in self.filtered(lambda l: l.state in ('active', 'defaulted')):
+        # disbursement_date : cohérent avec _compute_provision, qui renvoie 0 pour un crédit
+        # 'active' non encore décaissé (découplage activation / décaissement).
+        for loan in self.filtered(lambda l: l.state in ('active', 'defaulted') and l.disbursement_date):
             delta = loan.provision_amount - loan.provision_posted_amount
             if abs(delta) < 0.01:
                 continue
@@ -2009,7 +2620,9 @@ class MicrofinanceLoan(models.Model):
 
     @api.model
     def cron_post_provisions(self):
-        self.search([('state', 'in', ('active', 'defaulted'))]).action_post_provisions()
+        self.search([
+            ('state', 'in', ('active', 'defaulted')), ('disbursement_date', '!=', False),
+        ]).action_post_provisions()
         return True
 
     def action_open_payment_wizard(self):
@@ -2017,6 +2630,23 @@ class MicrofinanceLoan(models.Model):
         return {
             'type': 'ir.actions.act_window', 'name': _('Enregistrer remboursement'), 'res_model': 'microfinance.loan.payment.wizard',
             'view_mode': 'form', 'target': 'new', 'context': {'default_loan_id': self.id, 'default_journal_id': self.product_id.payment_journal_id.id}
+        }
+
+    def action_open_contract_signature_wizard(self):
+        """Ouvre le wizard de dépôt du contrat signé (bouton header "Téléverser le contrat
+        signé", invisible dès que contract_signature_date est renseigné - docs_dev/
+        date_signature_contrat/). Remplace l'ancien upload direct (widget signed_contract_upload
+        / binary natif) : le fichier et sa date de signature ne sont plus écrits que via ce
+        wizard, en un seul write() verrouillé définitivement ensuite
+        (_check_contract_signature_locked())."""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Téléverser le contrat signé'),
+            'res_model': 'microfinance.loan.contract.signature.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_loan_id': self.id},
         }
 
     def action_print_repayment_schedule(self):
@@ -2048,6 +2678,47 @@ class MicrofinanceLoan(models.Model):
             'tag': 'display_notification',
             'params': {
                 'title': _('Calendrier de remboursement'),
+                'message': _('Le document a été ajouté au fil de communication de ce crédit.'),
+                'type': 'success',
+                'sticky': False,
+            },
+        }
+
+    def action_print_carnet_remboursement(self):
+        """Génère le carnet de remboursement en PDF et le poste en pièce jointe dans le
+        chatter du crédit, sans jamais déclencher de téléchargement côté navigateur -
+        même principe que action_print_repayment_schedule() et
+        action_print_contrat_to_chatter(). Le PDF et son attachment restent rattachés à
+        self.company_id (la société du crédit), jamais à self.env.company : un
+        message_post(attachments=[...]) direct laisserait ir.attachment.company_id
+        prendre la société ACTIVE de l'utilisateur courant par défaut (champ
+        `default=lambda self: self.env.company` sur ir.attachment), ce qui fuiterait le
+        document entre agences si l'utilisateur courant a plusieurs sociétés
+        sélectionnées - même risque déjà écarté sur les deux méthodes soeurs."""
+        self.ensure_one()
+        report = self.env.ref('microfinance_loan_management.action_report_carnet_remboursement')
+        pdf_content, _report_format = report._render_qweb_pdf(report.report_name, self.ids)
+        attachment = self.env['ir.attachment'].create({
+            'name': _('Carnet de remboursement - %s.pdf') % self.name,
+            'type': 'binary',
+            'datas': base64.b64encode(pdf_content),
+            'res_model': self._name,
+            'res_id': self.id,
+            'company_id': self.company_id.id,
+            'mimetype': 'application/pdf',
+        })
+        self.message_post(body=_('Carnet de remboursement généré.'), attachment_ids=[attachment.id])
+        # Le rafraîchissement du chatter est pris en charge côté client par
+        # MicrofinanceLoanFormController.afterExecuteActionButton (MAIL:RELOAD-THREAD),
+        # exactement comme pour action_print_repayment_schedule/action_print_contrat_to_chatter -
+        # un seul mécanisme, sans recharger tout le formulaire (préserve une saisie en cours
+        # ailleurs). Nécessite l'ajout de ce nom de bouton dans CHATTER_REFRESH_BUTTONS
+        # (static/src/js/microfinance_loan_form_view.js).
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'display_notification',
+            'params': {
+                'title': _('Carnet de remboursement'),
                 'message': _('Le document a été ajouté au fil de communication de ce crédit.'),
                 'type': 'success',
                 'sticky': False,
@@ -2120,6 +2791,32 @@ class MicrofinanceLoan(models.Model):
         """Date (JJ/MM/AAAA) de la dernière échéance de l'échéancier."""
         self.ensure_one()
         return self._format_contrat_date(self._contrat_sorted_installments()[-1:].due_date)
+
+    def get_loan_duration_days(self):
+        """Durée du crédit en jours, calculée uniquement depuis l'échéancier (première
+        échéance à dernière échéance) - indépendante du décaissement, disponible même
+        avant disbursement_date. 0 si l'échéancier n'a pas encore été généré (jamais
+        d'exception, cf. carnet de remboursement)."""
+        self.ensure_one()
+        installments = self._contrat_sorted_installments()
+        if not installments:
+            return 0
+        return (installments[-1].due_date - installments[0].due_date).days
+
+    def get_loan_rank_for_partner(self):
+        """Rang de ce crédit dans l'historique du client (1 = premier), tous produits et
+        toutes sociétés confondus (un client microfinance n'est rattaché qu'à une seule
+        agence, cf. docs_dev/carnet_remboursement/AUDIT_compteur_findramana_faha.md). Ne
+        compte que les crédits réellement engagés (mêmes états que le bouton "Imprimer le
+        reçu"), sauf le dossier courant lui-même qui compte toujours dans son propre rang,
+        quel que soit son état."""
+        self.ensure_one()
+        prior_engaged_count = self.search_count([
+            ('partner_id', '=', self.partner_id.id),
+            ('state', 'in', ('active', 'closed', 'defaulted', 'written_off')),
+            ('id', '<', self.id),
+        ])
+        return prior_engaged_count + 1
 
     def get_guarantee_amount(self):
         """Épargne de garantie exigée, recalculée depuis le pourcentage du produit
@@ -2246,14 +2943,41 @@ class MicrofinanceLoan(models.Model):
         # historique) pour que _sync_arrears_state() capture aussi les régularisations (passage à
         # 'paid') et pose arrears_cured_date. La portée de action_apply_penalty() reste identique
         # à avant (filtrée sur pending/partial/overdue juste après).
+        # loan_id.disbursement_date renseigné : un crédit 'active' (ou avec un échéancier généré
+        # à l'approbation) mais pas encore décaissé n'a AUCUN arriéré réel — ses échéances
+        # pré-générées, ancrées sur approval_date puis recalées au décaissement, ne doivent ni
+        # passer 'overdue', ni générer de pénalité, ni dégrader le score. Corrige aussi le bug
+        # préexistant (le cron ne filtrait pas l'état du crédit), cf.
+        # docs_dev/guichet_caisse/AUDIT_decaissement.md §2 / §8.5.
         installments = self.env['microfinance.loan.installment'].search([
+            ('loan_id.disbursement_date', '!=', False),
             '|',
             ('state', 'in', ('pending', 'partial', 'overdue')),
             '&', ('arrears_onset_date', '!=', False), ('arrears_cured_date', '=', False),
         ])
         installments._sync_arrears_state()
         installments.filtered(lambda inst: inst.state in ('pending', 'partial', 'overdue')).action_apply_penalty()
-        self.search([('state', '=', 'active')]).action_calculate_scoring(silent=True)
+        self.search([
+            ('state', '=', 'active'), ('disbursement_date', '!=', False),
+        ]).action_calculate_scoring(silent=True)
+        self._refresh_max_days_overdue()
+        return True
+
+    def _refresh_max_days_overdue(self):
+        """Rafraîchit le champ figé max_days_overdue à partir de _get_max_overdue_days(). Portée
+        sur le portefeuille décaissé (active/defaulted) PLUS tout crédit ayant encore une valeur
+        non nulle, pour la remettre à 0 après régularisation. Appelé par
+        cron_update_overdue_and_penalties, juste après _sync_arrears_state() (donc installment.state
+        est déjà à jour). Écrit uniquement les crédits dont la valeur change."""
+        loans = self.search([
+            '|',
+            '&', ('state', 'in', ('active', 'defaulted')), ('disbursement_date', '!=', False),
+            ('max_days_overdue', '!=', 0),
+        ])
+        for loan in loans:
+            days = loan._get_max_overdue_days()
+            if days != loan.max_days_overdue:
+                loan.max_days_overdue = days
         return True
 
 

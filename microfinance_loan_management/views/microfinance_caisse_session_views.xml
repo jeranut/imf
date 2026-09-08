@@ -21,8 +21,10 @@
         <field name="arch" type="xml">
             <form string="Session de caisse">
                 <header>
-                    <button name="action_open_session" string="Ouvrir la session" type="object" class="btn-primary" invisible="state != 'draft'"/>
-                    <button name="action_close_session" string="Clôturer la session" type="object" class="btn-primary" invisible="state != 'open'"/>
+                    <button name="action_open_session" string="Ouvrir la session" type="object" class="btn-primary" invisible="state != 'draft'"
+                            groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager"/>
+                    <button name="action_open_close_wizard" string="Clôturer la session" type="object" class="btn-primary" invisible="state != 'open'"
+                            groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager"/>
                     <field name="state" widget="statusbar"/>
                 </header>
                 <sheet>

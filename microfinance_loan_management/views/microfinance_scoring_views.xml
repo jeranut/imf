@@ -179,11 +179,13 @@
                     <field name="scoring_line_count" widget="statinfo" string="Scoring"/>
                 </button>
             </xpath>
-            <!-- ancestor::group[1] (et non parent::group) : internal_score peut être
-                 imbriqué dans un <div class="o_row"> à l'intérieur du groupe "Résumé
-                 financier" (bouton "Recalculer le score" sur la même ligne) - parent::group
-                 ne le localiserait alors plus. -->
-            <xpath expr="//field[@name='internal_score']/ancestor::group[1]" position="after">
+            <!-- Ancré sur le <group name="resume_financier_wrapper"> (docs_dev/
+                 resume_financier_colonnes/), pas sur ancestor::group[1] d'internal_score :
+                 depuis que "Résumé financier" est scindé en 2 sous-groupes (Crédit /
+                 Épargne-Garanties), ancestor::group[1] d'internal_score désignerait le
+                 sous-groupe "Crédit" et casserait la disposition en 2 colonnes en insérant
+                 "Scoring interne" entre les deux au lieu d'en dessous. -->
+            <xpath expr="//group[@name='resume_financier_wrapper']" position="after">
                 <group string="Scoring interne">
                     <field name="scoring_profile_id"/>
                     <field name="risk_level" widget="badge" readonly="1" decoration-success="risk_level == 'low'" decoration-warning="risk_level == 'medium'" decoration-danger="risk_level in ('high','critical')"/>

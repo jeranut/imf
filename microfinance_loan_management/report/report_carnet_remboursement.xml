@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="paperformat_carnet_remboursement" model="report.paperformat">
+        <field name="name">CEFOR Carnet Remboursement (Paysage)</field>
+        <field name="default" eval="False"/>
+        <field name="format">custom</field>
+        <!-- Pas de champ orientation ici : avec format=custom, _build_wkhtmltopdf_args()
+             passe les options wkhtmltopdf de largeur/hauteur de page telles quelles (odoo/
+             addons/base/models/ir_actions_report.py), puis ajouterait l'option d'orientation
+             landscape par-dessus, ce qui fait PIVOTER une seconde fois le rectangle déjà
+             couché (297x150) et produit une page portrait (constaté : 425x842pt au lieu de
+             842x425pt). page_width/page_height ci-dessous encodent déjà la forme paysage
+             voulue, sans qu'il soit besoin d'une orientation explicite. -->
+        <field name="page_width">297</field>
+        <field name="page_height">150</field>
+        <field name="margin_top">8</field>
+        <field name="margin_bottom">6</field>
+        <field name="margin_left">6</field>
+        <field name="margin_right">6</field>
+        <field name="header_line" eval="False"/>
+        <field name="header_spacing">0</field>
+        <field name="dpi">90</field>
+    </record>
+
+    <record id="action_report_carnet_remboursement" model="ir.actions.report">
+        <field name="name">Carnet de remboursement</field>
+        <field name="model">microfinance.loan</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_carnet_remboursement_document</field>
+        <field name="report_file">microfinance_loan_management.report_carnet_remboursement_document</field>
+        <field name="print_report_name">'Carnet - %s' % (object.name or '')</field>
+        <field name="paperformat_id" ref="paperformat_carnet_remboursement"/>
+    </record>
+
+    <template id="report_carnet_remboursement_document">
+        <t t-foreach="docs" t-as="o">
+            <t t-call="web.basic_layout">
+                <style>
+                    * { box-sizing: border-box; }
+                    .carnet-page { font-family: Arial, Helvetica, sans-serif; font-size: 11px; }
+                    .carnet-flex { display:flex; align-items:flex-start; }
+                    .carnet-col-left { width: 48%; margin-right: 1.5%; display:flex; flex-direction:column; }
+                    .carnet-col-right { width: 50.5%; border: 1.5px solid #000; padding: 8px 10px; }
+                    table.carnet-table { width:100%; border-collapse: collapse; }
+                    table.carnet-table th, table.carnet-table td { border: 1px solid #000; text-align:center; padding:2px; height: 16px; font-size:10px; }
+                    table.carnet-table th { font-weight: bold; }
+                    .carnet-foot { margin-top:8px; font-size:9.5px; line-height:1.5; }
+                    .carnet-signature { text-align:center; margin-top:8px; }
+                    .carnet-header-title { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+                    /* Encart emprunteur (NY MPINDRAM-BOLA / MOMBAMOMBA) : agencement calqué
+                       sur reference_mise_en_page_carnet.png - libellés et valeurs en deux
+                       colonnes (deux-points alignés via .cr-label), sections sans cadre,
+                       interlignes aérés, paire Datin'ny findramana / Mpikarakara resserrée
+                       (.cr-tight). .carnet-box, .carnet-box-title, .carnet-row ne servent
+                       qu'ici (le verso utilise .carnet-foot). */
+                    .carnet-box { margin-bottom: 10px; }
+                    .carnet-box-title { text-align:center; font-weight:bold; font-size: 13px; margin: 2px 0 13px; }
+                    .carnet-row { margin-bottom: 10px; line-height: 1.25; }
+                    .carnet-row .cr-label { display:inline-block; min-width: 34%; vertical-align: top; }
+                    .carnet-row .cr-sec { margin-left: 18px; }
+                    .carnet-row.cr-tight { margin-bottom: 2px; }
+                    .carnet-highlight { background-color: #ffe066; padding: 0 3px; }
+                    /* Odoo ne définit aucune règle globale page-break-after sur .page (ce
+                       n'est utile qu'entre documents séparés, un par fichier wkhtmltopdf -
+                       cf. _prepare_html()) : deux div.page frères DANS le même document
+                       doivent forcer eux-mêmes le saut de page, sinon wkhtmltopdf les
+                       enchaîne et coupe le verso en deux (constaté sans cette règle). */
+                    .carnet-page-recto { page-break-after: always; }
+                </style>
+
+                <!-- PAGE 1 : RECTO -->
+                <div class="page carnet-page carnet-page-recto">
+                    <div class="carnet-flex">
+                        <div class="carnet-col-left">
+                            <table class="carnet-table">
+                                <thead>
+                                    <tr>
+                                        <th rowspan="2">Volana</th>
+                                        <th colspan="2">Fandoavana natao</th>
+                                        <th rowspan="2">Vola voaray</th>
+                                        <th rowspan="2">Totaly voaloa</th>
+                                        <th colspan="2">Sonia</th>
+                                    </tr>
+                                    <tr>
+                                        <th>Daty</th>
+                                        <th>Rosia n°</th>
+                                        <th>CEFOR</th>
+                                        <th>Mpindrana</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-foreach="range(3)" t-as="carnet_volana_group">
+                                        <t t-foreach="range(4)" t-as="carnet_daty_group">
+                                            <tr>
+                                                <td t-if="carnet_daty_group == 0" rowspan="8">&#160;</td>
+                                                <td rowspan="2">&#160;</td>
+                                                <td>&#160;</td><td>&#160;</td><td>&#160;</td><td>&#160;</td><td>&#160;</td>
+                                            </tr>
+                                            <tr>
+                                                <td>&#160;</td><td>&#160;</td><td>&#160;</td><td>&#160;</td><td>&#160;</td>
+                                            </tr>
+                                        </t>
+                                    </t>
+                                </tbody>
+                            </table>
+                            <div class="carnet-foot">
+                                Izao ....................................................................................................................................
+                                Dia manamarina fa nahavita ny famerenam-bola nindramiko androany …………/…………/……………………… Ka
+                                mitotaly……………………………………………………………………………………………………Ar izay voasoratra etsy ambony
+                                ny vola voaloako raha tsy misy fanitsiana hitan'ny CEFOR aorian'izao andro izao
+                            </div>
+                        </div>
+                        <div class="carnet-col-right">
+                            <div class="carnet-header-title">
+                                <!-- Dynamisé - docs_dev/carnet_remboursement/AUDIT_encart_agence.md
+                                     (Lot 0) + décision Micka : o.company_id.street tel quel, sans
+                                     repli sur o.company_id.name - une société dont la fiche
+                                     "street" n'est pas encore renseignée (10 sur 11 à ce jour)
+                                     affiche volontairement une case vide après "MASOIVOHO" (pas
+                                     une anomalie de ce template, un manque de données à combler
+                                     séparément sur les fiches res.company). Logo : même champ
+                                     (company_id.logo, related partner_id.image_1920) et même
+                                     helper (image_data_uri) que report_contrat_credit.xml, pour
+                                     rester cohérent avec la seule autre convention logo du
+                                     module. -->
+                                <div>MASOIVOHO <strong t-field="o.company_id.street"/></div>
+                                <div>
+                                    <img t-if="o.company_id.logo"
+                                         t-att-src="image_data_uri(o.company_id.logo)"
+                                         style="max-height:38px;max-width:130px;"/>
+                                </div>
+                            </div>
+                            <div class="carnet-box">
+                                <div class="carnet-box-title">NY MPINDRAM-BOLA</div>
+                                <!-- Champs confirmés dans le codebase réel (pas de suppositions) :
+                                     - Anarana : partner_id.name.
+                                     - Nomerao : partner_id.microfinance_account_number (numéro de
+                                       compte client permanent, format AGENCE/NNNNNN) - même champ
+                                       que "Mpindrana laharana" dans report_contrat_credit.xml.
+                                       ATTENTION : distinct de loan_account_id.name
+                                       (microfinance.loan.account, dérivé de ce même numéro à la
+                                       création du compte crédit mais peut diverger sur un dossier
+                                       ancien - constaté sur IS/001076 : IS/002719 côté partenaire vs
+                                       IS/000001 côté compte crédit). Champ retenu par cohérence avec
+                                       report_contrat_credit.xml, déjà validé par Micka.
+                                     - Kara-panondro n° : partner_id.microfinance_id_number_display
+                                       (champ calculé, formate microfinance_id_number par groupes de
+                                       3 chiffres ; corrige la coquille "microfiance_id_number_display"
+                                       du gabarit précédent) - même champ que "kara-panondro laharana"
+                                       dans report_contrat_credit.xml.
+                                     - Asa atao : partner_id.microfinance_profession (Many2one vers
+                                       microfinance.profession).
+                                     - Téléphone : partner_id.phone.
+                                     - Adiresy : partner_id.get_contrat_address() - même méthode que
+                                       report_contrat_credit.xml (concaténation street / fokontany /
+                                       city), pour un rendu d'adresse identique entre les deux
+                                       documents. -->
+                                <div class="carnet-row"><span class="cr-label"><u>Anarana</u> :</span> <strong><span t-field="o.partner_id.name"/></strong></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Nomerao</u> :</span> <strong><span t-field="o.partner_id.microfinance_account_number"/></strong><span class="cr-sec"><u>Kara-panondro n°</u> : <strong><span t-field="o.partner_id.microfinance_id_number_display"/></strong></span></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Asa atao</u> :</span> <strong><span t-field="o.partner_id.microfinance_profession"/></strong><span class="cr-sec">Téléphone : <span t-field="o.partner_id.phone"/></span></div>
+                                <t t-set="carnet_borrower_address" t-value="o.partner_id.get_contrat_address()"/>
+                                <div class="carnet-row"><span class="cr-label"><u>Adiresy</u> :</span> <strong><span t-esc="carnet_borrower_address"/></strong></div>
+                            </div>
+                            <div class="carnet-box">
+                                <div class="carnet-box-title">MOMBAMOMBA NY FAMPISAMBORAM-BOLA</div>
+                                <!-- Champs dynamisés - docs_dev/carnet_remboursement/AUDIT_bloc_findramana.md
+                                     (Lot 0) : disbursement_date/installment_amount (coquilles du
+                                     mapping initial corrigées), get_last_installment_date() déjà
+                                     existante et déjà utilisée par report_contrat_credit.xml
+                                     (réutilisée telle quelle, aucune nouvelle logique serveur).
+                                     Formatage monétaire : même convention que
+                                     report_contrat_credit.xml ('{:,.0f}'.format(x).replace(',', ' ')
+                                     + " Ar" en dur), pas le widget monetary. Les 6 autres lignes de
+                                     ce bloc (Findramana faha, Tahiry (2), Totalin'ny vola aloa
+                                     (1)+(2), Fe-potoana fandrotsahana ny tahiry, Faharetan'ny
+                                     findramam-bola, Agent BL) restent hors périmètre de ce lot,
+                                     volontairement laissées en dur. -->
+                                <div class="carnet-row cr-tight"><span class="cr-label"><u>Datin'ny findramana</u> :</span> <strong><span t-field="o.disbursement_date"/></strong><span class="cr-sec">Produit : <strong><span t-field="o.product_id.name"/></strong></span></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Mpikarakara</u> :</span> <strong><span t-field="o.officer_id.name"/></strong></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Findramana faha</u> :</span> <strong><t t-esc="o.get_loan_rank_for_partner()"/></strong><span class="cr-sec"><u>Fifanarahana n°</u> <strong><span t-field="o.name"/></strong></span></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Renivola</u> :</span> <strong><t t-esc="'{:,.0f}'.format(o.principal_total).replace(',', ' ')"/></strong></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Zana-bola</u> :</span> <strong><t t-esc="'{:,.0f}'.format(o.interest_total).replace(',', ' ')"/></strong></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Totalin'ny renivola sy zana-bola</u> (1) :</span> <strong><t t-esc="'{:,.0f}'.format(o.principal_total + o.interest_total).replace(',', ' ')"/></strong></div>
+                                <div class="carnet-row">
+                                    <span class="cr-label"><u>Famerenanana sy fotoam-pandoavana</u> :</span>
+                                    <t t-if="o.repayment_frequency_id.code == 'monthly'">
+                                        <strong><t t-esc="'{:,.0f}'.format(o.installment_amount).replace(',', ' ')"/> Ar / isam-bolana</strong>
+                                    </t>
+                                    <t t-elif="o.repayment_frequency_id.code == 'weekly'">
+                                        <strong><t t-esc="'{:,.0f}'.format(o.installment_amount).replace(',', ' ')"/> Ar / isankerinandro</strong>
+                                    </t>
+                                    <t t-elif="o.repayment_frequency_id.code == 'daily'">
+                                        <strong>isan'andro : .........................</strong>
+                                    </t>
+                                    <t t-else="">
+                                        <strong><t t-esc="'{:,.0f}'.format(o.installment_amount).replace(',', ' ')"/> Ar / <span t-field="o.repayment_frequency_id.name"/></strong>
+                                    </t>
+                                </div>
+                                <div class="carnet-row"><span class="cr-label"><u>Fotoana farany hamerenana ny renivola sy zanabola</u> :</span> <strong><t t-esc="o.get_last_installment_date()"/></strong></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Tahiry</u> (2) :</span> <strong><t t-esc="'{:,.0f}'.format(o.savings_target_amount).replace(',', ' ')"/></strong></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Totalin'ny vola aloa</u> (1)+(2) :</span> <strong><t t-esc="'{:,.0f}'.format(o.savings_target_amount + o.principal_total + o.interest_total).replace(',', ' ')"/></strong></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Fe-potoana fandrotsahana ny tahiry</u> :</span> <span class="carnet-highlight"><strong>18/08/2027</strong></span></div>
+                                <div class="carnet-row"><span class="cr-label"><u>Faharetan'ny findramam-bola</u> :</span> <strong><t t-esc="o.get_loan_duration_days()"/> andro</strong><span class="cr-sec">Agent BL : <strong><t t-esc="env.user.name"/></strong></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAGE 2 : VERSO -->
+                <div class="page carnet-page">
+                    <div class="carnet-flex">
+                        <div class="carnet-col-left">
+                            <t t-call="microfinance_loan_management.report_carnet_verso_bloc"/>
+                        </div>
+                        <div class="carnet-col-right" style="border-left: 1.5px solid #000; border-top:0; border-right:0; border-bottom:0; padding: 0 0 0 10px;">
+                            <t t-call="microfinance_loan_management.report_carnet_verso_bloc"/>
+                        </div>
+                    </div>
+                </div>
+
+            </t>
+        </t>
+    </template>
+
+    <template id="report_carnet_verso_bloc">
+        <table class="carnet-table">
+            <thead>
+                <tr>
+                    <th rowspan="2">Volana</th>
+                    <th colspan="2">Fandoavana natao</th>
+                    <th rowspan="2">Vola voaray</th>
+                    <th rowspan="2">Totaly voaloa</th>
+                    <th colspan="2">Sonia</th>
+                </tr>
+                <tr>
+                    <th>Daty</th>
+                    <th>Rosia n°</th>
+                    <th>CEFOR</th>
+                    <th>Mpindrana</th>
+                </tr>
+            </thead>
+            <tbody>
+                <t t-foreach="range(3)" t-as="carnet_volana_group2">
+                    <t t-foreach="range(4)" t-as="carnet_daty_group2">
+                        <tr>
+                            <td t-if="carnet_daty_group2 == 0" rowspan="8">&#160;</td>
+                            <td rowspan="2">&#160;</td>
+                            <td>&#160;</td><td>&#160;</td><td>&#160;</td><td>&#160;</td><td>&#160;</td>
+                        </tr>
+                        <tr>
+                            <td>&#160;</td><td>&#160;</td><td>&#160;</td><td>&#160;</td><td>&#160;</td>
+                        </tr>
+                    </t>
+                </t>
+            </tbody>
+        </table>
+        <div class="carnet-foot">
+            Izao ..........................................................................................................Dia manamarina fa
+            nahavita ny famerenam-bola nindramiko androany …………/…………/……………………… Ka
+            mitotaly……………………………………………………………………………………Ar izay voasoratra etsy ambony
+            ny vola voaloako raha tsy misy fanitsiana hitan'ny CEFOR aorian'izao andro izao
+            <div class="carnet-signature">Sonia</div>
+        </div>
+    </template>
+
+    <!-- t-call="web.basic_layout" (et non web.html_container directement) : indispensable
+         pour que le contenu soit enveloppé dans <div class="article">, seul repère que
+         _prepare_html() (odoo/addons/base/models/ir_actions_report.py) sait retrouver pour
+         router chaque corps de page à travers web.minimal_layout (qui injecte
+         <meta charset="utf-8">). Sans ce wrapper, _prepare_html() bascule sur son chemin de
+         secours (aucun body "article" trouvé) qui saute ce passage par minimal_layout : le
+         HTML est alors fourni à wkhtmltopdf sans déclaration de charset, et les caractères
+         accentués/non-ASCII (é, °, …) sont mal interprétés (constaté : "Ã©", "Â" à la place
+         de "é", des espaces insécables). Repéré et corrigé après rendu de test sur IS/001076
+         - voir report_contrat_credit.xml qui suit déjà ce même schéma. -->
+
+
+</odoo>

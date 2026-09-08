@@ -2,10 +2,10 @@
 from odoo.exceptions import AccessError
 from odoo.tests import Form
 
-from .common import MicrofinanceCommon
+from .common import MicrofinanceCommon, MicrofinanceNoFundMixin
 
 
-class TestCashierAccess(MicrofinanceCommon):
+class TestCashierAccess(MicrofinanceNoFundMixin, MicrofinanceCommon):
     """Lot 7 (audit gestion_caisse) : vérifie empiriquement si l'absence d'accès de
     group_microfinance_cashier à microfinance.loan.product casse un flux réel du caissier,
     avant de décider s'il faut modifier ir.model.access.csv."""

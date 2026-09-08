@@ -69,17 +69,46 @@
                     <button name="action_ca_review" string="Avis CA" type="object" groups="microfinance_loan_management.group_microfinance_credit_committee" invisible="state != 'enquete'"/>
                     <button name="action_cdag_review" string="Avis CDAG" type="object" groups="microfinance_loan_management.group_microfinance_credit_committee" invisible="state != 'avis_ca'"/>
                     <button name="action_approve" string="Approuver" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'avis_cdag'"/>
-                    <button name="action_charge_fee" string="Encaisser les frais de dossier" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved' or fee_paid or fee_amount_due &lt;= 0"/>
-                    <button name="action_disburse" string="Activer / Décaisser" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
+                    <button name="action_send_fee_to_cashier" string="Envoyer les frais en caisse" type="object" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved' or fee_paid or fee_amount_due &lt;= 0 or fee_sent_to_cashier or not fee_charged_before_disbursement"/>
+                    <!-- Découplage activation / décaissement (docs_dev/guichet_caisse/
+                         AUDIT_decaissement.md) : ce bouton ne fait plus que passer le crédit à
+                         'active' (contrôles conservés) ; le décaissement effectif (écriture de
+                         sortie de caisse) a lieu au Guichet Caisse. -->
+                    <button name="action_activate" string="Activer" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
                     <button name="action_open_payment_wizard" string="Enregistrer remboursement" type="object" class="btn-primary" invisible="state not in ('active','defaulted')"/>
                     <button name="action_reschedule" string="Rééchelonner" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'active'"/>
                     <button name="action_mark_default" string="Marquer en défaut" type="object" invisible="state != 'active'"/>
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
                     <button name="action_write_off" string="Radier" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state not in ('active','defaulted')"/>
-                    <button name="%(action_report_microfinance_loan_disbursement_receipt)d" string="Imprimer le reçu" type="action" invisible="state in ('draft','enquete','avis_ca','avis_cdag','approved','cancelled')"/>
-                    <button name="action_print_repayment_schedule" type="object" class="btn-cefor-print" invisible="installment_count == 0">
-                        <i class="fa fa-print"/> Imprimer le calendrier
-                    </button>
+                    <!-- Les 3 boutons d'impression du header ("Imprimer le reçu",
+                         "Imprimer le calendrier", "Imprimer le carnet" - ce dernier ajouté
+                         dans un lot précédent, poste le PDF dans le chatter au lieu d'un
+                         report_action direct) sont regroupés dans un seul menu déroulant
+                         "Imprimer" pour ne pas continuer à empiler des boutons au même
+                         niveau visuel que les boutons de statut. Le bouton toggle porte
+                         data-bs-toggle (Bootstrap 5, pas data-toggle) : le sélecteur Odoo
+                         "button:not([data-bs-toggle])" (view_compiler.js) l'exclut donc
+                         explicitement de la compilation en ViewButton - rendu comme un
+                         <button> HTML natif ordinaire, pas une action serveur. Les 3
+                         <button> internes, eux, restent des ViewButton normaux (repérés à
+                         n'importe quelle profondeur dans l'arch, comme dans button_box) et
+                         conservent name/type/invisible identiques à l'ancien bouton
+                         correspondant - même comportement, juste regroupé visuellement. -->
+                    <div class="btn-group" role="group">
+                        <button name="print_menu_toggle" type="button" class="btn btn-cefor-print dropdown-toggle" data-bs-toggle="dropdown">
+                            <i class="fa fa-print"/> Imprimer
+                        </button>
+                        <div class="dropdown-menu" role="menu">
+                            <button name="%(action_report_microfinance_loan_disbursement_receipt)d" type="action"
+                                    class="dropdown-item" string="Imprimer le reçu"
+                                    invisible="state in ('draft','enquete','avis_ca','avis_cdag','approved','cancelled')"/>
+                            <button name="action_print_repayment_schedule" type="object"
+                                    class="dropdown-item" string="Imprimer le calendrier"
+                                    invisible="installment_count == 0"/>
+                            <button name="action_print_carnet_remboursement" type="object"
+                                    class="dropdown-item" string="Imprimer le carnet"/>
+                        </div>
+                    </div>
                     <!-- Contrat de crédit : visible uniquement à l'état "Approuvé", pour
                          Agent crédit / Manager / Gestionnaire (group_microfinance_user est le
                          socle impliqué par manager et gestionnaire). Appelle une méthode
@@ -88,6 +117,20 @@
                          btn-cefor-print + icône que "Imprimer le calendrier". -->
                     <button name="action_print_contrat_to_chatter" type="object" class="btn-cefor-print" groups="microfinance_loan_management.group_microfinance_user" invisible="state != 'approved'">
                         <i class="fa fa-print"/> Imprimer le contrat
+                    </button>
+                    <!-- Dépôt du contrat signé : ouvre microfinance.loan.contract.signature.wizard
+                         (docs_dev/date_signature_contrat/) plutôt qu'un upload direct - le
+                         fichier ET sa date de signature sont saisis ensemble puis verrouillés
+                         définitivement dès confirmation (_check_contract_signature_locked()),
+                         quel que soit l'état du dossier ensuite. Remplace l'ancien widget
+                         signed_contract_upload (habillage visuel du binary standard, devenu
+                         inutile - retiré avec ce lot). Invisible dès que
+                         contract_signature_date est renseigné : plus aucun moyen de rouvrir ce
+                         wizard une fois le contrat confirmé (le widget natif du panneau SUIVI
+                         passe lui aussi en readonly permanent, cf. groupe "Suivi" plus bas). -->
+                    <button name="action_open_contract_signature_wizard" type="object" class="btn-cefor-print"
+                            invisible="state not in ('approved', 'active', 'closed', 'defaulted', 'written_off') or contract_signature_date">
+                        <i class="fa fa-upload"/> Téléverser le contrat signé
                     </button>
                     <!-- Génération manuelle de l'échéancier : remède au trou laissé par le
                          retrait du bouton historique (docs_dev/retrait_bouton_generer_echeancier/,
@@ -115,7 +158,15 @@
                             <field name="application_count" widget="statinfo" string="Enquête"/>
                         </button>
                     </div>
-                    <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                        <!-- Crédit activé mais pas encore décaissé en caisse (découplage
+                             activation / décaissement) : indicateur discret, pas un champ badge
+                             dédié. Se lève dès que disbursement_date est posé. -->
+                        <span class="text-warning" invisible="state != 'active' or disbursement_date">
+                            <i class="fa fa-clock-o"/> En attente de décaissement en caisse
+                        </span>
+                    </div>
                     <group>
                         <group string="Dossier">
                             <field name="partner_id"/>
@@ -148,62 +199,84 @@
                         <group string="Suivi">
                             <field name="application_date"/>
                             <field name="approval_date" readonly="1"/>
+                            <field name="activation_date" readonly="1" invisible="not activation_date"/>
                             <field name="disbursement_date" readonly="1"/>
+                            <field name="contract_signature_date" readonly="1"/>
                             <field name="officer_id"/>
                             <field name="manager_id"/>
                             <field name="finance_user_id"/>
                             <field name="collection_agent_id"/>
                             <field name="reschedule_count"/>
-                            <!-- Téléversement du contrat signé : disponible dès que le crédit
-                                 est approuvé (prérequis à l'activation - action_disburse() bloque
-                                 tant que ce champ est vide). Reste visible ensuite pour
-                                 consultation. À l'enregistrement, une copie est postée dans le
-                                 chatter (microfinance.loan.write -> _post_signed_contract_to_chatter)
-                                 et la pièce jointe du champ devient non supprimable
-                                 (ir.attachment.unlink) - un remplacement reste possible. -->
+                            <!-- Contrat signé : consultation/téléchargement uniquement depuis ce
+                                 panneau (docs_dev/date_signature_contrat/) - le dépôt se fait
+                                 exclusivement via le bouton header "Téléverser le contrat signé"
+                                 (microfinance.loan.contract.signature.wizard), qui écrit ce champ
+                                 ET contract_signature_date ensemble puis les verrouille tous les
+                                 deux définitivement (_check_contract_signature_locked()).
+                                 readonly="1" inconditionnel : plus aucune interaction d'upload
+                                 direct depuis cet emplacement, que le contrat soit déjà signé ou
+                                 non (avant signature, seul le bouton header permet l'upload). -->
                             <field name="signed_contract_filename" invisible="1"/>
-                            <field name="signed_contract" widget="binary" filename="signed_contract_filename" invisible="state not in ('approved', 'active', 'closed', 'defaulted', 'written_off')"/>
+                            <field name="signed_contract" widget="binary" filename="signed_contract_filename" readonly="1" invisible="state not in ('approved', 'active', 'closed', 'defaulted', 'written_off')"/>
                         </group>
                     </group>
-                    <group string="Résumé financier">
-                        <field name="principal_total" readonly="1"/>
-                        <field name="interest_total" readonly="1"/>
-                        <field name="penalty_total" readonly="1"/>
-                        <field name="paid_total" readonly="1"/>
-                        <field name="balance_total" readonly="1"/>
-                        <field name="overdue_amount" readonly="1"/>
-                        <field name="overdue_installment_count" readonly="1"/>
-                        <!-- Score + bouton "Recalculer le score" sur la même ligne.
-                             Le couple <label> + <div class="o_row"> forme une paire
-                             label/valeur normale de la grille du <group> : un <button> nu
-                             enfant direct ne consommerait qu'une demi-paire et décalerait
-                             tout l'alignement en dessous. name/type du bouton inchangés.
-                             NB : internal_score n'est plus enfant direct du <group> ->
-                             la vue héritée scoring cible ancestor::group[1] (voir
-                             microfinance_scoring_views.xml). -->
-                        <label for="internal_score" string="Score"/>
-                        <div class="o_row">
-                            <field name="internal_score" widget="progressbar" readonly="1" nolabel="1"/>
-                            <button name="action_recompute_risk" string="Recalculer le score" type="object" class="btn-secondary btn-sm" icon="fa-refresh"/>
-                        </div>
-                        <field name="provision_amount" readonly="1"/>
-                        <field name="provision_posted_amount" readonly="1"/>
-                        <field name="guarantee_total" readonly="1"/>
-                        <field name="fee_amount_due" readonly="1"/>
-                        <!-- Badge état frais (vert payé / rouge non payé), style calqué sur le
-                             badge risk_level du scoring. fee_paid reste dans la vue (invisible)
-                             car le bouton "Encaisser les frais de dossier" l'utilise dans son
-                             modifier invisible=. -->
-                        <field name="fee_payment_state" widget="badge" readonly="1"
-                               decoration-success="fee_payment_state == 'paid'"
-                               decoration-danger="fee_payment_state == 'unpaid'"
-                               decoration-muted="fee_payment_state == 'none'"
-                               invisible="fee_payment_state == 'none'"/>
-                        <field name="fee_paid" invisible="1"/>
-                        <field name="fee_receivable_move_id" readonly="1" invisible="not fee_receivable_move_id"/>
-                        <field name="fee_move_id" readonly="1"/>
-                        <field name="net_disbursed_amount" readonly="1"/>
-                        <field name="bypass_cash_balance" invisible="state != 'approved'"/>
+                    <!-- 2 colonnes par thème (même pattern que le <group> Dossier/Suivi
+                         ci-dessus) : name="resume_financier_wrapper" sert d'ancrage stable
+                         pour les xpaths d'autres modules (microfinance_savings_management,
+                         microfinance_scoring_views.xml) - ne pas le renommer sans répercuter
+                         le changement dans ces deux fichiers (docs_dev/
+                         resume_financier_colonnes/). -->
+                    <group name="resume_financier_wrapper">
+                        <group string="Résumé financier — Crédit">
+                            <field name="principal_total" readonly="1"/>
+                            <field name="interest_total" readonly="1"/>
+                            <field name="penalty_total" readonly="1"/>
+                            <field name="paid_total" readonly="1"/>
+                            <field name="balance_total" readonly="1"/>
+                            <field name="overdue_amount" readonly="1"/>
+                            <field name="overdue_installment_count" readonly="1"/>
+                            <!-- Score + bouton "Recalculer le score" sur la même ligne.
+                                 Le couple <label> + <div class="o_row"> forme une paire
+                                 label/valeur normale de la grille du <group> : un <button> nu
+                                 enfant direct ne consommerait qu'une demi-paire et décalerait
+                                 tout l'alignement en dessous. name/type du bouton inchangés. -->
+                            <label for="internal_score" string="Score"/>
+                            <div class="o_row">
+                                <field name="internal_score" widget="progressbar" readonly="1" nolabel="1"/>
+                                <button name="action_recompute_risk" string="Recalculer le score" type="object" class="btn-secondary btn-sm" icon="fa-refresh"/>
+                            </div>
+                            <field name="provision_amount" readonly="1"/>
+                            <field name="provision_posted_amount" readonly="1"/>
+                            <field name="fee_amount_due" readonly="1"/>
+                            <!-- Badge état frais (vert payé / rouge non payé), style calqué sur le
+                                 badge risk_level du scoring. fee_paid reste dans la vue (invisible)
+                                 car le bouton "Envoyer les frais en caisse" l'utilise dans son
+                                 modifier invisible=. -->
+                            <field name="fee_payment_state" widget="badge" readonly="1"
+                                   decoration-success="fee_payment_state == 'paid'"
+                                   decoration-danger="fee_payment_state == 'unpaid'"
+                                   decoration-muted="fee_payment_state == 'none'"
+                                   invisible="fee_payment_state == 'none'"/>
+                            <!-- Indicateur discret : les frais sont partis au guichet mais pas
+                                 encore encaissés. Ne duplique PAS fee_payment_state (qui reste
+                                 'unpaid' dans ce cas) - simple repère pour le gestionnaire. -->
+                            <div class="text-muted fst-italic" invisible="not fee_sent_to_cashier or fee_paid">
+                                En attente d'encaissement en caisse
+                            </div>
+                            <field name="fee_sent_to_cashier" invisible="1"/>
+                            <field name="fee_charged_before_disbursement" invisible="1"/>
+                            <field name="fee_paid" invisible="1"/>
+                            <field name="fee_receivable_move_id" readonly="1" invisible="not fee_receivable_move_id"/>
+                            <field name="fee_move_id" readonly="1"/>
+                            <field name="net_disbursed_amount" readonly="1"/>
+                            <field name="bypass_cash_balance" invisible="state != 'approved'"/>
+                        </group>
+                        <!-- guarantee_total sert aussi d'ancrage pour les champs épargne/
+                             garanties injectés par microfinance_savings_management
+                             (xpath position="after" sur ce champ). -->
+                        <group string="Résumé financier — Épargne / Garanties">
+                            <field name="guarantee_total" readonly="1"/>
+                        </group>
                     </group>
                     <notebook>
                         <page string="Avis CA / CDAG" invisible="state not in ('avis_ca', 'avis_cdag', 'approved', 'active', 'closed', 'defaulted', 'written_off')">

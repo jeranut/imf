@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-from .common import MicrofinanceCommon
+import base64
+
+from .common import MicrofinanceCommon, MicrofinanceNoFundMixin
 
 
-class TestRepaymentAccounting(MicrofinanceCommon):
+class TestRepaymentAccounting(MicrofinanceNoFundMixin, MicrofinanceCommon):
     """Comptabilisation cash-basis d'un remboursement (Décision 3, _prepare_payment_move) :
     écriture générée uniquement à l'encaissement effectif (pas à la génération d'échéancier),
     montants proportionnels à la ventilation réelle (Lot 2), sur les comptes PCEC déjà
@@ -113,6 +115,10 @@ class TestRepaymentAccounting(MicrofinanceCommon):
         loan_b = self.env['microfinance.loan'].create({
             'partner_id': partner_b.id, 'product_id': product_b.id, 'company_id': company_b.id,
             'loan_amount': 900.0, 'term': 3,
+            # Contrat signé factice : action_activate() l'exige depuis le découplage
+            # activation / décaissement (comme common.py:_create_loan()).
+            'signed_contract': base64.b64encode(b'test signed contract'),
+            'signed_contract_filename': 'contrat_signe_test.pdf',
         })
         loan_b.action_generate_schedule()
         loan_b.action_start_enquete()
@@ -121,7 +127,9 @@ class TestRepaymentAccounting(MicrofinanceCommon):
         loan_b.action_view_applications()
         loan_b.application_ids.write({'committee_first_decision': 'accepted'})
         loan_b.action_approve()
-        loan_b.action_disburse()
+        # Flux découplé : activation puis décaissement effectif (remplace action_disburse() déprécié).
+        loan_b.action_activate()
+        loan_b.action_process_disbursement()
 
         first_b = loan_b.installment_ids.sorted('sequence')[0]
         first_b.write({'principal_amount': 100.0, 'interest_amount': 20.0, 'penalty_amount': 10.0})

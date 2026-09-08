@@ -23,8 +23,10 @@
         <field name="arch" type="xml">
             <form string="Fiche journalière de caisse">
                 <header>
-                    <button name="action_refresh" string="Actualiser" type="object" invisible="state != 'open'"/>
-                    <button name="action_close_day" string="Clôturer la journée" type="object" class="btn-primary" invisible="state != 'open'"/>
+                    <button name="action_refresh" string="Actualiser" type="object" invisible="state != 'open'"
+                            groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager"/>
+                    <button name="action_close_day" string="Clôturer la journée" type="object" class="btn-primary" invisible="state != 'open'"
+                            groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager"/>
                     <button name="action_reopen_day" string="Rouvrir la journée" type="object"
                             groups="microfinance_loan_management.group_microfinance_manager"
                             invisible="state != 'closed'"/>
@@ -96,6 +98,10 @@
         <field name="model_id" ref="model_microfinance_caisse_fiche_journee"/>
         <field name="binding_model_id" ref="model_microfinance_caisse_fiche_journee"/>
         <field name="binding_view_types">list</field>
+        <!-- Action de clôture : réservée aux groupes ayant l'écriture sur la fiche, pour ne
+             pas apparaître dans le menu ⚙ des consultants en lecture seule (finance /
+             comptable / auditeur). -->
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_cashier'), ref('group_microfinance_manager')])]"/>
         <field name="state">code</field>
         <field name="code">model.action_quick_close_today()</field>
     </record>

@@ -40,6 +40,9 @@ class MicrofinanceLoanPayment(models.Model):
     )
     currency_id = fields.Many2one(related='loan_id.currency_id', store=True, readonly=True)
     company_id = fields.Many2one(related='loan_id.company_id', store=True, readonly=True)
+    # Stocké pour les agrégats read_group « remboursement encaissé par agent » du dashboard
+    # portefeuille (Lot 1).
+    officer_id = fields.Many2one(related='loan_id.officer_id', store=True, readonly=True, index=True, string='Agent crédit')
     # Ordre des champs = ordre de ventilation CEFOR (Décision 2) : intérêt -> principal ->
     # pénalité, cf. _allocate_to_installments() ci-dessous.
     allocated_interest = fields.Monetary(string='Intérêt alloué', readonly=True)
@@ -134,6 +137,13 @@ class MicrofinanceLoanPayment(models.Model):
         self.ensure_one()
         if self.loan_id.state not in ('active', 'defaulted'):
             raise UserError(_('Le crédit doit être actif ou en défaut pour enregistrer un remboursement.'))
+        if not self.loan_id.disbursement_date:
+            # Découplage activation / décaissement (docs_dev/guichet_caisse/AUDIT_decaissement.md) :
+            # un crédit 'active' peut ne pas être encore décaissé — aucun remboursement possible
+            # tant que les fonds ne sont pas sortis.
+            raise UserError(_(
+                "Ce crédit est activé mais pas encore décaissé : aucun remboursement ne peut "
+                "être enregistré avant le décaissement effectif en caisse."))
         if self.amount > self.loan_id.balance_total + 0.01:
             raise UserError(_('Surpaiement interdit. Solde restant : %.2f') % self.loan_id.balance_total)
         installments = self.loan_id.installment_ids.filtered(lambda i: i.residual_amount > 0.01).sorted(lambda i: (i.due_date, i.sequence))

@@ -28,6 +28,7 @@ class MicrofinanceCaisseMouvement(models.Model):
         ('retrait_epargne', 'Retrait épargne'),
         ('remboursement_credit', 'Remboursement crédit'),
         ('decaissement_credit', 'Décaissement crédit'),
+        ('frais_dossier', 'Frais de dossier'),
     ], string='Type', required=True)
     partner_id = fields.Many2one('res.partner', string='Client', required=True)
     amount = fields.Monetary(string='Montant', required=True)
@@ -46,9 +47,39 @@ class MicrofinanceCaisseMouvement(models.Model):
     penalty_amount = fields.Monetary(string='Dont pénalité')
 
     # Traçabilité vers l'enregistrement métier réellement créé et comptabilisé (Lot 3) — un seul
-    # des deux est renseigné selon `type`, jamais les deux.
+    # des trois est renseigné selon `type`, jamais plusieurs.
     payment_id = fields.Many2one('microfinance.loan.payment', string='Remboursement', readonly=True, copy=False)
     savings_transaction_id = fields.Many2one('microfinance.savings.transaction', string='Transaction épargne', readonly=True, copy=False)
+    # type == 'frais_dossier' : écriture de règlement des frais de dossier posée par
+    # microfinance.loan.action_charge_fee() (= loan.fee_move_id).
+    fee_move_id = fields.Many2one('account.move', string='Écriture frais', readonly=True, copy=False)
+
+    def _run_posting_sudo(self, record, session, method_name, *args, **kwargs):
+        """Exécute EN SUDO l'unique étape comptabilisante d'une opération de guichet
+        (_create_transaction / microfinance.loan.payment.action_post / microfinance.loan.
+        action_disburse). Ces méthodes créent/postent un account.move et, pour le crédit,
+        écrivent ou créent des microfinance.loan.installment — droits absents du profil
+        caissier (group_microfinance_cashier + group_savings_agent) et volontairement NON
+        élargis dans ir.model.access (décision Micka Lot 1.1bis, option 2 : sudo ciblé plutôt
+        qu'un groupe comptable).
+
+        Le sudo est strictement circonscrit à ce point d'entrée : les méthodes cibles restent
+        partagées et non sudo-ées pour tous leurs autres appelants (boutons de formulaire
+        finance / épargne, assistant remboursement, crons auto-débit / capitalisation), qui
+        portent déjà les droits comptables.
+
+        Défense en profondeur : re-vérifie ICI, au plus près du bypass, que l'enregistrement
+        comptabilisé appartient bien à l'agence de la session — sans se reposer uniquement sur
+        la garde d'amont de register_operation. `record.company_id` est lu en identité réelle
+        (record passé non sudo par l'appelant) ; seule l'exécution de `method_name` passe en
+        sudo."""
+        record.ensure_one()
+        if record.company_id != session.company_id:
+            raise UserError(_(
+                "Opération de caisse refusée : « %(record)s » n'appartient pas à l'agence "
+                "de la session en cours (%(company)s)."
+            ) % {'record': record.display_name, 'company': session.company_id.display_name})
+        return getattr(record.sudo(), method_name)(*args, **kwargs)
 
     @api.model
     def register_operation(self, session_id, type, partner_id, amount, savings_account_id=False, loan_id=False):
@@ -72,7 +103,8 @@ class MicrofinanceCaisseMouvement(models.Model):
             if account.company_id != session.company_id:
                 raise UserError(_("Ce compte épargne n'appartient pas à l'agence de la session en cours."))
             transaction_type = 'deposit' if type == 'depot_epargne' else 'withdrawal'
-            transaction = account._create_transaction(transaction_type, amount, payment_method='cash')
+            transaction = self._run_posting_sudo(
+                account, session, '_create_transaction', transaction_type, amount, payment_method='cash')
             vals.update({'savings_account_id': account.id, 'savings_transaction_id': transaction.id})
         elif type == 'remboursement_credit':
             loan = self.env['microfinance.loan'].browse(loan_id)
@@ -83,7 +115,10 @@ class MicrofinanceCaisseMouvement(models.Model):
                 'amount': amount,
                 'journal_id': session.journal_id.id,
             })
-            payment.action_post()
+            # payment.company_id est un related stocké de loan_id.company_id : la
+            # re-vérification d'agence dans _run_posting_sudo porte donc bien sur l'agence du
+            # crédit remboursé.
+            self._run_posting_sudo(payment, session, 'action_post')
             vals.update({
                 'loan_id': loan.id,
                 'payment_id': payment.id,
@@ -95,12 +130,41 @@ class MicrofinanceCaisseMouvement(models.Model):
             loan = self.env['microfinance.loan'].browse(loan_id)
             if loan.company_id != session.company_id:
                 raise UserError(_("Ce crédit n'appartient pas à l'agence de la session en cours."))
-            loan.action_disburse()
+            # Découplage activation / décaissement (docs_dev/guichet_caisse/AUDIT_decaissement.md) :
+            # le guichet ne fait plus que le décaissement effectif (écriture de sortie de caisse
+            # + disbursement_date + recalage de l'échéancier). Les contrôles d'éligibilité et le
+            # passage à 'active' ont eu lieu au clic « Activer » (action_activate) sur la fiche.
+            self._run_posting_sudo(loan, session, 'action_process_disbursement')
             # Le montant réellement sorti de caisse (net des frais nettés éventuels), pas la
-            # saisie brute côté UI : action_disburse() ne prend aucun montant en paramètre, il
-            # décaisse toujours l'intégralité configurée sur le crédit.
+            # saisie brute côté UI : action_process_disbursement() ne prend aucun montant en
+            # paramètre, il décaisse toujours l'intégralité configurée sur le crédit.
             vals['amount'] = loan.net_disbursed_amount
             vals['loan_id'] = loan.id
+        elif type == 'frais_dossier':
+            loan = self.env['microfinance.loan'].browse(loan_id)
+            if loan.company_id != session.company_id:
+                raise UserError(_("Ce crédit n'appartient pas à l'agence de la session en cours."))
+            # Gardes métier remontées ici pour un message clair côté guichet (redondantes avec
+            # les gardes internes de action_charge_fee : state == 'approved', fee_sent_to_cashier,
+            # not fee_paid, fee_amount_due > 0).
+            if not loan.fee_sent_to_cashier:
+                raise UserError(_("Les frais de ce dossier n'ont pas été envoyés en caisse."))
+            if loan.fee_paid:
+                raise UserError(_('Les frais de dossier de ce dossier ont déjà été encaissés.'))
+            # action_charge_fee() conserve son verrou pessimiste (SELECT ... FOR UPDATE) et
+            # toute sa logique (rattrapage engagement, règlement product.fee_journal_id,
+            # lettrage). _run_posting_sudo ne fait qu'exécuter cette méthode en sudo (le
+            # caissier n'a pas create sur account.move) après re-vérification d'agence.
+            self._run_posting_sudo(loan, session, 'action_charge_fee')
+            # Relu après l'appel : fee_amount_due est figé (inchangé), fee_move_id vient d'être
+            # renseigné par action_charge_fee.
+            vals['amount'] = loan.fee_amount_due
+            vals['loan_id'] = loan.id
+            mouvement = self.create(vals)
+            # Lien vers l'account.move de règlement posé en sudo : le caissier n'a aucun droit
+            # sur account.move, et ce champ n'est de toute façon lu que dans les vues manager.
+            mouvement.sudo().write({'fee_move_id': loan.fee_move_id.id})
+            return mouvement
         else:
             raise UserError(_('Type d\'opération de caisse inconnu : %s') % type)
         return self.create(vals)

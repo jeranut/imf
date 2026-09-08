@@ -2,10 +2,10 @@
 from odoo import fields
 from odoo.exceptions import UserError
 
-from .common import MicrofinanceCommon
+from .common import MicrofinanceCommon, MicrofinanceNoFundMixin
 
 
-class TestEligibility(MicrofinanceCommon):
+class TestEligibility(MicrofinanceNoFundMixin, MicrofinanceCommon):
 
     def _set_partner_create_date(self, partner, days_ago):
         past_date = fields.Datetime.subtract(fields.Datetime.now(), days=days_ago)

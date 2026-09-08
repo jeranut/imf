@@ -1,11 +1,8 @@
 /** @odoo-module **/
 
 import { registry } from "@web/core/registry";
-import { patch } from "@web/core/utils/patch";
-import { useEffect } from "@odoo/owl";
 import { FormController } from "@web/views/form/form_controller";
 import { formView } from "@web/views/form/form_view";
-import { StatusBarField } from "@web/views/fields/statusbar/statusbar_field";
 
 // Boutons qui postent un PDF dans le chatter côté serveur (message_post) mais dont
 // l'action de retour (display_notification) ne recharge pas le formulaire : sans ça, le
@@ -16,6 +13,7 @@ import { StatusBarField } from "@web/views/fields/statusbar/statusbar_field";
 const CHATTER_REFRESH_BUTTONS = new Set([
     "action_print_repayment_schedule",
     "action_print_contrat_to_chatter",
+    "action_print_carnet_remboursement",
 ]);
 
 export class MicrofinanceLoanFormController extends FormController {
@@ -38,36 +36,6 @@ export const MicrofinanceLoanFormView = {
 
 registry.category("views").add("microfinance_loan_form", MicrofinanceLoanFormView);
 
-// Barre d'état du dossier de crédit : le widget statusbar natif ne distingue que l'étape
-// courante. Ici on ajoute la classe `o_passed` aux étapes situées AVANT l'étape courante
-// dans l'ordre du champ selection, pour que la feuille de style du module
-// (microfinance_loan_form.scss) puisse les colorer différemment des étapes futures.
-// Strictement borné à microfinance.loan / champ state : no-op partout ailleurs.
-patch(StatusBarField.prototype, {
-    setup() {
-        super.setup();
-        useEffect(() => {
-            if (
-                this.props.record.resModel !== "microfinance.loan" ||
-                this.props.name !== "state"
-            ) {
-                return;
-            }
-            const root = this.rootRef.el;
-            if (!root) {
-                return;
-            }
-            const items = this.getAllItems();
-            const currentIndex = items.findIndex((item) => item.isSelected);
-            root.querySelectorAll(".o_arrow_button:not(.dropdown-toggle)").forEach((btn) => {
-                const idx = items.findIndex(
-                    (item) => String(item.value) === String(btn.dataset.value)
-                );
-                btn.classList.toggle(
-                    "o_passed",
-                    currentIndex > -1 && idx > -1 && idx < currentIndex
-                );
-            });
-        });
-    },
-});
+// (Barre d'état : la coloration par état se fait entièrement en SCSS via des
+// sélecteurs [data-value] sur l'étape courante, cf. microfinance_loan_form.scss —
+// plus besoin du patch JS qui ajoutait la classe .o_passed.)

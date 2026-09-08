@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from odoo import fields
 
-from .common import MicrofinanceCommon
+from .common import MicrofinanceCommon, MicrofinanceNoFundMixin
 
 
-class TestDashboardPar(MicrofinanceCommon):
+class TestDashboardPar(MicrofinanceNoFundMixin, MicrofinanceCommon):
 
     def test_par_buckets_present_and_excludes_written_off(self):
         loan = self._activate_loan(loan_amount=1000.0, term=4)

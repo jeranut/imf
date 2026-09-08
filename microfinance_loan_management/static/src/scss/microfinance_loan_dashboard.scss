@@ -598,3 +598,110 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ============================================================
+   Onglet "Mon portefeuille" (Lot 2)
+   ============================================================ */
+.o_microfinance_agent_header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+
+    &__id strong {
+        font-size: 18px;
+    }
+
+    &__selector {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        select {
+            min-width: 220px;
+        }
+    }
+}
+
+.o_microfinance_agent_shortcuts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.o_microfinance_par_cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+
+    .o_microfinance_par_card {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 10px 12px;
+        text-align: center;
+
+        &__label {
+            display: block;
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        &__value {
+            display: block;
+            font-size: 20px;
+            color: #0f172a;
+        }
+    }
+}
+
+.o_microfinance_agent_duestats {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    li {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #f1f5f9;
+
+        &:last-child {
+            border-bottom: 0;
+        }
+
+        span {
+            color: #64748b;
+        }
+    }
+}
+
+.o_microfinance_agent_table__search {
+    max-width: 320px;
+}
+
+.o_microfinance_agent_table__row {
+    cursor: pointer;
+}
+
+.o_microfinance_agent_pagination {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+
+    &__ellipsis {
+        padding: 0 4px;
+        color: #94a3b8;
+    }
+}
+
+@media (max-width: 640px) {
+    .o_microfinance_par_cards {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

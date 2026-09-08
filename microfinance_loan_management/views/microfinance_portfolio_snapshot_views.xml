@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_portfolio_snapshot_tree" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.snapshot.tree</field>
+        <field name="model">microfinance.portfolio.snapshot</field>
+        <field name="arch" type="xml">
+            <tree create="false" edit="false">
+                <field name="date"/>
+                <field name="officer_id"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="outstanding_total"/>
+                <field name="par30"/>
+                <field name="par60"/>
+                <field name="par90"/>
+                <field name="par120"/>
+                <field name="currency_id" invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_portfolio_snapshot_search" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.snapshot.search</field>
+        <field name="model">microfinance.portfolio.snapshot</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="officer_id"/>
+                <field name="company_id"/>
+                <field name="date"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_officer" string="Agent" context="{'group_by': 'officer_id'}"/>
+                    <filter name="group_company" string="Agence" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_date" string="Mois" context="{'group_by': 'date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_portfolio_snapshot" model="ir.actions.act_window">
+        <field name="name">Historique PAR par agent</field>
+        <field name="res_model">microfinance.portfolio.snapshot</field>
+        <field name="view_mode">tree</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Aucun instantané pour l'instant</p>
+            <p>Le cron mensuel « Microfinance: instantané mensuel du PAR par agent » alimente cet historique à partir du 1ᵉʳ de chaque mois.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_microfinance_portfolio_snapshot" name="Historique PAR par agent"
+        parent="menu_microfinance_analysis" action="action_microfinance_portfolio_snapshot" sequence="5"/>
+</odoo>

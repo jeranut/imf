@@ -41,6 +41,8 @@ class MicrofinanceLoanInstallment(models.Model):
     partner_id = fields.Many2one(related='loan_id.partner_id', store=True, readonly=True)
     company_id = fields.Many2one(related='loan_id.company_id', store=True, readonly=True)
     currency_id = fields.Many2one(related='loan_id.currency_id', store=True, readonly=True)
+    # Stocké pour les agrégats read_group par agent du dashboard portefeuille (Lot 1).
+    officer_id = fields.Many2one(related='loan_id.officer_id', store=True, readonly=True, index=True, string='Agent crédit')
 
     @api.depends('principal_amount', 'interest_amount', 'penalty_amount', 'paid_principal', 'paid_interest', 'paid_penalty')
     def _compute_amounts(self):
@@ -91,6 +93,68 @@ class MicrofinanceLoanInstallment(models.Model):
             ('due_date', '=', today),
             ('state', '!=', 'paid'),
         ], order='due_date, loan_id')
+
+    @api.model
+    def get_pending_or_late(self, company_id):
+        """Échéances attendues aujourd'hui OU en retard, pour l'onglet « Échéances du jour »
+        du guichet (Lot 1.2). Périmètre acté avec Micka :
+        due_date <= aujourd'hui AND state != 'paid' AND loan_id.state in ('active','defaulted').
+
+        - `state != 'paid'` : inclut donc les échéances 'partial' en retard (partiellement
+          soldées mais échues), voulu.
+        - `loan_id.state in ('active','defaulted')` : OBLIGATOIRE — exclut les échéances
+          d'un crédit non décaissé dont un échéancier a été généré en phase d'aperçu (cf.
+          docs_dev/guichet_caisse/AUDIT.md §3.3 et docs_dev/dashboard_portefeuille_agent/
+          AUDIT.md anomalie A1). Ne pas l'omettre.
+        - `loan_id.disbursement_date != False` : depuis le découplage activation / décaissement
+          (docs_dev/guichet_caisse/AUDIT_decaissement.md §2), l'état 'active' ne prouve plus
+          que les fonds sont sortis — un crédit activé mais pas encore décaissé a un échéancier
+          (recalé au décaissement) mais ne doit pas remonter comme échéance à encaisser.
+
+        Méthode dédiée (get_due_today reste inchangée, consommée par le dashboard avec un
+        périmètre plus restrictif : due_date == aujourd'hui seulement)."""
+        today = fields.Date.context_today(self)
+        installments = self.search([
+            ('company_id', '=', company_id),
+            ('due_date', '<=', today),
+            ('state', '!=', 'paid'),
+            ('loan_id.state', 'in', ('active', 'defaulted')),
+            ('loan_id.disbursement_date', '!=', False),
+        ], order='due_date asc, loan_id asc')
+        return [{
+            'id': inst.id,
+            'partner_id': inst.partner_id.id,
+            'partner_name': inst.partner_id.name,
+            'dossier': inst.loan_id.name,
+            'due_date': inst.due_date,
+            'amount': inst.residual_amount,
+            'state': inst.state,
+            'is_late': inst.due_date < today,
+            'company_name': inst.company_id.name,
+        } for inst in installments]
+
+    @api.model
+    def get_loan_schedule(self, loan_id, company_id):
+        """Échéancier complet d'un crédit, pour le panneau de l'onglet « Décaissements en
+        attente » du guichet : la ligne cliquée identifie déjà précisément le crédit à
+        décaisser, on affiche donc directement son calendrier (aucun choix à faire).
+        Lecture seule, aucun impact comptable. `company_id` vérifié en défense en profondeur
+        (loan_id scope déjà, mais on refuse un crédit d'une autre agence que la session,
+        comme les autres méthodes de ce chantier). Renvoie [] si le crédit n'existe pas ou
+        n'appartient pas à l'agence."""
+        loan = self.env['microfinance.loan'].browse(loan_id)
+        if not loan.exists() or (company_id and loan.company_id.id != company_id):
+            return []
+        state_labels = dict(self._fields['state'].selection)
+        return [{
+            'id': inst.id,
+            'sequence': inst.sequence,
+            'due_date': inst.due_date,
+            'total_amount': inst.total_amount,
+            'residual_amount': inst.residual_amount,
+            'state': inst.state,
+            'state_label': state_labels.get(inst.state, inst.state),
+        } for inst in loan.installment_ids.sorted(lambda i: (i.sequence, i.due_date))]
 
     def action_apply_penalty(self):
         for inst in self.filtered(lambda x: not x.penalty_applied and x.state in ('pending', 'partial', 'overdue')):

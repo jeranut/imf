@@ -177,7 +177,7 @@ class MicrofinanceFondCredit(models.Model):
                 ))
 
     @api.depends('contribution_ids.amount', 'contribution_ids.type_mouvement', 'contribution_ids.state',
-                 'loan_ids.state', 'loan_ids.loan_amount',
+                 'loan_ids.state', 'loan_ids.loan_amount', 'loan_ids.disbursement_date',
                  'loan_ids.installment_ids.principal_amount', 'loan_ids.installment_ids.paid_principal',
                  'loan_ids.installment_ids.paid_interest', 'loan_ids.installment_ids.paid_penalty')
     def _compute_fond_totals(self):
@@ -185,6 +185,12 @@ class MicrofinanceFondCredit(models.Model):
         # consolidés quelle que soit l'agence consultante, y compris pour un utilisateur qui n'a
         # pas accès à toutes les sociétés ayant décaissé sur ce fonds (cf. ir.rule stricte sur
         # microfinance.loan, qui ne connaît pas la clause de partage optionnel des fonds).
+        # 'active' ne suffit plus à prouver qu'un crédit a été décaissé : depuis le découplage
+        # activation / décaissement (docs_dev/guichet_caisse/AUDIT_decaissement.md), un crédit
+        # peut être 'active' sans écriture de sortie ni disbursement_date. Les totaux
+        # « décaissé » / « remboursé » exigent donc disbursement_date renseigné en plus de
+        # l'état. solde_disponible (outstanding_states) reste inchangé : un 'approved' et un
+        # 'active' non décaissé pèsent identiquement dans l'encours réservé du fonds.
         disbursed_states = ('active', 'closed', 'defaulted', 'written_off')
         outstanding_states = ('approved', 'active')
         for fond in self:
@@ -194,7 +200,7 @@ class MicrofinanceFondCredit(models.Model):
             fond.total_contributions = deposits - withdrawals
 
             loans = fond.sudo().loan_ids
-            disbursed_loans = loans.filtered(lambda l: l.state in disbursed_states)
+            disbursed_loans = loans.filtered(lambda l: l.state in disbursed_states and l.disbursement_date)
             fond.total_decaisse = sum(disbursed_loans.mapped('loan_amount'))
             fond.total_rembourse = sum(
                 sum(loan.installment_ids.mapped('paid_principal'))
@@ -279,9 +285,12 @@ class MicrofinanceFondCredit(models.Model):
             sign = 1.0 if contribution.type_mouvement == 'depot' else -1.0
             contrib_by_company[contribution.saisie_company_id] += sign * contribution.amount
 
+        # disbursement_date en plus de l'état : un 'active' non décaissé n'est pas un
+        # décaissement réel (découplage activation / décaissement, AUDIT_decaissement.md).
         disbursed_states = ('active', 'closed', 'defaulted', 'written_off')
         loans = self.env['microfinance.loan'].sudo().search([
             ('fond_credit_id', 'in', multi_funds.ids), ('state', 'in', disbursed_states),
+            ('disbursement_date', '!=', False),
         ])
         disbursed_by_company = defaultdict(float)
         for loan in loans:
@@ -326,11 +335,13 @@ class MicrofinanceFondCredit(models.Model):
         if not funds:
             return {'companies': [{'id': c.id, 'name': c.name} for c in companies.sorted('name')], 'funds': []}
 
+        # disbursement_date en plus de l'état : cf. _compute_fond_totals / AUDIT_decaissement.md.
         disbursed_states = ('active', 'closed', 'defaulted', 'written_off')
         loans = self.env['microfinance.loan'].sudo().search([
             ('fond_credit_id', 'in', funds.ids),
             ('company_id', 'in', companies.ids),
             ('state', 'in', disbursed_states),
+            ('disbursement_date', '!=', False),
         ])
         amount_by_fund_company = defaultdict(float)
         for loan in loans:

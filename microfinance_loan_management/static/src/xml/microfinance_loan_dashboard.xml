@@ -110,6 +110,225 @@
                 </div>
                 </t>
 
+                <t t-if="state.activeTopic === 'portefeuille'">
+                <t t-call="microfinance_loan_management.DashboardSectionHeader">
+                    <t t-set="label">Mon portefeuille</t>
+                </t>
+
+                <t t-if="state.agent.loading and !state.agent.loaded">
+                    <div class="o_microfinance_dashboard__loading">Chargement du portefeuille...</div>
+                </t>
+                <t t-elif="state.agent.loaded and state.agent.selectedOfficerId === null">
+                    <div class="o_microfinance_dashboard__empty">Aucun agent de crédit dans votre périmètre.</div>
+                </t>
+                <t t-elif="state.agent.loaded">
+                <div class="o_microfinance_agent_header">
+                    <div class="o_microfinance_agent_header__id">
+                        <strong t-esc="selectedAgentLabel"/>
+                    </div>
+                    <div t-if="agentSelectorVisible" class="o_microfinance_agent_header__selector">
+                        <label>Mon portefeuille&#160;:</label>
+                        <select class="form-select form-select-sm" t-on-change="onSelectAgent">
+                            <option t-foreach="state.agent.agents" t-as="a" t-key="a.officer_id + '_' + a.company_id"
+                                    t-att-value="a.officer_id"
+                                    t-att-selected="a.officer_id === state.agent.selectedOfficerId">
+                                <t t-esc="a.officer_name"/><t t-if="a.company_name"> — <t t-esc="a.company_name"/></t>
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="o_microfinance_agent_shortcuts">
+                    <button type="button" class="btn btn-primary btn-sm" t-on-click="() => this.openAgentShortcut('new_client')">Nouveau client</button>
+                    <button type="button" class="btn btn-primary btn-sm" t-on-click="() => this.openAgentShortcut('new_application')">Nouvelle demande de crédit</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_clients')">Mes clients</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_loans')">Mes crédits</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_payments')">Mes remboursements</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_overdue')">Mes impayés</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_installments')">Mes échéances</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_visits')">Mes visites</button>
+                </div>
+
+                <div class="o_microfinance_kpi_grid">
+                    <article class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-user" role="img" aria-label="Clients"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatNumber(state.agent.kpis.nb_clients)"/>
+                                <span>Clients gérés</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-folder-open" role="img" aria-label="Crédits actifs"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatNumber(state.agent.kpis.nb_dossiers_actifs)"/>
+                                <span>Crédits actifs</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-usd" role="img" aria-label="Encours"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(state.agent.kpis.encours)"/>
+                                <span>Encours total</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-arrow-up" role="img" aria-label="Décaissés"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatNumber(state.agent.monthly.nb_credits_decaisses)"/>
+                                <span>Crédits décaissés ce mois</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-money" role="img" aria-label="Montant décaissé"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(state.agent.monthly.montant_decaisse)"/>
+                                <span>Montant décaissé ce mois</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-calendar" role="img" aria-label="Attendu"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(state.agent.monthly.remboursement_attendu)"/>
+                                <span>Remboursements attendus (mois)</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-check" role="img" aria-label="Encaissé"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(state.agent.monthly.remboursement_encaisse)"/>
+                                <span>Remboursements encaissés (mois)</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--impayes">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-exclamation-triangle" role="img" aria-label="En retard"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(state.agent.kpis.montant_impaye)"/>
+                                <span>Montant en retard (<t t-esc="formatNumber(state.agent.kpis.nb_dossiers_en_retard)"/> dossiers)</span>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <div class="o_microfinance_dashboard__grid">
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>État de mon portefeuille</h2>
+                            <span class="o_microfinance_dashboard__hint">Répartition de l'encours à risque par tranche d'ancienneté (chaque crédit dans une seule tranche).</span>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="agentDonut"/>
+                    </section>
+
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Indicateurs de risque — PAR cumulatif</h2>
+                            <span class="o_microfinance_dashboard__hint">% de l'encours en retard d'au moins N jours (mesure cumulative, distincte du donut).</span>
+                        </div>
+                        <div class="o_microfinance_par_cards">
+                            <div class="o_microfinance_par_card" t-foreach="state.agent.cumulPar ? state.agent.cumulPar.thresholds : []" t-as="thr" t-key="thr">
+                                <span class="o_microfinance_par_card__label">PAR <t t-esc="thr"/></span>
+                                <strong class="o_microfinance_par_card__value" t-esc="formatPercent(state.agent.cumulPar.values[thr_index])"/>
+                            </div>
+                        </div>
+                        <div class="o_microfinance_chart" t-ref="agentCumulPar"/>
+                    </section>
+
+                    <section class="o_microfinance_panel o_microfinance_panel--wide">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Évolution du PAR</h2>
+                        </div>
+                        <div t-if="state.agent.history.has_data" class="o_microfinance_chart" t-ref="agentHistory"/>
+                        <div t-else="" class="o_microfinance_dashboard__empty">Historique en cours de constitution : le premier point apparaîtra après le passage du cron mensuel d'instantané.</div>
+                    </section>
+                </div>
+
+                <div class="o_microfinance_dashboard__grid">
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Échéances — aujourd'hui</h2>
+                        </div>
+                        <ul class="o_microfinance_agent_duestats" t-if="state.agent.dueDates">
+                            <li><span>Clients concernés</span><strong t-esc="formatNumber(state.agent.dueDates.today.nb_clients)"/></li>
+                            <li><span>Montant attendu</span><strong t-esc="formatMoney(state.agent.dueDates.today.montant_attendu)"/></li>
+                            <li><span>Montant encaissé</span><strong t-esc="formatMoney(state.agent.dueDates.today.montant_encaisse)"/></li>
+                            <li><span>Reste à recouvrer</span><strong t-esc="formatMoney(state.agent.dueDates.today.reste_a_recouvrer)"/></li>
+                        </ul>
+                    </section>
+                    <section class="o_microfinance_panel">
+                        <div class="o_microfinance_panel__title">
+                            <h2>Échéances — 7 prochains jours</h2>
+                        </div>
+                        <ul class="o_microfinance_agent_duestats" t-if="state.agent.dueDates">
+                            <li><span>Nombre d'échéances</span><strong t-esc="formatNumber(state.agent.dueDates.next_7_days.nb_echeances)"/></li>
+                            <li><span>Montant à recouvrer</span><strong t-esc="formatMoney(state.agent.dueDates.next_7_days.montant_a_recouvrer)"/></li>
+                        </ul>
+                    </section>
+                </div>
+
+                <section class="o_microfinance_panel o_microfinance_panel--table">
+                    <div class="o_microfinance_panel__title">
+                        <h2>Clients du portefeuille</h2>
+                        <input type="text" class="form-control form-control-sm o_microfinance_agent_table__search"
+                               placeholder="Rechercher un client ou un dossier..."
+                               t-att-value="state.agent.search" t-on-input="onAgentSearchInput"/>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle o_microfinance_table">
+                            <thead>
+                                <tr>
+                                    <th>Dossier</th>
+                                    <th>Client</th>
+                                    <th class="text-end">Montant</th>
+                                    <th class="text-end">Encours</th>
+                                    <th class="text-end">En retard</th>
+                                    <th class="text-end">Jours retard</th>
+                                    <th>Décaissé le</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="state.agent.table.rows" t-as="row" t-key="row.id"
+                                    class="o_microfinance_agent_table__row" t-on-click="() => this.openLoanRecord(row.id)">
+                                    <td t-esc="row.name"/>
+                                    <td t-esc="row.partner_name"/>
+                                    <td class="text-end" t-esc="formatMoney(row.loan_amount)"/>
+                                    <td class="text-end" t-esc="formatMoney(row.balance_total)"/>
+                                    <td class="text-end" t-esc="formatMoney(row.overdue_amount)"/>
+                                    <td class="text-end" t-esc="formatNumber(row.max_days_overdue)"/>
+                                    <td t-esc="formatDate(row.disbursement_date)"/>
+                                </tr>
+                                <tr t-if="!state.agent.table.rows.length">
+                                    <td colspan="7" class="text-center text-muted py-4">Aucun crédit dans ce portefeuille.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="o_microfinance_agent_pagination" t-if="agentTablePages.pageCount > 1">
+                        <span class="text-muted"><t t-esc="state.agent.table.total"/> crédits</span>
+                        <t t-foreach="agentTablePages.pages" t-as="pg" t-key="pg_index">
+                            <button t-if="pg !== '…'" type="button"
+                                    t-attf-class="btn btn-sm {{ pg === agentTablePages.current ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                    t-on-click="() => this.goToAgentPage(pg)" t-esc="pg"/>
+                            <span t-else="" class="o_microfinance_agent_pagination__ellipsis">…</span>
+                        </t>
+                    </div>
+                </section>
+                </t>
+                </t>
+
                 <t t-if="state.activeTopic === 'analyses'">
                 <t t-call="microfinance_loan_management.DashboardSectionHeader">
                     <t t-set="label">Analyses</t>

@@ -2,6 +2,23 @@
 // "o_microfinance_loan_form"). Tout est scopé sous cette classe racine pour ne
 // jamais déborder sur les autres modèles.
 
+// Colore l'étape COURANTE de la barre d'état du crédit selon son état, sur le
+// rendu chevrons natif : fond du bouton + pointe du chevron (::after) + liseré
+// arrière (::before). Utilisé uniquement sous .o_microfinance_loan_form.
+@mixin mf-loan-state-chevron($bg) {
+    &,
+    &:disabled,
+    &:active {
+        background-color: $bg !important;
+        border-color: $bg !important;
+        color: #fff !important;
+    }
+    &::after,
+    &::before {
+        border-left-color: $bg !important;
+    }
+}
+
 .o_microfinance_loan_form {
 
     // ------------------------------------------------------------------
@@ -41,96 +58,52 @@
     }
 
     // ------------------------------------------------------------------
-    // Barre d'état : segments rectangulaires accolés (pas de chevrons), sur sa
-    // propre ligne AU-DESSUS des boutons et occupant TOUTE la largeur du sheet
-    // (segments à largeur égale). Police héritée du système (comme les boutons).
-    //   - étapes passées  : #8B8FA3 / blanc  (classe .o_passed ajoutée en JS)
-    //   - étape courante   : #714B67 / blanc  (violet du thème)
-    //   - étapes futures   : #D8D6DD / #5B5866
-    // Coins arrondis uniquement aux deux extrémités de la barre.
-    // (row-reverse + DOM inversé du widget : .o_first = segment le plus à DROITE,
-    //  .o_last = le plus à GAUCHE)
+    // Barre d'état : rendu en CHEVRONS standard d'Odoo (comme l'épargne — on ne
+    // touche NI à la forme, NI aux triangles ::before/::after, NI aux largeurs) +
+    // code couleur PAR ÉTAT, propre au dossier de crédit (9 états aux statuts de
+    // santé très différents ; l'épargne n'en a pas).
+    //
+    // On conserve UNIQUEMENT le layout : le header du crédit porte 12+ boutons
+    // et .o_form_statusbar est nativement `d-flex` sans repli ; la barre d'état
+    // (margin-left:auto natif) serait donc repoussée hors écran. On la force sur
+    // sa propre ligne pleine largeur, au-dessus des boutons.
+    //
+    // Couleur : seule l'ÉTAPE COURANTE est colorée selon son état ; passées /
+    // futures = rendu natif. États d'instruction (draft -> approved) non
+    // surchargés (rendu natif de l'étape courante).
+    //   active       -> vert     (dossier sain, en cours)
+    //   closed       -> gris      (terminal neutre : remboursé normalement)
+    //   defaulted    -> rouge     (en défaut)
+    //   written_off  -> bordeaux  (terminal négatif, distinct de defaulted)
+    // Sélecteurs [data-value] scopés sous .o_microfinance_loan_form : aucun
+    // impact sur le statusbar de l'épargne, d'EAT, de MIIA ni d'aucun autre
+    // modèle de l'instance partagée.
     // ------------------------------------------------------------------
     .o_form_statusbar {
         flex-wrap: wrap;
 
-        // Le champ "state" passe sur sa propre ligne pleine largeur, avant les
-        // boutons (double sélecteur : selon la version, le wrapper porte
-        // .o_field_statusbar et/ou l'attribut name="state").
+        // "state" sur sa propre ligne pleine largeur, avant les boutons (double
+        // sélecteur selon la version du wrapper).
         > .o_field_widget.o_field_statusbar,
         > .o_field_widget[name="state"] {
             order: -1;
             flex: 1 1 100%;
             max-width: 100%;
             margin: 0 0 8px 0;
-            align-self: stretch;
         }
 
+        // Chevrons alignés à gauche sur leur ligne (le margin-left:auto natif les
+        // pousserait à droite). Rien d'autre n'est modifié : forme, triangles,
+        // largeurs et couleurs des étapes non-courantes restent natifs.
         .o_statusbar_status {
-            display: flex;
-            width: 100%;
             margin-left: 0 !important;
-            flex-flow: row-reverse nowrap; // pas de repli responsive -> pas de dropdown
-            align-items: stretch;
+        }
 
-            > .o_arrow_button {
-                flex: 1 1 0;
-                min-width: 0;
-                text-align: center;
-                padding: 0.35em 0.6em !important;
-                border: 0 !important;
-                border-radius: 0 !important;
-                box-shadow: none !important;
-                font-size: inherit;   // = police système (boutons, etc.)
-                font-weight: 400;
-                line-height: 1.6;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                background-color: #D8D6DD;
-                color: #5B5866;
-
-                &.dropdown-toggle {
-                    flex: 0 0 auto; // les bascules "..." (masquées) ne s'étirent pas
-                }
-
-                &::before,
-                &::after {
-                    display: none !important; // supprime les triangles / chevrons Odoo
-                }
-
-                &.o_first {
-                    border-top-right-radius: 4px !important;
-                    border-bottom-right-radius: 4px !important;
-                }
-
-                &.o_last {
-                    border-top-left-radius: 4px !important;
-                    border-bottom-left-radius: 4px !important;
-                }
-
-                &.o_passed {
-                    background-color: #8B8FA3;
-                    color: #fff;
-                }
-
-                &.o_arrow_button_current,
-                &.o_arrow_button_current:disabled {
-                    background-color: #714B67 !important;
-                    color: #fff !important;
-                    font-weight: 500;
-                }
-
-                // Odoo grise le texte des étapes désactivées (text-muted) : on rétablit.
-                &:disabled:not(.o_arrow_button_current) {
-                    color: #5B5866;
-                    opacity: 1;
-                }
-
-                &:hover:not(.o_arrow_button_current):not(:disabled) {
-                    filter: brightness(0.96);
-                }
-            }
+        .o_statusbar_status > .o_arrow_button.o_arrow_button_current {
+            &[data-value="active"]      { @include mf-loan-state-chevron(#1D9E75); }
+            &[data-value="closed"]      { @include mf-loan-state-chevron(#6C757D); }
+            &[data-value="defaulted"]   { @include mf-loan-state-chevron(#D9342B); }
+            &[data-value="written_off"] { @include mf-loan-state-chevron(#7A1E1E); }
         }
     }
 }
