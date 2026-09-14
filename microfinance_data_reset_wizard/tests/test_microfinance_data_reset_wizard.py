@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from unittest.mock import patch
 
+from odoo import fields
 from odoo.exceptions import UserError
 
 from .common import MicrofinanceDataResetCommon
@@ -60,6 +61,40 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
         self.assertIn('1 microfinance.loan.payment supprimés', wizard.log)
         self.assertIn('1 microfinance.savings.account supprimés', wizard.log)
 
+    # 2bis. Dry-run multi-agences doit converger jusqu'à state='done' (correctif de
+    # l'incident du 14/09) : avant, step_index et pending_company_ids n'étaient
+    # jamais flushés en SQL avant le rollback dry-run (_FlushingSavepoint.rollback()
+    # vide tout le cache ORM via cr.clear() avant le ROLLBACK TO SAVEPOINT), donc la
+    # condition step_index >= total_steps n'était jamais vraie tant qu'il restait une
+    # agence : le dry-run bouclait indéfiniment sur la 1ère agence sans jamais
+    # atteindre 'done', ni traiter les suivantes.
+    def test_dry_run_multi_company_reaches_done(self):
+        company_b, product_b, savings_product_b, payment_journal_b, partner_b = \
+            self._setup_second_company('T3')
+        loan_a, payment_a, visit_a, account_a, application_a, loan_account_a = self._create_full_dataset(
+            partner=self.partner, product=self.product,
+            savings_product=self.savings_product, payment_journal=self.payment_journal,
+        )
+        loan_b, payment_b, visit_b, account_b, application_b, loan_account_b = self._create_full_dataset(
+            partner=partner_b, product=product_b, savings_product=savings_product_b,
+            payment_journal=payment_journal_b,
+        )
+
+        wizard = self._make_wizard(self.company | company_b)
+        wizard.action_start_dry_run()
+        wizard.action_process_all_remaining()
+
+        self.assertEqual(wizard.state, 'done')
+        self.assertEqual(wizard.step_index, 2)
+        self.assertFalse(wizard.pending_company_ids)
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertIn('SIMULATION TERMINÉE', wizard.log)
+        # Dry-run : rien n'est réellement supprimé, dans aucune des deux agences.
+        self.assertTrue(loan_a.exists())
+        self.assertTrue(loan_b.exists())
+        self.assertTrue(payment_a.exists())
+        self.assertTrue(payment_b.exists())
+
     # 3. Exécution réelle : aucun blocage FK/état, écritures comptables liées supprimées.
     def test_execute_real_respects_fk_order(self):
         loan, payment, visit, account, application, loan_account = self._create_full_dataset(
@@ -85,6 +120,40 @@ class TestMicrofinanceDataResetWizard(MicrofinanceDataResetCommon):
         self.assertFalse(loan_account.exists())
         self.assertFalse(document_lines.exists())
         self.assertFalse(self.env['account.move'].sudo().browse(move_ids).exists())
+
+    # 3bis. Un crédit remboursé via un transfert inter-agence doit pouvoir être
+    # supprimé sans erreur : c'est exactement l'incident du 14/09 sur CEFOR (crédit
+    # id 5532, contrainte microfinance_transfert_remboursement_loan_id_fkey — le
+    # bloc do_transfert_remboursement n'existait pas encore). Module optionnel
+    # (microfinance_transfert_inter_agence, pas une dépendance dure de ce wizard) :
+    # test ignoré si non installé dans la base de test.
+    def test_execute_removes_loan_with_transfert_remboursement(self):
+        if 'microfinance.transfert.remboursement' not in self.env:
+            self.skipTest("microfinance_transfert_inter_agence n'est pas installé")
+
+        loan, payment, visit, account, application, loan_account = self._create_full_dataset(
+            partner=self.partner, product=self.product,
+            savings_product=self.savings_product, payment_journal=self.payment_journal,
+        )
+        session = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.payment_journal.id,
+            'company_id': self.company.id,
+            'date': fields.Date.today(),
+        })
+        session.action_open_session()
+        transfert = self.env['microfinance.transfert.remboursement'].create({
+            'loan_id': loan.id, 'session_id': session.id, 'amount': 150.0,
+        })
+
+        wizard = self._make_wizard(self.company, i_confirm=True, confirm_text='SUPPRIMER')
+        wizard.action_start_execute()
+        wizard.action_process_all_remaining()
+
+        self.assertEqual(wizard.state, 'done')
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertIn('microfinance.transfert.remboursement supprimés', wizard.log)
+        self.assertFalse(transfert.exists())
+        self.assertFalse(loan.exists())
 
     # 4. Isolation multi-agence : RAZ scopé sur A n'affecte jamais B.
     def test_multi_company_isolation(self):

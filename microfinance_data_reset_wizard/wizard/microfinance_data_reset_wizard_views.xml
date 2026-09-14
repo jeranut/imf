@@ -36,6 +36,7 @@
                         <field name="do_loan_applications"/>
                         <field name="do_loan_installments"/>
                         <field name="do_loan_payments"/>
+                        <field name="do_transfert_remboursement"/>
                         <field name="do_loan_guarantees"/>
                         <field name="do_scoring_lines"/>
                     </group>
@@ -71,6 +72,13 @@
                 </group>
 
                 <field name="state" invisible="1"/>
+                <field name="has_error" invisible="1"/>
+
+                <div class="alert alert-danger" role="alert" invisible="not has_error">
+                    <strong>⚠️ Une erreur est survenue pendant le traitement.</strong>
+                    Voir le détail (type d'exception, message) dans le "Journal des
+                    résultats" ci-dessous — repérez la ligne commençant par "ERREUR".
+                </div>
 
                 <group string="Trace en direct" invisible="not live_trace">
                     <field name="live_trace" nolabel="1" widget="text" readonly="1"

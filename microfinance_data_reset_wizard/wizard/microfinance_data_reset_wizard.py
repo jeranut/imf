@@ -69,12 +69,28 @@ class MicrofinanceDataResetWizard(models.TransientModel):
         string="Échéanciers (microfinance.loan.installment)", default=True,
         help="loan_id est en ondelete='cascade'. Traitées explicitement pour le journal.",
     )
+    do_transfert_remboursement = fields.Boolean(
+        string="Transferts inter-agences (microfinance.transfert.remboursement)", default=True,
+        help="Module microfinance_transfert_inter_agence (optionnel, pas une dépendance dure "
+             "de ce wizard — cf. _process_company()). loan_id y est en ondelete='restrict' : "
+             "doit être supprimé avant le crédit, sans quoi microfinance.loan.unlink() échoue "
+             "avec une erreur de contrainte FK PostgreSQL (constaté en pratique le 14/09 sur "
+             "CEFOR, crédit id 5532 — cause de l'incident ayant motivé cet audit). N'apparaît "
+             "que si le module est installé ; ignoré sinon.",
+    )
     do_loans = fields.Boolean(
         string="Crédits (microfinance.loan)", default=True,
-        help="Aucune surcharge unlink() ne bloque un crédit selon son état : la seule "
-             "contrainte réelle est l'ordre (paiements supprimés avant, cf. ondelete "
-             "restrict). Les écritures de décaissement/frais/radiation sont traitées par "
-             "le bloc comptable ci-dessous, pas ici.",
+        help="Aucune surcharge unlink() ne bloque un crédit selon son état, mais l'ordre "
+             "compte : tout modèle ayant un champ loan_id en ondelete='restrict' doit être "
+             "vidé avant ce bloc. Recensement exhaustif au 14/09 (grep sur tout le repo) : "
+             "microfinance.loan.payment.loan_id (bloc Remboursements crédit ci-dessus) et "
+             "microfinance.transfert.remboursement.loan_id (bloc Transferts inter-agences "
+             "ci-dessus). Tous les autres champs microfinance.loan_id du repo (loan.account, "
+             "loan.application, caisse.mouvement, savings.account, ...) sont en "
+             "ondelete='cascade' ou 'set null', sans contrainte d'ordre. Si un nouveau module "
+             "ajoute un champ loan_id en ondelete='restrict', il faut le rajouter ici ET dans "
+             "_process_company() avant ce bloc. Les écritures de décaissement/frais/radiation "
+             "sont traitées par le bloc comptable ci-dessous, pas ici.",
     )
     do_loan_accounts = fields.Boolean(
         string="Comptes crédit conteneurs (microfinance.loan.account)", default=True,
@@ -154,17 +170,31 @@ class MicrofinanceDataResetWizard(models.TransientModel):
     progress = fields.Float(compute='_compute_progress', store=True, string="Progression (%)")
     live_trace = fields.Text(
         readonly=True, string="Trace en direct",
-        help="Dernières lignes horodatées de l'opération en cours, "
-             "mises à jour et committées à chaque petite action pour donner "
-             "une visibilité fine (contrairement au journal final).",
+        help="Dernières lignes horodatées de l'opération en cours, mises à jour à "
+             "chaque petite action pour donner une visibilité fine (contrairement au "
+             "journal final). En exécution réelle, chaque lot traité est committé "
+             "(cf. _batch_unlink()) : cette trace reflète donc toujours un état "
+             "réellement en base, jamais un état en attente de validation.",
     )
 
     log = fields.Text(string="Journal", readonly=True)
+    has_error = fields.Boolean(compute='_compute_has_error', string="Erreur dans le journal")
 
     @api.depends('total_steps', 'step_index')
     def _compute_progress(self):
         for rec in self:
             rec.progress = (rec.step_index / rec.total_steps * 100.0) if rec.total_steps else 0.0
+
+    @api.depends('log')
+    def _compute_has_error(self):
+        # Bannière d'alerte visible au-dessus du journal : l'erreur de l'incident du
+        # 14/09 (contrainte FK sur microfinance_loan) n'était pas silencieusement
+        # avalée — elle était bien journalisée dans `log` (cf. except Exception dans
+        # _process_one_step) — mais en texte brut non stylé, au milieu d'un journal
+        # potentiellement long, donc facile à manquer côté UI ("pas de traceback
+        # visible" rapporté). Cette bannière la rend impossible à rater.
+        for rec in self:
+            rec.has_error = bool(rec.log and 'ERREUR' in rec.log)
 
     # ------------------------------------------------------------------
     # Verrou anti-concurrence : empêche deux RAZ de tourner en même temps
@@ -196,6 +226,14 @@ class MicrofinanceDataResetWizard(models.TransientModel):
 
     # ------------------------------------------------------------------
     def _trace(self, message):
+        # Pur affichage : ne committe jamais. Avant le 14/09, cette méthode faisait
+        # elle-même un cr.commit() en exécution réelle — un effet de bord non
+        # documenté d'un helper de log, qui rendait le commit par lot réel mais
+        # invisible à la lecture de _batch_unlink() (le seul endroit qui, lui,
+        # affiche l'intention via stats['batches_committed']). Le commit par lot est
+        # maintenant fait explicitement dans _batch_unlink(), juste après chaque
+        # unlink() réussi — voir le commentaire à cet endroit pour le pourquoi
+        # (reprise sans tout rejouer après une panne sur un gros volume).
         ts = datetime.now().strftime('%H:%M:%S')
         line = f"[{ts}] {message}"
         if self.is_dry_run:
@@ -204,7 +242,6 @@ class MicrofinanceDataResetWizard(models.TransientModel):
         lines = [l for l in (self.live_trace or '').split('\n') if l]
         lines.append(line)
         self.live_trace = '\n'.join(lines[-self._TRACE_MAX_LINES:])
-        self.env.cr.commit()
 
     # ------------------------------------------------------------------
     # Aperçu des volumes avant toute action (lecture seule)
@@ -217,6 +254,7 @@ class MicrofinanceDataResetWizard(models.TransientModel):
 
         lines = []
         Move = self.env['account.move'].sudo()
+        transfert_model_installed = 'microfinance.transfert.remboursement' in self.env
         for company in self.company_ids:
             cid = company.id
             n_visits = self.env['microfinance.collection.visit'].sudo().search_count([('company_id', '=', cid)])
@@ -225,6 +263,11 @@ class MicrofinanceDataResetWizard(models.TransientModel):
             n_reschedule = self.env['microfinance.loan.reschedule.history'].sudo().search_count([('company_id', '=', cid)])
             n_payments = self.env['microfinance.loan.payment'].sudo().search_count([('company_id', '=', cid)])
             n_installments = self.env['microfinance.loan.installment'].sudo().search_count([('company_id', '=', cid)])
+            n_transferts = (
+                self.env['microfinance.transfert.remboursement'].sudo().search_count(
+                    [('destination_company_id', '=', cid)])
+                if transfert_model_installed else 0
+            )
             n_loans = self.env['microfinance.loan'].sudo().search_count([('company_id', '=', cid)])
             n_loan_accounts = self.env['microfinance.loan.account'].sudo().search_count([('company_id', '=', cid)])
             n_applications = self.env['microfinance.loan.application'].sudo().search_count([('company_id', '=', cid)])
@@ -236,6 +279,7 @@ class MicrofinanceDataResetWizard(models.TransientModel):
                 f"{n_loans} crédits, {n_loan_accounts} comptes crédit conteneurs, "
                 f"{n_applications} dossiers d'instruction, "
                 f"{n_installments} échéances, {n_payments} remboursements, "
+                f"{n_transferts} transferts inter-agences, "
                 f"{n_guarantees} garanties, {n_scoring} lignes de scoring, "
                 f"{n_reschedule} historiques de rééchelonnement, {n_visits} visites de recouvrement, "
                 f"{n_sav_acc} comptes épargne, {n_sav_txn} transactions épargne, "
@@ -323,23 +367,50 @@ class MicrofinanceDataResetWizard(models.TransientModel):
         company_stats = {'batches_committed': 0}
 
         sp = cr.savepoint() if dry_run else None
+        cid = False
         try:
-            if self.pending_company_ids:
-                company = self.pending_company_ids[0]
+            company = self.pending_company_ids[:1]
+            if company:
                 cid = company.id
                 self.current_label = _("Traitement de %s…") % company.name
                 self.batch_progress = False
                 new_log.extend(self._process_company(cid, company.name, dry_run, company_stats))
-                self.pending_company_ids = [(3, cid, 0)]
-
-            self.step_index += 1
-            self.batch_progress = False
 
             if not dry_run:
+                if cid:
+                    self.pending_company_ids = [(3, cid, 0)]
+                self.step_index += 1
+                self.batch_progress = False
                 cr.commit()
             else:
                 sp.rollback()
                 cr.rollback()
+                # Suivi de progression du wizard (jamais de la donnée métier) : écrit
+                # volontairement APRÈS le rollback ci-dessus, jamais avant.
+                # _FlushingSavepoint.rollback() (odoo/sql_db.py:106-108) appelle
+                # self._cr.clear() — qui vide TOUT le cache ORM de la transaction —
+                # avant même d'exécuter ROLLBACK TO SAVEPOINT. Si pending_company_ids
+                # et step_index étaient écrits AVANT ce rollback (comme c'était le
+                # cas jusqu'ici), rien ne force leur flush en SQL entre leur
+                # affectation et l'appel à sp.rollback() : ils sont donc perdus par ce
+                # cache.clear() sans jamais avoir atteint la base, et la relecture
+                # suivante de step_index renvoie l'ANCIENNE valeur (celle d'avant
+                # cette étape), lue fraîchement en base après l'invalidation du
+                # cache. Conséquence constatée par lecture de code (pas encore vue en
+                # prod, aucun dry-run multi-agences n'ayant été loggé au 14/09) : la
+                # condition step_index >= total_steps ci-dessous n'est jamais vraie
+                # tant qu'il reste des agences, pending_company_ids ne se vide jamais
+                # de sa 1ère agence, et le dry-run boucle indéfiniment dessus sans la
+                # moindre erreur. Écrire ici, après le rollback, garantit que SEULE
+                # la donnée métier (les unlink() réels de _process_company) est
+                # annulée ; le suivi interne du wizard, lui, persiste normalement via
+                # le commit implicite de fin de requête RPC — exactement comme
+                # state/current_label/log un peu plus bas, déjà positionnés après le
+                # rollback pour la même raison.
+                if cid:
+                    self.pending_company_ids = [(3, cid, 0)]
+                self.step_index += 1
+                self.batch_progress = False
 
             if self.step_index >= self.total_steps:
                 self.state = 'done'
@@ -400,6 +471,16 @@ class MicrofinanceDataResetWizard(models.TransientModel):
                 f"{len(batch_ids)} {model_name} (IDs {batch_ids[0]}-{batch_ids[-1]})"
             )
             if not dry_run:
+                # Commit explicite par lot (pas juste un flush) : un échec sur un
+                # LOT ULTÉRIEUR de cette même agence ne doit pas pouvoir annuler les
+                # lots déjà traités ici. C'est ce qui rend la RAZ reprenable sans
+                # tout rejouer sur un gros volume (cf. test_resume_after_interruption
+                # et le message d'erreur dans _process_one_step, qui compte sur ce
+                # commit pour être exact). Avant le 14/09, ce commit était un effet
+                # de bord caché dans _trace() (appelée juste au-dessus) ; il est
+                # maintenant explicite ici, là où stats['batches_committed'] — qui
+                # reflète le nombre RÉEL de commits — est incrémenté.
+                self.env.cr.commit()
                 stats['batches_committed'] += 1
 
         return total
@@ -407,8 +488,11 @@ class MicrofinanceDataResetWizard(models.TransientModel):
     # ------------------------------------------------------------------
     # Traitement complet d'une agence (tous les blocs cochés). Ordre contraint par
     # deux types de FK différents :
-    # - ondelete='restrict' (loan.payment.loan_id, savings.transaction.account_id) :
-    #   l'enfant doit être supprimé avant son parent, sinon Odoo lève une erreur FK.
+    # - ondelete='restrict' (loan.payment.loan_id, transfert.remboursement.loan_id,
+    #   savings.transaction.account_id) : l'enfant doit être supprimé avant son
+    #   parent, sinon Odoo lève une erreur FK — c'est exactement l'incident du
+    #   14/09 sur CEFOR (crédit id 5532, bloqué par microfinance.transfert.
+    #   remboursement, qui n'était pas encore traité ici à l'époque).
     # - ondelete='set null' (les 4 tags microfinance_* sur account.move) : le bloc
     #   comptable doit au contraire tourner AVANT loans/payments/savings, sinon leur
     #   suppression met les tags à NULL et les écritures deviennent invisibles au
@@ -488,6 +572,23 @@ class MicrofinanceDataResetWizard(models.TransientModel):
                 "échéances", cid, company_name, dry_run, stats,
             )
             lines.append(f"  - {n} microfinance.loan.installment supprimées (par lots de {self._BATCH_SIZE})")
+
+        # CRITIQUE : doit tourner AVANT do_loans, comme do_loan_payments ci-dessus.
+        # microfinance.transfert.remboursement.loan_id est en ondelete='restrict'
+        # (module microfinance_transfert_inter_agence, optionnel — cf. do_loans et
+        # do_transfert_remboursement ci-dessus) : sans ce bloc, microfinance.loan.
+        # unlink() échoue avec une erreur de contrainte FK PostgreSQL dès qu'un
+        # crédit a été remboursé via un transfert inter-agence (incident du 14/09,
+        # crédit id 5532). Le modèle n'a pas de champ company_id propre (visible par
+        # les DEUX agences source et destination) : on filtre sur
+        # destination_company_id (related loan_id.company_id, stocké), qui est
+        # exactement l'agence propriétaire du crédit qu'on s'apprête à supprimer.
+        if self.do_transfert_remboursement and 'microfinance.transfert.remboursement' in self.env:
+            n = self._batch_unlink(
+                'microfinance.transfert.remboursement', [('destination_company_id', '=', cid)],
+                "transferts inter-agences", cid, company_name, dry_run, stats,
+            )
+            lines.append(f"  - {n} microfinance.transfert.remboursement supprimés (par lots de {self._BATCH_SIZE})")
 
         if self.do_loans:
             n = self._batch_unlink(

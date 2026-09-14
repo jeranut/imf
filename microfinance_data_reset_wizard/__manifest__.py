@@ -11,11 +11,12 @@ Assistant de RAZ des données transactionnelles microfinance, agence par agence.
 Vide, pour les agences (res.company) sélectionnées : les dossiers d'instruction
 et leurs sous-lignes (visites terrain, section financière, documents, garant),
 les crédits et leur échéancier, les comptes crédit conteneurs (historique par
-client), les remboursements, les visites de recouvrement, les garanties et
-lignes de scoring liées, l'historique de rééchelonnement, les comptes et
-transactions d'épargne, ainsi que les écritures comptables (account.move)
-générées par ces opérations (décaissement, remboursement, frais, radiation,
-dépôt/retrait d'épargne).
+client), les remboursements, les transferts de remboursement inter-agences (si
+le module microfinance_transfert_inter_agence est installé), les visites de
+recouvrement, les garanties et lignes de scoring liées, l'historique de
+rééchelonnement, les comptes et transactions d'épargne, ainsi que les
+écritures comptables (account.move) générées par ces opérations (décaissement,
+remboursement, frais, radiation, dépôt/retrait d'épargne).
 
 Ne touche JAMAIS : les clients (res.partner, territoire partagé avec les
 autres activités de cette instance), les produits de crédit/épargne, les
@@ -45,6 +46,11 @@ action irréversible.
     """,
     'author': 'Micka',
     'license': 'LGPL-3',
+    # Ne dépend PAS de microfinance_transfert_inter_agence, alors que le bloc
+    # do_transfert_remboursement (wizard/microfinance_data_reset_wizard.py) traite
+    # microfinance.transfert.remboursement : ce module est optionnel (bases EAT/MIIA
+    # sans transferts inter-agences), donc dépendance dure évitée. Le wizard vérifie
+    # 'microfinance.transfert.remboursement' in self.env avant de l'utiliser.
     'depends': [
         'base', 'web', 'account',
         'microfinance_loan_management',
