@@ -11,7 +11,7 @@
         <div class="o_microfinance_dashboard">
             <div class="o_microfinance_dashboard__header">
                 <div>
-                    <p class="o_microfinance_dashboard__eyebrow">Microfinance</p>
+                    <p class="o_microfinance_dashboard__eyebrow">Ampaly</p>
                     <h1>Tableau de bord</h1>
                     <p t-if="companyInfo.address_subtitle" class="o_microfinance_dashboard__address" t-esc="companyInfo.address_subtitle"/>
                 </div>

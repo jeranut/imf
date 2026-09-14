@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_account_move_line_writeoff_wizard_form_disbursement" model="ir.ui.view">
+        <field name="name">account.move.line.writeoff.wizard.form.disbursement</field>
+        <field name="model">account.move.line.writeoff.wizard</field>
+        <field name="inherit_id" ref="base_accounting_kit.view_account_move_line_writeoff_wizard_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='currency_id']" position="after">
+                <field name="loan_id" invisible="1"/>
+            </xpath>
+            <xpath expr="//field[@name='writeoff_account_id']" position="attributes">
+                <attribute name="readonly">loan_id</attribute>
+            </xpath>
+        </field>
+    </record>
+</odoo>

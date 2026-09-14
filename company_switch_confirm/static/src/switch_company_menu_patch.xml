@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-inherit="web.SwitchCompanyMenu" t-inherit-mode="extension">
+    <xpath expr="//t[@t-foreach]" position="after">
+        <div class="o_switch_company_menu_confirm dropdown-item-text d-flex justify-content-between gap-2 border-top pt-2 mt-1">
+            <button type="button"
+                    class="btn btn-sm btn-secondary"
+                    t-on-click.stop="() => companySelector.resetSelection()">
+                Réinitialiser
+            </button>
+            <button type="button"
+                    class="btn btn-sm btn-primary"
+                    t-on-click.stop="() => companySelector.confirmSelection()">
+                Confirmer
+            </button>
+        </div>
+    </xpath>
+</t>
+
+</templates>

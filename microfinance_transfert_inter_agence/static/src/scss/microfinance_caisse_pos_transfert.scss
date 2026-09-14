@@ -1,0 +1,54 @@
+// En-tête « client d'une autre agence sélectionné » — utilisé à la fois dans la
+// section « Autres clients » de la recherche et (au besoin) dans l'onglet Transfert.
+.o_mf_transfert_picked {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+// Onglet central « Transfert » du guichet — gestion des lots. Rendu DANS le corps
+// de liste (.o_microfinance_pos__list_body), en flux normal (pas de surcouche).
+.o_mf_transfert {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    .o_mf_transfert_subnav {
+        margin-bottom: 4px;
+    }
+
+    .o_mf_transfert_box {
+        border: 1px solid var(--border-color, #dee2e6);
+        border-radius: 6px;
+        padding: 8px 10px;
+    }
+
+    .o_mf_transfert_lotbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-top: 8px;
+
+        select {
+            max-width: 220px;
+        }
+    }
+
+    .o_mf_transfert_lot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 0;
+        border-top: 1px solid var(--border-color, #dee2e6);
+
+        &:first-of-type {
+            border-top: 0;
+        }
+    }
+}
+
+.o_microfinance_pos__other_clients .badge,
+.o_mf_transfert .badge {
+    font-weight: normal;
+}

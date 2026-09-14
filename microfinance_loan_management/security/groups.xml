@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <record id="module_category_microfinance" model="ir.module.category">
-        <field name="name">Microfinance</field>
+        <field name="name">Ampaly</field>
         <field name="sequence">25</field>
     </record>
 

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_transfert_confirm_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.transfert.confirm.wizard.form</field>
+        <field name="model">microfinance.transfert.confirm.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Transfert de remboursement inter-agences">
+                <field name="currency_id" invisible="1"/>
+                <field name="session_id" invisible="1"/>
+                <field name="loan_id" invisible="1"/>
+                <div class="alert alert-info" role="status">
+                    Ce client appartient à <strong>une autre agence</strong>. L'opération sera
+                    enregistrée comme un <strong>transfert</strong> : l'argent est encaissé ici
+                    et compte immédiatement dans votre solde de caisse ; le remboursement réel
+                    du crédit sera comptabilisé par l'agence propriétaire à réception des fonds.
+                </div>
+                <group>
+                    <group>
+                        <field name="partner_name"/>
+                        <field name="partner_agency"/>
+                        <field name="loan_name"/>
+                    </group>
+                    <group>
+                        <field name="loan_balance"/>
+                        <field name="amount"/>
+                    </group>
+                </group>
+                <footer>
+                    <button name="action_confirm" type="object"
+                            string="Confirmer et encaisser" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

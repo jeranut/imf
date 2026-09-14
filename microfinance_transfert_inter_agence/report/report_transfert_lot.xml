@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="action_report_transfert_lot" model="ir.actions.report">
+        <field name="name">Ticket de remise — lot de transfert</field>
+        <field name="model">microfinance.transfert.lot</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_transfert_inter_agence.report_transfert_lot_document</field>
+        <field name="report_file">microfinance_transfert_inter_agence.report_transfert_lot_document</field>
+        <field name="print_report_name">'Ticket lot - %s' % (object.reference or '')</field>
+    </record>
+
+    <template id="report_transfert_lot_document">
+        <t t-foreach="docs" t-as="o">
+            <t t-call="web.basic_layout">
+                <div class="page" style="font-family: Arial, Helvetica, sans-serif; font-size: 12px;">
+                    <h3 style="margin-bottom:2px;">Remise de fonds inter-agences</h3>
+                    <p style="margin-top:0;">
+                        <strong>Lot : </strong><span t-field="o.reference"/>
+                    </p>
+                    <table style="width:100%; margin-bottom:10px;">
+                        <tr>
+                            <td><strong>Agence source</strong><br/><span t-field="o.source_company_id.name"/></td>
+                            <td><strong>Agence destination</strong><br/><span t-field="o.destination_company_id.name"/></td>
+                            <td><strong>Coursier</strong><br/><span t-field="o.coursier_id.name"/></td>
+                            <td><strong>Date de remise</strong><br/><span t-field="o.date_remise"/></td>
+                        </tr>
+                    </table>
+                    <table style="width:100%; border-collapse:collapse;" border="1" cellpadding="4">
+                        <thead>
+                            <tr style="background:#eee;">
+                                <th>Code de transfert</th>
+                                <th>N° dossier</th>
+                                <th>Client</th>
+                                <th style="text-align:right;">Montant</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="o.transfert_ids" t-as="t">
+                                <td><span t-field="t.transfer_code"/></td>
+                                <td><span t-field="t.loan_id.name"/></td>
+                                <td><span t-field="t.partner_id.display_name"/></td>
+                                <td style="text-align:right;">
+                                    <span t-field="t.amount"
+                                          t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="3" style="text-align:right;">Total</th>
+                                <th style="text-align:right;">
+                                    <span t-field="o.montant_total"
+                                          t-options="{'widget': 'monetary', 'display_currency': o.currency_id}"/>
+                                </th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    <p style="margin-top:24px;">
+                        Reçu par l'agence destination le ......................  —
+                        Signature : ............................................
+                    </p>
+                </div>
+            </t>
+        </t>
+    </template>
+
+</odoo>

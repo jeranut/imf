@@ -21,7 +21,6 @@ export class MicrofinanceLoanDashboard extends Component {
     static PAGE_SIZE = 20;
 
     setup() {
-        this.rpc = useService("rpc");
         this.orm = useService("orm");
         this.actionService = useService("action");
         this.topics = MicrofinanceLoanDashboard.TOPICS;
@@ -35,8 +34,9 @@ export class MicrofinanceLoanDashboard extends Component {
             activeTopic: "apercu",
             // --- Onglet "Mon portefeuille" (Lot 2) : chargé paresseusement à la 1re activation
             // et rafraîchi à chaque changement d'agent dans le sélecteur d'en-tête. Données
-            // servies par des méthodes @api.model dédiées de microfinance.loan (scope validé
-            // serveur), pas par l'endpoint /microfinance/dashboard/data.
+            // servies par des méthodes @api.model dédiées de microfinance.loan avec un scope
+            // par agent validé serveur, distinctes de get_dashboard_data qui alimente les
+            // autres onglets.
             agent: {
                 loaded: false,
                 loading: false,
@@ -91,7 +91,11 @@ export class MicrofinanceLoanDashboard extends Component {
 
     async loadDashboard() {
         try {
-            this.state.data = await this.rpc("/microfinance/dashboard/data", {});
+            // Méthode de modèle (et non plus une route HTTP maison appelée via this.rpc) :
+            // orm.call transmet allowed_company_ids, donc self.env.company côté serveur suit
+            // le sélecteur multi-société. Le rechargement de page déclenché nativement par le
+            // sélecteur (browser.location.reload) suffit à rejouer onMounted -> loadDashboard.
+            this.state.data = await this.orm.call("microfinance.loan", "get_dashboard_data", []);
             this.shouldRenderCharts = true;
             this.state.loading = false;
         } catch (error) {

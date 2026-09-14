@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Loan Management',
-    'version': '17.0.1.11.0',
+    'version': '17.0.1.12.0',
     'summary': 'Gestion des crédits clients pour institutions de microfinance',
     'description': 'Produits de crédit, demandes, approbations, échéanciers, remboursements, pénalités, recouvrement et risque.',
     'category': 'Accounting/Finance',
@@ -55,6 +55,7 @@
         'wizard/microfinance_loan_payment_cancel_wizard_views.xml',
         'wizard/microfinance_loan_contract_signature_wizard_views.xml',
         'wizard/microfinance_caisse_close_session_wizard_views.xml',
+        'wizard/account_move_line_writeoff_wizard_disbursement_view.xml',
         'views/microfinance_dashboard_views.xml',
         'views/microfinance_partner_views.xml',
         'views/microfinance_client_blacklist_views.xml',
@@ -62,15 +63,16 @@
         'views/microfinance_caisse_session_views.xml',
         'views/microfinance_caisse_denomination_views.xml',
         'views/microfinance_caisse_comptage_views.xml',
-        'views/microfinance_portfolio_snapshot_views.xml',
         'views/microfinance_caisse_pos_views.xml',
         'views/res_config_settings_views.xml',
         'views/microfinance_menus.xml',
-        # Chargé après microfinance_menus.xml : ses <menuitem> référencent
-        # menu_microfinance_config_geography, défini dans microfinance_menus.xml (les xmlids
-        # de <menuitem parent="..."> doivent déjà exister au moment du chargement du fichier,
-        # Odoo ne les résout pas en différé au sein d'un même module).
+        # Chargés après microfinance_menus.xml : leurs <menuitem parent="..."> référencent
+        # des menus qui y sont définis (menu_microfinance_config_geography pour geo_views,
+        # menu_microfinance_analysis pour portfolio_snapshot) — les xmlids de
+        # <menuitem parent="..."> doivent déjà exister au moment du chargement du fichier,
+        # Odoo ne les résout pas en différé au sein d'un même module.
         'views/microfinance_geo_views.xml',
+        'views/microfinance_portfolio_snapshot_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

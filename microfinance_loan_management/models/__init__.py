@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from . import res_company
+from . import account_chart_template
 from . import microfinance_profession
 from . import microfinance_financial_designation
 from . import microfinance_repayment_frequency

@@ -381,6 +381,83 @@ class TestCaissePureCashierSavingsAccess(SavingsCommon):
         self.assertTrue(loan.disbursement_date)
         self.assertAlmostEqual(mouvement.amount, loan.net_disbursed_amount, places=2)
 
+    def test_pure_cashier_decaissement_credit_choix_journal_et_cheque(self):
+        # Sous-lot D (docs_dev/guichet_caisse/AUDIT_decaissement_journal_cheque.md) : le guichet
+        # peut choisir un journal différent de celui du produit et régler par chèque — écrit sur
+        # le prêt en sudo avant action_process_disbursement (le caissier pur n'a que la lecture
+        # sur microfinance.loan).
+        self._neutralize_funds()
+        waiting_account = self.env['account.account'].create({
+            'name': 'Attente chèques émis test guichet', 'code': 'TCHQEG', 'account_type': 'liability_current',
+            'company_id': self.env.company.id,
+        })
+        self.product.write({'account_cheques_emis_attente_id': waiting_account.id})
+        alt_journal = self.env['account.journal'].create({
+            'name': 'Journal décaissement alternatif guichet test', 'code': 'TALTG', 'type': 'bank',
+            'company_id': self.env.company.id, 'default_account_id': self.bank_account.id,
+        })
+        loan = self._approve_loan_not_disbursed(loan_amount=500.0, term=3)
+        loan.action_activate()
+        session = self._open_session(self.disbursement_journal)
+        cashier = self._pure_cashier()
+        self._cashier_mouvement(cashier).register_operation(
+            session.id, 'decaissement_credit', self.partner.id, loan.loan_amount, False, loan.id,
+            journal_id=alt_journal.id, payment_method='cheque',
+            cheque_number='CHQ-0042', cheque_date='2026-09-12',
+        )
+        self.assertEqual(loan.disbursement_journal_id, alt_journal)
+        self.assertEqual(loan.disbursement_payment_method, 'cheque')
+        self.assertEqual(loan.disbursement_cheque_number, 'CHQ-0042')
+        self.assertEqual(loan.disbursement_cheque_state, 'en_attente')
+        move = loan.move_ids.filtered(lambda m: m.state == 'posted')
+        outflow_line = move.line_ids.filtered(lambda l: l.credit > 0)
+        self.assertEqual(outflow_line.account_id, waiting_account)
+
+    def test_decaissement_credit_cheque_requires_number_and_date(self):
+        self._neutralize_funds()
+        alt_journal = self.env['account.journal'].create({
+            'name': 'Journal bancaire test garde chèque', 'code': 'TBKG', 'type': 'bank',
+            'company_id': self.env.company.id, 'default_account_id': self.bank_account.id,
+        })
+        loan = self._approve_loan_not_disbursed(loan_amount=500.0, term=3)
+        loan.action_activate()
+        session = self._open_session(self.disbursement_journal)
+        with self.assertRaises(UserError):
+            self.env['microfinance.caisse.mouvement'].register_operation(
+                session.id, 'decaissement_credit', self.partner.id, loan.loan_amount, False, loan.id,
+                journal_id=alt_journal.id, payment_method='cheque',
+            )
+
+    def test_decaissement_credit_cash_journal_rejects_non_cash_payment_method(self):
+        # Le journal représente la banque/caisse, pas le moyen de paiement (clarification Micka,
+        # Sous-lot D) : un journal 'cash' ne peut être réglé qu'en espèces, revalidé côté serveur
+        # en défense en profondeur (la contrainte n'est sinon garantie que côté guichet OWL).
+        self._neutralize_funds()
+        loan = self._approve_loan_not_disbursed(loan_amount=500.0, term=3)
+        loan.action_activate()
+        session = self._open_session(self.disbursement_journal)
+        with self.assertRaises(UserError):
+            self.env['microfinance.caisse.mouvement'].register_operation(
+                session.id, 'decaissement_credit', self.partner.id, loan.loan_amount, False, loan.id,
+                journal_id=self.disbursement_journal.id, payment_method='cheque',
+                cheque_number='CHQ-0001', cheque_date='2026-09-12',
+            )
+
+    def test_decaissement_credit_bank_journal_rejects_cash_payment_method(self):
+        self._neutralize_funds()
+        alt_journal = self.env['account.journal'].create({
+            'name': 'Journal bancaire test garde espèces', 'code': 'TBKC', 'type': 'bank',
+            'company_id': self.env.company.id, 'default_account_id': self.bank_account.id,
+        })
+        loan = self._approve_loan_not_disbursed(loan_amount=500.0, term=3)
+        loan.action_activate()
+        session = self._open_session(self.disbursement_journal)
+        with self.assertRaises(UserError):
+            self.env['microfinance.caisse.mouvement'].register_operation(
+                session.id, 'decaissement_credit', self.partner.id, loan.loan_amount, False, loan.id,
+                journal_id=alt_journal.id, payment_method='cash',
+            )
+
     # --- Lot 1.1bis : le sudo ne fuit pas hors de register_operation ---
 
     def test_sudo_does_not_leak_arbitrary_account_move(self):

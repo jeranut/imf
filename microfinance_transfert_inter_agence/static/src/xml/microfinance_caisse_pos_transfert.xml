@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+
+    <!-- Transfert inter-agences dans le guichet — DEUX points d'accroche, on ne
+         quitte jamais l'écran guichet :
+
+         1. Le POINT D'ENTRÉE d'un nouveau transfert passe par la barre de recherche
+            principale : refreshOtherClients() (patché dans le .js) interroge AUSSI
+            res.partner.search_other_agency_clients et fusionne le résultat dans la
+            section « Autres clients », en bas des résultats de recherche, avec un
+            badge agence. Cliquer une de ces lignes -> mini-sélecteur du crédit à
+            rembourser -> assistant de confirmation. Aucun autre onglet n'est
+            modifié ; search_caisse_clients reste mono-agence.
+
+         2. L'onglet central « Transfert » sert UNIQUEMENT à la gestion des lots :
+            regrouper les transferts encaissés, les remettre au coursier (« à
+            envoyer »), et valider les transferts reçus (« à recevoir »).
+
+         Les xpath ciblent les noeuds par classe/position SANS double tiret : en
+         mode debug=assets, Odoo recopie l'attribut expr dans un commentaire XML
+         (qui n'accepte pas le double tiret). -->
+    <t t-inherit="microfinance_loan_management.MicrofinanceCaissePos" t-inherit-mode="extension">
+
+        <!-- 1. Le 5e bouton d'onglet central. -->
+        <xpath expr="//nav[hasclass('o_microfinance_pos__list_tabs')]/button[last()]" position="after">
+            <button type="button"
+                    t-attf-class="o_microfinance_pos__list_tab {{ state.centralTab === 'transfert' ? 'o_microfinance_pos__list_tab--active' : '' }}"
+                    t-on-click="() => this.setCentralTab('transfert')">Transfert<span t-if="state.transfert.incoming.length" class="o_microfinance_pos__list_tab_badge" t-esc="state.transfert.incoming.length"/></button>
+        </xpath>
+
+        <!-- 2. Panneau « gestion des lots », inséré dans la chaîne t-if/t-elif du
+             corps de liste, juste avant le t-else (placeholder Épargne). -->
+        <xpath expr="//div[hasclass('o_microfinance_pos__list_body')]/t[last()]" position="before">
+            <t t-elif="state.centralTab === 'transfert'">
+                <div class="o_mf_transfert">
+
+                    <nav class="o_microfinance_pos__list_tabs o_mf_transfert_subnav">
+                        <button type="button"
+                                t-attf-class="o_microfinance_pos__list_tab {{ state.transfert.view === 'source' ? 'o_microfinance_pos__list_tab--active' : '' }}"
+                                t-on-click="() => this.setTransfertView('source')">Transferts à envoyer</button>
+                        <button type="button"
+                                t-attf-class="o_microfinance_pos__list_tab {{ state.transfert.view === 'destination' ? 'o_microfinance_pos__list_tab--active' : '' }}"
+                                t-on-click="() => this.setTransfertView('destination')">Transferts à recevoir<span t-if="state.transfert.incoming.length" class="o_microfinance_pos__list_tab_badge" t-esc="state.transfert.incoming.length"/></button>
+                    </nav>
+
+                    <div t-if="state.transfert.loading" class="o_microfinance_pos__placeholder">Chargement...</div>
+
+                    <!-- ============ À ENVOYER ============ -->
+                    <t t-if="!state.transfert.loading and state.transfert.view === 'source'">
+
+                        <div class="o_mf_transfert_box">
+                            <p class="o_microfinance_pos__accounts_title">En attente de lot</p>
+                            <div t-if="!state.transfert.pending.length" class="o_microfinance_pos__placeholder_small">
+                                Aucun transfert encaissé en attente. Pour enregistrer un nouveau transfert,
+                                cherchez le client dans la barre de recherche : il apparaîtra sous « Autres clients ».
+                            </div>
+                            <t t-else="">
+                                <div class="o_microfinance_pos__list_scroll">
+                                    <table class="o_microfinance_pos__list_table">
+                                        <thead>
+                                            <tr><th></th><th>Code</th><th>Dossier</th><th>Client</th><th>Destination</th><th class="o_microfinance_pos__num">Montant</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr t-foreach="state.transfert.pending" t-as="row" t-key="row.id">
+                                                <td>
+                                                    <input type="checkbox" t-att-checked="isPendingSelected(row.id)"
+                                                           t-on-change="() => this.togglePendingSelected(row.id)"/>
+                                                </td>
+                                                <td t-esc="row.transfer_code"/>
+                                                <td t-esc="row.loan_name"/>
+                                                <td t-esc="row.partner"/>
+                                                <td t-esc="row.destination"/>
+                                                <td class="o_microfinance_pos__num" t-esc="formatMoney(row.amount)"/>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="o_mf_transfert_lotbar">
+                                    <select class="form-select form-select-sm" t-on-change="(ev) => (state.transfert.coursierId = ev.target.value)">
+                                        <option value="">-- Coursier --</option>
+                                        <option t-foreach="state.transfert.coursiers" t-as="c" t-key="c.id" t-att-value="c.id" t-esc="c.name"/>
+                                    </select>
+                                    <button type="button" class="btn btn-primary btn-sm"
+                                            t-att-disabled="state.transfert.working"
+                                            t-on-click="createLot">Créer le lot</button>
+                                </div>
+                            </t>
+                        </div>
+
+                        <div class="o_mf_transfert_box">
+                            <p class="o_microfinance_pos__accounts_title">Lots en brouillon</p>
+                            <div t-if="!state.transfert.draftLots.length" class="o_microfinance_pos__placeholder_small">
+                                Aucun lot en brouillon.
+                            </div>
+                            <div t-foreach="state.transfert.draftLots" t-as="lot" t-key="lot.id" class="o_mf_transfert_lot">
+                                <div>
+                                    <strong t-esc="lot.reference"/> → <span t-esc="lot.destination"/>
+                                    <span class="text-muted"> · <t t-esc="lot.count"/> transfert(s) · <t t-esc="formatMoney(lot.total)"/></span>
+                                    <div class="text-muted small" t-esc="'Coursier : ' + (lot.coursier || '—')"/>
+                                </div>
+                                <button type="button" class="btn btn-success btn-sm"
+                                        t-att-disabled="state.transfert.working"
+                                        t-on-click="() => this.validateLot(lot.id)">Remettre au coursier</button>
+                            </div>
+                        </div>
+                    </t>
+
+                    <!-- ============ À RECEVOIR ============ -->
+                    <t t-if="!state.transfert.loading and state.transfert.view === 'destination'">
+                        <div class="o_mf_transfert_box">
+                            <p class="o_microfinance_pos__accounts_title">Transferts en transit à valider</p>
+                            <div t-if="!state.transfert.incoming.length" class="o_microfinance_pos__placeholder_small">
+                                Aucun transfert en attente de réception.
+                            </div>
+                            <t t-else="">
+                                <div class="o_microfinance_pos__list_scroll">
+                                    <table class="o_microfinance_pos__list_table">
+                                        <thead>
+                                            <tr><th>Code</th><th>Compte crédit</th><th>Dossier</th><th>Client</th><th>Date</th><th>Agence source</th><th class="o_microfinance_pos__num">Montant</th><th></th></tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr t-foreach="state.transfert.incoming" t-as="row" t-key="row.id">
+                                                <td t-esc="row.transfer_code"/>
+                                                <td t-esc="row.loan_account"/>
+                                                <td t-esc="row.loan_name"/>
+                                                <td t-esc="row.partner"/>
+                                                <td t-esc="row.date and row.date.slice(0, 10)"/>
+                                                <td t-esc="row.source"/>
+                                                <td class="o_microfinance_pos__num" t-esc="formatMoney(row.amount)"/>
+                                                <td>
+                                                    <button type="button" class="btn btn-success btn-sm"
+                                                            t-att-disabled="state.transfert.working"
+                                                            t-on-click="() => this.validateIncoming(row.id)">Valider</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </t>
+                        </div>
+                    </t>
+
+                </div>
+            </t>
+        </xpath>
+
+        <!-- 3. Section « Autres clients » : y fusionner les clients d'une AUTRE
+             agence (badge agence) ; cliquer une telle ligne ouvre le mini-sélecteur
+             du crédit à rembourser en transfert. Les clients de l'agence courante
+             gardent le comportement d'origine (selectClient). -->
+        <xpath expr="//div[hasclass('o_microfinance_pos__other_clients')]" position="replace">
+            <div t-if="state.otherClients.length or state.transfert.picked" class="o_microfinance_pos__other_clients">
+                <p class="o_microfinance_pos__accounts_title">Autres clients</p>
+
+                <t t-if="state.transfert.picked">
+                    <div class="o_mf_transfert_picked">
+                        <strong t-esc="state.transfert.picked.name"/>
+                        <span class="badge text-bg-secondary" t-esc="state.transfert.picked.agency_name"/>
+                        <button type="button" class="btn btn-link btn-sm" t-on-click="clearTransfertPick">Changer</button>
+                    </div>
+                    <div t-if="!state.transfert.pickedLoans.length" class="o_microfinance_pos__placeholder_small">
+                        Aucun crédit actionnable pour ce client.
+                    </div>
+                    <div t-foreach="state.transfert.pickedLoans" t-as="loan" t-key="loan.id"
+                         class="o_microfinance_pos__account_row" t-on-click="() => this.startTransfert(loan)">
+                        <span><strong t-esc="loan.name"/> — <span t-esc="loan.product"/></span>
+                        <span t-esc="formatMoney(loan.balance_total)"/>
+                    </div>
+                </t>
+
+                <t t-else="">
+                    <div t-foreach="state.otherClients" t-as="result" t-key="result.id"
+                         class="o_microfinance_pos__search_result"
+                         t-on-click="() => this.selectOtherClient(result)">
+                        <strong t-esc="result.name"/>
+                        <span t-if="result.account_number" t-esc="result.account_number"/>
+                        <span t-if="result.is_other_agency" class="badge text-bg-secondary" t-esc="result.agency_name"/>
+                    </div>
+                </t>
+            </div>
+        </xpath>
+
+    </t>
+
+</templates>

@@ -348,6 +348,22 @@ class MicrofinanceLoanProduct(models.Model):
         default=_pcec_default('315000'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
     )
+    account_cheques_emis_attente_id = fields.Many2one(
+        'account.account', string="Compte d'attente chèques émis",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('219000'),
+        help="Compte de contrepartie d'un décaissement réglé par chèque (moyen de paiement "
+             "'Chèque' choisi au guichet), tant que le chèque n'est pas encaissé par le client "
+             "(disbursement_cheque_state='en_attente') : le décaissement engage une dette "
+             "envers le client (le chèque remis n'est pas encore sorti de trésorerie) plutôt "
+             "qu'une sortie de caisse/banque immédiate. À la compensation "
+             "(action_clear_disbursement_cheque), le montant est transféré vers le compte du "
+             "journal de décaissement choisi ; en cas de rejet "
+             "(action_reject_disbursement_cheque), le décaissement est intégralement "
+             "contre-passé. Sens inverse du compte d'attente chèques de l'épargne "
+             "(account_cheques_attente_id, actif) : ici l'institution émet le chèque, elle ne "
+             "le reçoit pas. Requis uniquement si un décaissement est réglé par chèque.",
+    )
 
     fee_type = fields.Selection([
         ('fixed', 'Montant fixe'),

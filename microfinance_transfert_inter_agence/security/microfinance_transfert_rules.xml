@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- ================================================================
+         EXCEPTION DÉLIBÉRÉE au cloisonnement multi-société strict du projet.
+
+         Partout ailleurs (microfinance_company_rules.xml des modules crédit et
+         épargne), chaque modèle transactionnel est borné à UNE seule agence :
+         domain_force = [('company_id', 'in', company_ids)], groups vide.
+
+         Les deux modèles ci-dessous sont les PREMIERS du projet visibles par
+         DEUX agences nommément à la fois : l'agence SOURCE qui encaisse un
+         remboursement hors agence, ET l'agence DESTINATION propriétaire du
+         crédit. C'est intentionnel et nécessaire au flux — l'onglet « Transfert »
+         du guichet destination doit afficher les transferts en transit venus
+         d'autres agences (sous-lot D).
+
+         NE PAS « corriger » ce domaine lors d'un futur audit multi-société : il
+         est volontairement plus large que le cloisonnement standard. Voir
+         docs_dev/guichet_caisse/AUDIT_transfert_inter_agence.md §2.3 et §8.
+
+         Portée de l'exception strictement limitée à ces deux modèles : aucune
+         autre ir.rule du projet n'est touchée. source_company_id et
+         destination_company_id sont des related STOCKÉS (cf. modèles), donc
+         directement exploitables dans le domaine, sans jointure.
+
+         groups vide = s'applique à tous les internes (managers/auditeurs
+         compris), comme les autres règles de cloisonnement du projet.
+         ================================================================ -->
+
+    <record id="microfinance_transfert_remboursement_company_rule" model="ir.rule">
+        <field name="name">Transfert remboursement inter-agences : visible source ET destination</field>
+        <field name="model_id" ref="model_microfinance_transfert_remboursement"/>
+        <field name="domain_force">['|', ('source_company_id', 'in', company_ids), ('destination_company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_transfert_lot_company_rule" model="ir.rule">
+        <field name="name">Lot de rapatriement inter-agences : visible source ET destination</field>
+        <field name="model_id" ref="model_microfinance_transfert_lot"/>
+        <field name="domain_force">['|', ('source_company_id', 'in', company_ids), ('destination_company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+</odoo>

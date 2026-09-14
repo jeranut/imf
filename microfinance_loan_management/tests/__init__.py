@@ -22,6 +22,7 @@ from . import test_client_blacklist
 from . import test_dashboard_overdue_flux
 from . import test_dashboard_recent_activity
 from . import test_dashboard_company_header
+from . import test_dashboard_multicompany
 from . import test_agency_code
 from . import test_agency_numbering
 from . import test_fond_bailleur
@@ -68,6 +69,7 @@ from . import test_disbursement_schedule_recalc
 from . import test_disbursement_decouple_aggregates
 from . import test_disbursement_decouple_guards
 from . import test_disbursement_concurrent_guard
+from . import test_disbursement_cheque_workflow
 from . import test_caisse_comptage
 from . import test_caisse_close_wizard
 from . import test_caisse_session_security

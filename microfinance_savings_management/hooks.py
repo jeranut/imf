@@ -60,13 +60,28 @@ def _get_or_create_account(env, company, code, name, account_type, reconcile):
     })
 
 
+def provision_company_savings_accounts(env, company):
+    """Crée idempotemment, pour une société sur le plan PCEC (chart_template == 'mg_pcec'),
+    les sous-comptes épargne dédiés par segment (SAVINGS_NEW_SUBACCOUNTS : 213001/2/3 Épargne,
+    607301/2/3 Intérêt payé, 325005/6/7 Intérêts comptabilisés d'avance, 218001/2/3, 749003/4,
+    717004, 467000). Ne fait rien pour les sociétés sur un autre plan comptable.
+
+    Source unique appelée par post_init_hook (installation neuve), par
+    AccountChartTemplate._load() (chargement du plan PCEC sur une agence créée après
+    l'installation du module — cf. models/account_chart_template.py) et par le script de
+    migration post-migrate. Les journaux (dont EPG, utilisé par les défauts des champs
+    journal_id dépôt/retrait) sont créés côté microfinance_loan_management, dont ce module
+    dépend."""
+    if not company or company.chart_template != 'mg_pcec':
+        return
+    for code, (name, account_type, reconcile) in SAVINGS_NEW_SUBACCOUNTS.items():
+        _get_or_create_account(env, company, code, name, account_type, reconcile)
+
+
 def post_init_hook(env):
     """Sur chaque société utilisant le plan PCEC (chart_template == 'mg_pcec'), crée les
     sous-comptes épargne dédiés par segment. Les journaux (dont EPG, utilisé par les défauts
     des champs journal_id dépôt/retrait) sont créés par microfinance_loan_management, dont ce
     module dépend."""
     for company in env['res.company'].search([]):
-        if company.chart_template != 'mg_pcec':
-            continue
-        for code, (name, account_type, reconcile) in SAVINGS_NEW_SUBACCOUNTS.items():
-            _get_or_create_account(env, company, code, name, account_type, reconcile)
+        provision_company_savings_accounts(env, company)

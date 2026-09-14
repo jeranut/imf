@@ -21,3 +21,4 @@ from . import test_savings_container_creation
 from . import test_epargne_exigee_disponible
 from . import test_savings_transaction_amount_lock
 from . import test_savings_transaction_split_amounts
+from . import test_dashboard_savings_kpis

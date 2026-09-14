@@ -13,11 +13,23 @@ export class MicrofinanceCaissePos extends Component {
         { id: "frais_dossier", label: "Frais de dossier", icon: "fa-file-text-o", kind: "fee" },
     ];
 
+    // Le journal représente la banque/caisse, pas le moyen de paiement (clarification Micka,
+    // Sous-lot D) : un journal 'cash' n'est réglé qu'en espèces (posé automatiquement, jamais
+    // choisi manuellement, cf. selectDisbursementJournal) ; un journal 'bank' propose seulement
+    // ce sous-choix entre les deux moyens de sortie pertinents pour une banque. Mêmes valeurs
+    // que microfinance.loan.disbursement_payment_method — cf.
+    // docs_dev/guichet_caisse/AUDIT_decaissement_journal_cheque.md §3/§7.
+    static BANK_JOURNAL_PAYMENT_METHODS = [
+        { id: "cheque", label: "Chèque" },
+        { id: "bank_transfer", label: "Virement" },
+    ];
+
     setup() {
         this.orm = useService("orm");
         this.company = useService("company");
         this.notification = useService("notification");
         this.tabs = MicrofinanceCaissePos.TABS;
+        this.bankJournalPaymentMethods = MicrofinanceCaissePos.BANK_JOURNAL_PAYMENT_METHODS;
         this.state = useState({
             loadingSession: true,
             session: null,
@@ -48,6 +60,22 @@ export class MicrofinanceCaissePos extends Component {
             // compte, pas de pavé numérique). disbursementFlow gouverne le rendu et le verrou.
             disbursementFlow: false,
             disbursementAmount: 0,
+            // Choix fait au guichet juste avant la validation du décaissement (Sous-lot D,
+            // docs_dev/guichet_caisse/AUDIT_decaissement_journal_cheque.md) : transmis à
+            // register_operation, qui les écrit sur le prêt avant d'appeler
+            // action_process_disbursement (qui ne prend lui-même aucun paramètre). Reset à
+            // chaque nouvelle sélection de décaissement (selectDisbursement) et à la sortie du
+            // flux (_resetDisbursementFlow). disbursementPaymentMethod n'est jamais choisi
+            // directement : posé à "cash" automatiquement pour un journal 'cash', laissé vide
+            // (sous-choix obligatoire) pour un journal 'bank' — cf. selectDisbursementJournal.
+            disbursementJournalId: null,
+            disbursementPaymentMethod: "",
+            disbursementChequeNumber: "",
+            disbursementChequeDate: "",
+            // Journaux bank/cash de l'agence de la session, chargés une fois (loadLists) pour la
+            // liste cliquable de choix du journal de décaissement. Le type de chacun pilote
+            // l'affichage du sous-choix moyen de paiement (selectedDisbursementJournalType).
+            availableJournals: [],
             // Calendrier d'échéance (lecture seule) du crédit sélectionné. Partagé par deux
             // onglets : "Décaissement crédit" (flux liste, montant figé) et "Remboursement
             // crédit" (sélection panneau, pavé numérique éditable). Alimenté par
@@ -130,14 +158,20 @@ export class MicrofinanceCaissePos extends Component {
         const companyId = this.state.session.company_id[0];
         this.state.listLoading = true;
         try {
-            const [disbursements, installments, fees] = await Promise.all([
+            const [disbursements, installments, fees, journals] = await Promise.all([
                 this.orm.call("microfinance.loan", "get_pending_disbursements", [companyId]),
                 this.orm.call("microfinance.loan.installment", "get_pending_or_late", [companyId]),
                 this.orm.call("microfinance.loan", "get_pending_fees", [companyId]),
+                this.orm.searchRead(
+                    "account.journal",
+                    [["type", "in", ["bank", "cash"]], ["company_id", "=", companyId]],
+                    ["id", "name", "code", "type"]
+                ),
             ]);
             this.state.pendingDisbursements = disbursements;
             this.state.pendingInstallments = installments;
             this.state.pendingFees = fees;
+            this.state.availableJournals = journals;
         } finally {
             this.state.listLoading = false;
         }
@@ -260,6 +294,10 @@ export class MicrofinanceCaissePos extends Component {
     _resetDisbursementFlow() {
         this.state.disbursementFlow = false;
         this.state.disbursementAmount = 0;
+        this.state.disbursementJournalId = null;
+        this.state.disbursementPaymentMethod = "";
+        this.state.disbursementChequeNumber = "";
+        this.state.disbursementChequeDate = "";
     }
 
     // Calendrier d'échéance d'un crédit (get_loan_schedule, lecture seule, aucun impact
@@ -283,7 +321,46 @@ export class MicrofinanceCaissePos extends Component {
         this.state.disbursementAmount = row.amount;
         this.state.amountStr = String(row.amount);
         this.state.disbursementFlow = true;
+        // Choix journal / moyen de paiement / chèque : jamais reportés d'un crédit à l'autre.
+        this.state.disbursementJournalId = null;
+        this.state.disbursementPaymentMethod = "";
+        this.state.disbursementChequeNumber = "";
+        this.state.disbursementChequeDate = "";
         this.state.loanSchedule = await this._loadLoanSchedule(row.id);
+    }
+
+    // Journal représente la banque/caisse (clarification Micka) : le choix du journal détermine
+    // le moyen de paiement, pas l'inverse. Un journal 'cash' pose "Espèces" automatiquement (rien
+    // d'autre à choisir) ; un journal 'bank' laisse le moyen de paiement à vide pour forcer le
+    // sous-choix explicite Chèque/Virement (cf. template, bloc affiché seulement si
+    // selectedDisbursementJournalType === 'bank').
+    selectDisbursementJournal(journalId) {
+        this.state.disbursementJournalId = journalId;
+        const journal = this.state.availableJournals.find((j) => j.id === journalId);
+        this.state.disbursementPaymentMethod = journal && journal.type === "cash" ? "cash" : "";
+        this.state.disbursementChequeNumber = "";
+        this.state.disbursementChequeDate = "";
+    }
+
+    get selectedDisbursementJournalType() {
+        const journal = this.state.availableJournals.find((j) => j.id === this.state.disbursementJournalId);
+        return journal ? journal.type : null;
+    }
+
+    selectDisbursementPaymentMethod(method) {
+        this.state.disbursementPaymentMethod = method;
+        if (method !== "cheque") {
+            this.state.disbursementChequeNumber = "";
+            this.state.disbursementChequeDate = "";
+        }
+    }
+
+    onDisbursementChequeNumberInput(ev) {
+        this.state.disbursementChequeNumber = ev.target.value;
+    }
+
+    onDisbursementChequeDateInput(ev) {
+        this.state.disbursementChequeDate = ev.target.value;
     }
 
     // --- Onglet opération ---
@@ -468,9 +545,24 @@ export class MicrofinanceCaissePos extends Component {
         if (this.state.activeTab === "frais_dossier") {
             return this.selectedFeeAmount > 0;
         }
-        // décaissement depuis la liste : montant net figé, pas de saisie pavé requise.
+        // décaissement depuis la liste : montant net figé (pas de saisie pavé requise), mais
+        // journal obligatoire ; pour un journal 'bank', le sous-choix Chèque/Virement est
+        // également obligatoire (disbursementPaymentMethod reste vide tant qu'il n'est pas fait,
+        // cf. selectDisbursementJournal) et, si "Chèque", numéro + date obligatoires
+        // (docs_dev/guichet_caisse/AUDIT_decaissement_journal_cheque.md §7 : ne jamais poster un
+        // décaissement chèque sans ces deux informations).
         if (this.state.disbursementFlow) {
-            return this.state.disbursementAmount > 0;
+            if (!(this.state.disbursementAmount > 0) || !this.state.disbursementJournalId) {
+                return false;
+            }
+            if (!this.state.disbursementPaymentMethod) {
+                return false;
+            }
+            if (this.state.disbursementPaymentMethod === "cheque"
+                && (!this.state.disbursementChequeNumber.trim() || !this.state.disbursementChequeDate)) {
+                return false;
+            }
+            return true;
         }
         return this.amount > 0;
     }
@@ -483,6 +575,33 @@ export class MicrofinanceCaissePos extends Component {
         const tab = this.state.activeTab;
         const isLoanOp = tab === "remboursement_credit" || tab === "decaissement_credit" || tab === "frais_dossier";
         try {
+            // Remboursement crédit : avant toute comptabilisation, demander au serveur si la
+            // situation impose une confirmation (cascade sur plusieurs échéances en retard,
+            // ou surplus une fois le dû immédiat soldé -> anticiper / verser en épargne).
+            // Si oui, on ouvre l'assistant renvoyé ; il comptabilise lui-même
+            // (register_repayment_confirmed) et son onClose rafraîchit le guichet.
+            // register_operation N'EST PAS appelé dans ce cas.
+            if (tab === "remboursement_credit") {
+                const flow = await this.orm.call(
+                    "microfinance.caisse.mouvement", "get_repayment_flow_action",
+                    [this.state.session.id, this.state.selectedAccountId, this.effectiveAmount]
+                );
+                if (flow && flow.type === "ir.actions.act_window") {
+                    const clientId = this.state.client?.id;
+                    this.env.services.action.doAction(flow, {
+                        onClose: () => {
+                            this.state.amountStr = "";
+                            this.state.ventilation = null;
+                            this.state.selectedAccountId = null;
+                            this.loadSession();
+                            if (clientId) {
+                                this.selectClient(clientId);
+                            }
+                        },
+                    });
+                    return;
+                }
+            }
             await this.orm.call("microfinance.caisse.mouvement", "register_operation", [
                 this.state.session.id,
                 tab,
@@ -490,7 +609,17 @@ export class MicrofinanceCaissePos extends Component {
                 this.effectiveAmount,
                 isLoanOp ? false : this.state.selectedAccountId,
                 isLoanOp ? this.state.selectedAccountId : false,
-            ]);
+            ], {
+                // Sans effet hors décaissement_credit (register_operation ne les lit que dans
+                // cette branche) : toujours transmis pour ne pas complexifier cet appel selon
+                // l'onglet actif.
+                journal_id: this.state.disbursementFlow ? this.state.disbursementJournalId : false,
+                payment_method: this.state.disbursementFlow ? this.state.disbursementPaymentMethod : "cash",
+                cheque_number: this.state.disbursementFlow && this.state.disbursementPaymentMethod === "cheque"
+                    ? this.state.disbursementChequeNumber : false,
+                cheque_date: this.state.disbursementFlow && this.state.disbursementPaymentMethod === "cheque"
+                    ? this.state.disbursementChequeDate : false,
+            });
             this.notification.add("Opération enregistrée.", { type: "success" });
             this.state.amountStr = "";
             this.state.ventilation = null;

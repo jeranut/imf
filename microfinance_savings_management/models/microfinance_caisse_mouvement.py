@@ -82,12 +82,19 @@ class MicrofinanceCaisseMouvement(models.Model):
         return getattr(record.sudo(), method_name)(*args, **kwargs)
 
     @api.model
-    def register_operation(self, session_id, type, partner_id, amount, savings_account_id=False, loan_id=False):
+    def register_operation(self, session_id, type, partner_id, amount, savings_account_id=False, loan_id=False,
+                            journal_id=False, payment_method='cash', cheque_number=False, cheque_date=False):
         """Point d'entrée unique du guichet (Lot 3.3) : exécute l'opération via les mécanismes
         déjà existants (transaction épargne, remboursement crédit, décaissement crédit) sans
         aucune comptabilisation propre à ce modèle, puis trace le résultat dans un
         microfinance.caisse.mouvement rattaché à la session. Refuse toute opération hors session
-        ouverte."""
+        ouverte.
+
+        journal_id/payment_method/cheque_number/cheque_date (Sous-lot D, docs_dev/guichet_caisse/
+        AUDIT_decaissement_journal_cheque.md) : choix faits au guichet, sans effet hors branche
+        decaissement_credit — action_process_disbursement() ne prend elle-même aucun paramètre
+        (compatibilité action_disburse() déprécié et tests directs), ces valeurs sont donc écrites
+        sur le prêt AVANT de l'appeler, pas transmises en argument."""
         session = self.env['microfinance.caisse.session'].browse(session_id)
         if not session.exists() or session.state != 'open':
             raise UserError(_("Aucune session de caisse ouverte : impossible d'enregistrer une opération."))
@@ -130,6 +137,42 @@ class MicrofinanceCaisseMouvement(models.Model):
             loan = self.env['microfinance.loan'].browse(loan_id)
             if loan.company_id != session.company_id:
                 raise UserError(_("Ce crédit n'appartient pas à l'agence de la session en cours."))
+            if journal_id:
+                journal = self.env['account.journal'].browse(journal_id)
+                if journal.company_id != session.company_id:
+                    raise UserError(_("Ce journal n'appartient pas à l'agence de la session en cours."))
+            else:
+                journal = loan.product_id.disbursement_journal_id
+            # Le journal représente la banque/caisse, pas le moyen de paiement : un journal
+            # 'cash' n'est réglé qu'en espèces (posé automatiquement côté guichet, jamais choisi
+            # manuellement), un journal 'bank' seulement par chèque ou virement (Sous-lot D,
+            # clarification Micka) — revalidé ici en défense en profondeur, la contrainte n'étant
+            # sinon garantie que côté guichet OWL.
+            if journal.type == 'cash' and payment_method != 'cash':
+                raise UserError(_("Un journal de type Espèces ne peut être réglé qu'en espèces."))
+            if journal.type == 'bank' and payment_method not in ('cheque', 'bank_transfer'):
+                raise UserError(_("Un journal de type Banque doit être réglé par chèque ou par virement."))
+            if payment_method == 'cheque' and not (cheque_number and cheque_date):
+                raise UserError(_('Numéro et date de chèque requis pour un décaissement réglé par chèque.'))
+            # Choix journal / moyen de paiement / chèque faits au guichet : écrits sur le prêt en
+            # sudo (le caissier n'a que le droit de lecture sur microfinance.loan, cf.
+            # _run_posting_sudo) AVANT le décaissement effectif — action_process_disbursement() /
+            # _prepare_disbursement_move() les relisent depuis self sans qu'ils soient jamais
+            # passés en paramètre (cf. docstring de register_operation).
+            disbursement_vals = {'disbursement_payment_method': payment_method}
+            if journal_id:
+                disbursement_vals['disbursement_journal_id'] = journal_id
+            if payment_method == 'cheque':
+                disbursement_vals.update({
+                    'disbursement_cheque_number': cheque_number,
+                    'disbursement_cheque_date': cheque_date,
+                })
+            else:
+                disbursement_vals.update({
+                    'disbursement_cheque_number': False,
+                    'disbursement_cheque_date': False,
+                })
+            self._run_posting_sudo(loan, session, 'write', disbursement_vals)
             # Découplage activation / décaissement (docs_dev/guichet_caisse/AUDIT_decaissement.md) :
             # le guichet ne fait plus que le décaissement effectif (écriture de sortie de caisse
             # + disbursement_date + recalage de l'échéancier). Les contrôles d'éligibilité et le
@@ -168,6 +211,122 @@ class MicrofinanceCaisseMouvement(models.Model):
         else:
             raise UserError(_('Type d\'opération de caisse inconnu : %s') % type)
         return self.create(vals)
+
+    # ------------------------------------------------------------------
+    # Sous-lots B/C — remboursement crédit confirmé par assistant
+    # (docs_dev/guichet_caisse/AUDIT_cascade_remboursement.md)
+    # ------------------------------------------------------------------
+    @api.model
+    def get_repayment_flow_action(self, session_id, loan_id, amount):
+        """Appelé par le guichet OWL AVANT toute comptabilisation, pour un remboursement
+        crédit. Renvoie :
+
+        - ``{'situation': 'direct'}`` : rien à confirmer, l'appelant enchaîne sur
+          ``register_operation`` exactement comme aujourd'hui ;
+        - un ``ir.actions.act_window`` ouvrant l'assistant adéquat (cascade multi-échéances
+          en retard, ou surplus anticipation/épargne). Les assistants se re-remplissent
+          seuls à partir de ``(session_id, loan_id, amount)`` — aucune donnée calculée n'est
+          transportée dans le contexte.
+
+        La décision repose sur ``microfinance.loan.payment.analyze_repayment_situation``
+        (sous-lot A), qui n'écrit rien.
+        """
+        info = self.env['microfinance.loan.payment'].analyze_repayment_situation(loan_id, amount)
+        if info['situation'] == 'direct':
+            return {'situation': 'direct'}
+
+        ctx = {
+            'default_session_id': session_id,
+            'default_loan_id': loan_id,
+            'default_amount': amount,
+        }
+        if info['situation'] == 'cascade':
+            return {
+                'type': 'ir.actions.act_window',
+                'name': _('Confirmer le remboursement de plusieurs échéances en retard'),
+                'res_model': 'microfinance.caisse.repayment.cascade.wizard',
+                'view_mode': 'form',
+                'views': [[False, 'form']],
+                'target': 'new',
+                'context': ctx,
+            }
+        # 'surplus'
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Surplus de remboursement'),
+            'res_model': 'microfinance.caisse.repayment.surplus.wizard',
+            'view_mode': 'form',
+            'views': [[False, 'form']],
+            'target': 'new',
+            'context': ctx,
+        }
+
+    @api.model
+    def register_repayment_confirmed(self, session_id, loan_id, loan_amount, deposit_amount=0.0):
+        """Chemin de remboursement CONFIRMÉ par un assistant (sous-lots B/C). Réutilise les
+        mêmes primitives que ``register_operation`` (branche ``remboursement_credit``) :
+        création d'un ``microfinance.loan.payment``, ``action_post`` **en sudo** via
+        ``_run_posting_sudo``, traçage en ``microfinance.caisse.mouvement``. En plus :
+        possibilité de verser un surplus sur le compte d'épargne lié au crédit.
+
+        - ``loan_amount``   : montant imputé au crédit (cascade ``_allocation_plan``
+          inchangée). Sur le chemin « épargne », c'est le dû immédiat (jamais > solde
+          restant) — le garde « Surpaiement interdit » n'est donc pas franchi.
+        - ``deposit_amount`` : si > 0, versé sur ``loan.savings_account_id`` ; un SECOND
+          ``microfinance.caisse.mouvement`` (type ``depot_epargne``) est créé pour le tracer
+          (décision actée : deux mouvements distincts plutôt qu'un seul surchargé).
+
+        Renvoie le mouvement ``remboursement_credit``.
+        """
+        session = self.env['microfinance.caisse.session'].browse(session_id)
+        if not session.exists() or session.state != 'open':
+            raise UserError(_("Aucune session de caisse ouverte : impossible d'enregistrer une opération."))
+        loan = self.env['microfinance.loan'].browse(loan_id)
+        if loan.company_id != session.company_id:
+            raise UserError(_("Ce crédit n'appartient pas à l'agence de la session en cours."))
+
+        payment = self.env['microfinance.loan.payment'].create({
+            'loan_id': loan.id,
+            'amount': loan_amount,
+            'journal_id': session.journal_id.id,
+        })
+        self._run_posting_sudo(payment, session, 'action_post')
+        mouvement = self.create({
+            'session_id': session.id,
+            'type': 'remboursement_credit',
+            'partner_id': loan.partner_id.id,
+            'amount': loan_amount,
+            'loan_id': loan.id,
+            'payment_id': payment.id,
+            'interest_amount': payment.allocated_interest,
+            'principal_amount': payment.allocated_principal,
+            'penalty_amount': payment.allocated_penalty,
+        })
+
+        if deposit_amount and deposit_amount > 0.01:
+            account = loan._get_repayment_surplus_savings_account()
+            if not account:
+                raise UserError(_(
+                    "Aucun compte épargne n'est lié à ce crédit : impossible d'y verser le surplus."))
+            if account.company_id != session.company_id:
+                raise UserError(_("Le compte épargne lié n'appartient pas à l'agence de la session en cours."))
+            transaction = self._run_posting_sudo(
+                account, session, '_create_transaction', 'deposit', deposit_amount,
+                note=_("Surplus du remboursement %(pay)s du crédit %(loan)s") % {
+                    'pay': payment.name, 'loan': loan.name,
+                },
+                payment_method='cash',
+            )
+            self.create({
+                'session_id': session.id,
+                'type': 'depot_epargne',
+                'partner_id': loan.partner_id.id,
+                'amount': deposit_amount,
+                'savings_account_id': account.id,
+                'savings_transaction_id': transaction.id,
+            })
+
+        return mouvement
 
 
 class MicrofinanceCaisseSession(models.Model):

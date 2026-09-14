@@ -140,6 +140,38 @@ class ResPartner(models.Model):
         } for partner in partners]
 
     @api.model
+    def search_other_agency_clients(self, query, company_id):
+        """Recherche client CROSS-AGENCE pour le guichet — uniquement pour détecter un
+        client rattaché à une AUTRE agence en vue d'un transfert de remboursement
+        inter-agences (module microfinance_transfert_inter_agence).
+
+        Distincte de search_caisse_clients (qui reste strictement mono-agence, cf.
+        docs_dev/guichet_caisse/AUDIT_transfert_inter_agence.md §6) : exécutée en sudo()
+        ciblé pour franchir base.res_partner_rule — un client d'une autre agence est sinon
+        totalement invisible au caissier — mais ne renvoie QUE {id, name, account_number,
+        agency_name}. Aucun accès élargi aux crédits / comptes / historique du client :
+        c'est get_other_agency_client_loans (module de transfert) qui expose ensuite, sous
+        sudo lui aussi et de façon minimale, la liste des crédits actionnables.
+
+        Exclut l'agence de la session (company_id) : ce sont les « autres » agences.
+        """
+        if not query or len(query) < 2:
+            return []
+        domain = [
+            ('microfinance_partner_type', '=', 'client'),
+            ('company_id', '!=', False),
+            ('company_id', '!=', company_id),
+            '|', ('name', 'ilike', query), ('microfinance_account_number', 'ilike', query),
+        ]
+        partners = self.sudo().search(domain, limit=20)
+        return [{
+            'id': partner.id,
+            'name': partner.name,
+            'account_number': partner.microfinance_account_number,
+            'agency_name': partner.company_id.name,
+        } for partner in partners]
+
+    @api.model
     def get_client_accounts_summary(self, partner_id, company_id):
         """Agrège en un seul appel les comptes épargne actifs et les crédits actionnables au
         guichet (approuvé en attente de décaissement, actif ou en défaut pour remboursement) —

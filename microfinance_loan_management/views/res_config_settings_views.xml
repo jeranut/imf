@@ -7,7 +7,7 @@
         <field name="inherit_id" ref="base.res_config_settings_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//form" position="inside">
-                <app data-string="Microfinance" string="Microfinance" name="microfinance_loan_management"
+                <app data-string="Ampaly" string="Ampaly" name="microfinance_loan_management"
                     groups="microfinance_loan_management.group_microfinance_manager">
                     <block title="Politique de produit" id="microfinance_product_policy_settings">
                         <setting string="Politique de produit"

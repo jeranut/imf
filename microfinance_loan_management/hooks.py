@@ -81,6 +81,13 @@ JOURNALS = [
     ('CRE', 'Crédits', 'cash', None),
     ('EPG', 'Épargne', 'cash', None),
     ('OD', 'Opérations diverses', 'general', None),
+    # TRANSIT : compte de liaison des transferts de fonds inter-agences
+    # (module microfinance_transfert_inter_agence). Type 'general' : porte des
+    # écritures manuelles de liaison, jamais utilisé comme journal de caisse.
+    # default_account_id = 302000 « Opérations entre succursales/agences » (PCEC,
+    # reconcile=True). Créé ici pour que toute agence PCEC en dispose ; le module
+    # de transfert le (re)crée aussi à son installation sur les agences existantes.
+    ('TRANSIT', 'Transit inter-agences', 'general', '302000'),
 ]
 
 
@@ -713,16 +720,32 @@ def _cleanup_existing_financial_lines(env):
     )
 
 
+def provision_company_pcec(env, company):
+    """Crée idempotemment, pour une société utilisant le plan PCEC (chart_template ==
+    'mg_pcec'), les sous-comptes dédiés par segment (LOAN_NEW_SUBACCOUNTS) et les journaux
+    standards (JOURNALS). Ne fait rien pour les sociétés sur un autre plan comptable (aucun
+    compte au format PCEC n'a de sens en dehors de ce plan).
+
+    Source unique appelée par :
+      - post_init_hook (installation neuve du module) ;
+      - AccountChartTemplate._load() (chargement du plan PCEC sur une agence créée après
+        l'installation du module — cf. models/account_chart_template.py) ;
+      - le script de migration post-migrate qui rejoue le provisioning sur les sociétés déjà
+        en base (post_init_hook ne se redéclenche pas sur un -u d'un module déjà installé,
+        cf. odoo/modules/loading.py)."""
+    if not company or company.chart_template != 'mg_pcec':
+        return
+    _create_subaccounts(env, company, LOAN_NEW_SUBACCOUNTS)
+    _create_journals(env, company)
+
+
 def post_init_hook(env):
     """Sur chaque société utilisant le plan PCEC (plan_compta_pcec, chart_template ==
     'mg_pcec'), crée les sous-comptes dédiés par segment et les 7 journaux standards. Les
     sociétés utilisant un autre plan comptable ne sont pas modifiées (aucun compte au format
     PCEC n'a de sens en dehors de ce plan)."""
     for company in env['res.company'].search([]):
-        if company.chart_template != 'mg_pcec':
-            continue
-        _create_subaccounts(env, company, LOAN_NEW_SUBACCOUNTS)
-        _create_journals(env, company)
+        provision_company_pcec(env, company)
     _seed_known_agency_codes(env)
     _seed_agency_partner_type(env)
     _backfill_existing_client_partner_type(env)

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_caisse_repayment_cascade_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.caisse.repayment.cascade.wizard.form</field>
+        <field name="model">microfinance.caisse.repayment.cascade.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Confirmer le remboursement">
+                <field name="currency_id" invisible="1"/>
+                <field name="session_id" invisible="1"/>
+                <div class="alert alert-info" role="status">
+                    Ce montant solde <strong>plusieurs échéances en retard</strong>. Confirmez
+                    pour l'encaisser et l'imputer aux échéances ci-dessous.
+                </div>
+                <group>
+                    <field name="loan_id" readonly="1"/>
+                    <field name="amount"/>
+                </group>
+                <field name="line_ids">
+                    <tree>
+                        <field name="currency_id" column_invisible="1"/>
+                        <field name="sequence" string="N°"/>
+                        <field name="due_date"/>
+                        <field name="residual_amount"/>
+                        <field name="allocated_amount"/>
+                    </tree>
+                </field>
+                <footer>
+                    <button name="action_confirm" type="object" string="Confirmer et encaisser"
+                            class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_caisse_repayment_surplus_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.caisse.repayment.surplus.wizard.form</field>
+        <field name="model">microfinance.caisse.repayment.surplus.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Surplus de remboursement">
+                <field name="currency_id" invisible="1"/>
+                <field name="session_id" invisible="1"/>
+                <field name="future_anticipable" invisible="1"/>
+                <div class="alert alert-info" role="status">
+                    Le dû immédiat est soldé. <strong>Que faire du surplus&#160;?</strong>
+                </div>
+                <group>
+                    <field name="loan_id" readonly="1"/>
+                    <field name="amount"/>
+                    <field name="base_due"/>
+                    <field name="surplus"/>
+                    <field name="savings_account_id"/>
+                </group>
+                <div class="alert alert-warning" role="alert"
+                     invisible="future_anticipable or savings_account_id">
+                    Aucune échéance future à anticiper et aucun compte épargne lié à ce crédit.
+                    Annulez et réduisez le montant remis.
+                </div>
+                <footer>
+                    <button name="action_anticipate" type="object"
+                            string="Anticiper les échéances futures"
+                            class="btn-primary" invisible="not future_anticipable"/>
+                    <button name="action_to_savings" type="object"
+                            string="Verser le surplus sur l'épargne"
+                            class="btn-primary" invisible="not savings_account_id"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+</odoo>

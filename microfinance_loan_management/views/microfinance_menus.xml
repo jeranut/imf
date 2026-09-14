@@ -5,7 +5,12 @@
          accordée) et « Analyse > Flux de caisse » (déjà déclaré visible au comptable mais
          inatteignable). Le comptable ne verra que les sous-menus dont il a le groupe ET
          l'ACL. -->
-    <menuitem id="menu_microfinance_root" name="Microfinance" sequence="20" groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent,microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_comptable"/>
+    <!-- Nom commercial de l'application : « Ampaly » (le module technique reste
+         microfinance_loan_management — inchangé, ce n'est pas ce que voit
+         l'utilisateur). Icône dédiée : static/description/icon.png. -->
+    <menuitem id="menu_microfinance_root" name="Ampaly" sequence="20"
+        web_icon="microfinance_loan_management,static/description/icon.png"
+        groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent,microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_comptable"/>
     <menuitem id="menu_clients_root" name="Clients" parent="menu_microfinance_root" sequence="2"
         groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent"/>
     <!-- menu_clients_root portait auparavant action="action_microfinance_client" ; le tag

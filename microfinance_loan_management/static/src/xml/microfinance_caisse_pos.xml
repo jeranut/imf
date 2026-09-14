@@ -254,6 +254,53 @@
                                             <span t-esc="formatMoney(state.disbursementAmount)"/>
                                         </div>
                                     </div>
+
+                                    <!-- Choix du journal de décaissement (Sous-lot D) : liste
+                                         cliquable, même pattern que la sélection de compte/crédit
+                                         ci-dessus, pas de <select> (aucun précédent de ce genre
+                                         dans ce composant, cf. AUDIT_decaissement_journal_cheque
+                                         §4). Filtrée côté client sur les journaux bank/cash de
+                                         l'agence de la session (availableJournals, loadLists). -->
+                                    <div class="o_microfinance_pos__accounts_section">
+                                        <p class="o_microfinance_pos__accounts_title">Journal de décaissement</p>
+                                        <div t-if="!state.availableJournals.length" class="o_microfinance_pos__placeholder_small">Aucun journal disponible pour cette agence.</div>
+                                        <div t-foreach="state.availableJournals" t-as="journal" t-key="journal.id"
+                                             t-attf-class="o_microfinance_pos__account_row {{ state.disbursementJournalId === journal.id ? 'o_microfinance_pos__account_row--selected' : '' }}"
+                                             t-on-click="() => this.selectDisbursementJournal(journal.id)">
+                                            <span t-esc="journal.name"/>
+                                            <span t-esc="journal.code"/>
+                                        </div>
+                                    </div>
+
+                                    <!-- Moyen de paiement : le journal représente la banque/
+                                         caisse, pas le moyen de paiement (clarification Micka).
+                                         Un journal 'cash' pose "Espèces" automatiquement (rien à
+                                         choisir ici) ; ce sous-choix Chèque/Virement n'apparaît
+                                         que pour un journal 'bank'. Le choix « Chèque » fait
+                                         apparaître la saisie libre numéro + date juste en
+                                         dessous. -->
+                                    <div t-if="selectedDisbursementJournalType === 'bank'" class="o_microfinance_pos__accounts_section">
+                                        <p class="o_microfinance_pos__accounts_title">Moyen de paiement</p>
+                                        <div t-foreach="bankJournalPaymentMethods" t-as="method" t-key="method.id"
+                                             t-attf-class="o_microfinance_pos__account_row {{ state.disbursementPaymentMethod === method.id ? 'o_microfinance_pos__account_row--selected' : '' }}"
+                                             t-on-click="() => this.selectDisbursementPaymentMethod(method.id)">
+                                            <span t-esc="method.label"/>
+                                        </div>
+                                    </div>
+
+                                    <div t-if="selectedDisbursementJournalType === 'bank' &amp;&amp; state.disbursementPaymentMethod === 'cheque'" class="o_microfinance_pos__accounts_section">
+                                        <p class="o_microfinance_pos__accounts_title">Détails du chèque</p>
+                                        <div class="o_microfinance_pos__cheque_fields">
+                                            <input type="text" placeholder="Numéro de chèque"
+                                                   class="o_microfinance_pos__cheque_input"
+                                                   t-att-value="state.disbursementChequeNumber"
+                                                   t-on-input="onDisbursementChequeNumberInput"/>
+                                            <input type="date" class="o_microfinance_pos__cheque_input"
+                                                   t-att-value="state.disbursementChequeDate"
+                                                   t-on-input="onDisbursementChequeDateInput"/>
+                                        </div>
+                                    </div>
+
                                     <t t-set="schedule" t-value="state.loanSchedule"/>
                                     <t t-call="microfinance_loan_management.CaisseLoanSchedule"/>
                                 </t>

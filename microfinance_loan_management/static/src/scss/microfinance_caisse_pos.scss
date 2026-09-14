@@ -168,6 +168,23 @@
         &--selected { border-color: #2563eb; background: #eff6ff; }
     }
 
+    // Saisie libre numéro + date de chèque (décaissement crédit réglé par chèque) : première
+    // saisie libre du composant hors montant/pavé numérique.
+    &__cheque_fields {
+        display: flex;
+        gap: 8px;
+    }
+
+    &__cheque_input {
+        flex: 1;
+        padding: 8px 10px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-size: 13px;
+
+        &:focus { outline: none; border-color: #2563eb; }
+    }
+
     // Bouton « Retour à la liste » (icône maison), en haut de la colonne centrale, visible
     // seulement quand un client / crédit est sélectionné. Même gabarit visuel que les boutons
     // d'opération (&__tab) : bordure, rayon, fond.

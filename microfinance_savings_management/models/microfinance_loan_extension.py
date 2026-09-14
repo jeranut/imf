@@ -81,6 +81,38 @@ class MicrofinanceLoan(models.Model):
             'context': {'default_partner_id': self.partner_id.id, 'default_microfinance_loan_id': self.id},
         }
 
+    def _get_repayment_surplus_savings_account(self):
+        """Compte d'épargne sur lequel verser un surplus de remboursement au guichet
+        (assistant « Surplus de remboursement », sous-lots B/C).
+
+        Deux rattachements crédit ↔ épargne coexistent dans le modèle et **ne sont pas
+        synchronisés** (cf. docs_dev/guichet_caisse/AUDIT_cascade_remboursement.md §5.1 et
+        docs_dev/epargne_exigee_display/AUDIT_COMPLEMENT_credit_lie.md) :
+
+          1. ``microfinance.loan.savings_account_id`` (« Compte épargne (prélèvement) ») :
+             compte de la cible d'épargne progressive / source du prélèvement automatique,
+             choisi explicitement par l'agent sur la fiche crédit. Optionnel.
+          2. ``microfinance.savings.account.microfinance_loan_id`` (« Crédit lié ») : compte
+             d'épargne constitué pour ce crédit précis (concept « épargne obligatoire »).
+             C'est le côté renseigné dans les données réelles observées.
+
+        On prend le premier des deux qui est renseigné, dans cet ordre (le choix explicite
+        de l'agent l'emporte). Comptes conteneurs et non actifs exclus. Aucune contrainte
+        n'impose l'unicité d'un compte « Crédit lié » par crédit : en cas de pluralité, le
+        plus ancien (ordre par id) est retenu.
+
+        Renvoie un recordset ``microfinance.savings.account`` de 0 ou 1 élément.
+        """
+        self.ensure_one()
+        explicit = self.savings_account_id
+        if explicit and explicit.state == 'active' and not explicit.is_container:
+            return explicit
+        return self.env['microfinance.savings.account'].search([
+            ('microfinance_loan_id', '=', self.id),
+            ('state', '=', 'active'),
+            ('is_container', '=', False),
+        ], order='id', limit=1)
+
     @api.depends('loan_amount', 'product_id.savings_requirement_type', 'product_id.savings_target_ratio')
     def _compute_savings_target_amount(self):
         for loan in self:
