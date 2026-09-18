@@ -32,10 +32,12 @@ class AccountChartTemplate(models.AbstractModel):
                 # vers 10 (valeurs en caisse), au lieu de 51/53 dans le PCG.
                 'bank_account_code_prefix': '13',
                 'cash_account_code_prefix': '10',
-                # 335 "Virements internes" (classe 3, comptes d'encaissement) : pas d'équivalent
-                # direct du "58 Virements internes" du PCG générique dans la nomenclature PCEC
-                # classes 1-7 fournie ; compte le plus proche fonctionnellement.
-                'transfer_account_code_prefix': '335',
+                # TODO valider avec CEFOR : bascule de pcec_335 vers pcec_301, comme
+                # account_journal_suspense_account_id ci-dessous (voir synthese_audit_pcec.md
+                # §1.2). 301 "Opérations entre siège et succursales/agences" est retenu comme
+                # compte de liaison générique pour les virements internes CEFOR, malgré le
+                # libellé "Virements internes" de 335 — à confirmer avec CEFOR.
+                'transfer_account_code_prefix': '301',
                 'income_currency_exchange_account_id': 'pcec_731',
                 'expense_currency_exchange_account_id': 'pcec_631',
                 # Pas de poste PCEC dédié à l'escompte de règlement ni aux écarts de caisse :
@@ -43,7 +45,12 @@ class AccountChartTemplate(models.AbstractModel):
                 # (649/749), à affiner si CEFOR utilise réellement ces mécanismes.
                 'account_journal_early_pay_discount_loss_account_id': 'pcec_649',
                 'account_journal_early_pay_discount_gain_account_id': 'pcec_749',
-                'account_journal_suspense_account_id': 'pcec_335',
+                # TODO valider avec CEFOR : bascule de pcec_335 vers pcec_301, comme
+                # transfer_account_code_prefix ci-dessus. 335 "Virements internes" n'est pas un
+                # compte de suspens de journal générique. 301 "Opérations entre siège et
+                # succursales/agences" est retenu comme équivalent PCEC (voir
+                # synthese_audit_pcec.md §1.2).
+                'account_journal_suspense_account_id': 'pcec_301',
                 'default_cash_difference_income_account_id': 'pcec_749',
                 'default_cash_difference_expense_account_id': 'pcec_649',
                 'account_sale_tax_id': 'tva_collectee_20',

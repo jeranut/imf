@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_caisse_open_session_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.caisse.open.session.wizard.form</field>
+        <field name="model">microfinance.caisse.open.session.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Ouverture de session de caisse">
+                <group>
+                    <field name="company_id" groups="base.group_multi_company"/>
+                    <field name="journal_id"/>
+                    <field name="date"/>
+                    <field name="cashier_id"/>
+                </group>
+                <p invisible="journal_id">
+                    Aucun journal de caisse guichet n'est configuré pour cette agence : contactez
+                    un manager avant de poursuivre.
+                </p>
+                <footer>
+                    <button name="action_confirm" string="Ouvrir la session" type="object" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

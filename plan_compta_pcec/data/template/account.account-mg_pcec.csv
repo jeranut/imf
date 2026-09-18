@@ -101,16 +101,16 @@ pcec_318,Comptes rattachés - Débiteurs/créditeurs divers *,318000,asset_curre
 pcec_3186,Charges à payer - Débiteurs/créditeurs divers *,318600,liability_current,False
 pcec_3187,Produits à recevoir - Débiteurs/créditeurs divers *,318700,asset_current,False
 pcec_319,Autres débiteurs et créditeurs divers *,319000,asset_current,True
-pcec_321,Charges et produits constatés d'avance *,321000,asset_current,False
-pcec_324,Charges à répartir *,324000,asset_current,False
+pcec_321,Charges payées ou constatées d'avance *,321000,asset_current,False
+pcec_324,Comptes d'attente à régulariser - actif *,324000,asset_current,False
 pcec_325,Produits reçus ou constatés d'avance,325000,liability_current,False
-pcec_326,Comptes d'ajustement - passif *,326000,liability_current,False
-pcec_3261,Produits réservés sur échéances de crédit non imputées,326100,income,False
-pcec_3262,Comptes d'ajustement devises - passif *,326200,liability_current,False
-pcec_329,Autres comptes de régularisation *,329000,asset_current,False
-pcec_3291,Autres comptes de régularisation - actif *,329100,asset_current,False
-pcec_3292,Autres comptes de régularisation - passif *,329200,liability_current,False
-pcec_3293,Autres comptes de régularisation - divers *,329300,asset_current,False
+pcec_326,Produits réservés *,326000,liability_current,False
+pcec_3261,Produits sur échéances de crédit non imputées,326100,liability_current,False
+pcec_3262,Produits sur créances litigieuses douteuses ou contentieuses,326200,liability_current,False
+pcec_329,Autres comptes de régularisation - passif *,329000,liability_current,False
+pcec_3291,Écritures créditrices à régulariser,329100,liability_current,False
+pcec_3292,Produits réservés sur crédits sains,329200,liability_current,False
+pcec_3293,Principal à récupérer sur crédits réintégrés,329300,asset_receivable,True
 pcec_331,Valeurs à l'encaissement *,331000,asset_current,True
 pcec_3311,Chèques à encaisser *,331100,asset_current,True
 pcec_33111,Chèques à encaisser sur place *,331110,asset_current,True

@@ -342,10 +342,15 @@ class MicrofinanceLoanProduct(models.Model):
         default=_pcec_default('749002'),
         help="Requis uniquement si des pénalités sont perçues sur les remboursements de ce produit.",
     )
+    # TODO valider avec CEFOR : bascule de 315000 ("Créditeurs divers", générique tiers) vers
+    # 219001, sous-compte dédié du poste 219 "Autres sommes dues à la clientèle", plus proche
+    # sémantiquement d'un surpaiement client (voir synthese_audit_pcec.md §2.3). 219001 (et non
+    # le 219000 déjà utilisé par account_cheques_emis_attente_id juste en dessous) pour garder un
+    # compte dédié par champ et ne pas mélanger les deux flux sur une même ligne PCEC.
     account_surpaiement_id = fields.Many2one(
         'account.account', string='Surpaiement',
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
-        default=_pcec_default('315000'),
+        default=_pcec_default('219001'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR.",
     )
     account_cheques_emis_attente_id = fields.Many2one(

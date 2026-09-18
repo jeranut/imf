@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
+    <!-- TEMPS 1 — Comptage : ni théorique ni écart, ces champs n'existent pas sur ce modèle. -->
     <record id="view_microfinance_caisse_close_session_wizard_form" model="ir.ui.view">
         <field name="name">microfinance.caisse.close.session.wizard.form</field>
         <field name="model">microfinance.caisse.close.session.wizard</field>
@@ -7,10 +8,16 @@
             <form string="Clôture de session — comptage de billetage">
                 <field name="session_id" invisible="1"/>
                 <field name="currency_id" invisible="1"/>
+                <field name="is_recovered_draft" invisible="1"/>
+                <field name="draft_date" invisible="1"/>
+                <field name="variance_comment" invisible="1"/>
+                <div class="alert alert-info" role="alert" invisible="not is_recovered_draft">
+                    Comptage en cours retrouvé (sauvegardé le <field name="draft_date" nolabel="1" readonly="1"/>) :
+                    les quantités et le motif d'écart déjà saisis ont été restaurés ci-dessous.
+                </div>
                 <p>
-                    Comptez les espèces en caisse, coupure par coupure, avant de clôturer la
-                    session. Un écart avec le solde théorique ne bloque pas la clôture mais
-                    exige un motif.
+                    Comptez les espèces en caisse, coupure par coupure, puis confirmez pour
+                    passer au récapitulatif.
                 </p>
                 <field name="line_ids">
                     <tree editable="bottom" create="false" delete="false">
@@ -18,6 +25,72 @@
                         <field name="denomination_value" readonly="1"/>
                         <field name="quantity"/>
                         <field name="subtotal" readonly="1"/>
+                        <field name="currency_id" invisible="1"/>
+                    </tree>
+                </field>
+                <group class="oe_subtotal_footer">
+                    <field name="counted_total"/>
+                </group>
+                <footer>
+                    <button name="action_confirm_count" string="Confirmer le comptage" type="object" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- TEMPS 2 — Récapitulatif : lecture seule, ni théorique ni écart (le modèle ne les porte
+         pas). Bouton Retour vers le comptage (temps 1) pour corriger la saisie. -->
+    <record id="view_microfinance_caisse_close_session_recap_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.caisse.close.session.recap.wizard.form</field>
+        <field name="model">microfinance.caisse.close.session.recap.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Clôture de session — récapitulatif du comptage">
+                <field name="source_wizard_id" invisible="1"/>
+                <field name="session_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <p>
+                    Vérifiez le billetage compté avant de poursuivre. Vous pourrez encore
+                    revenir en arrière pour corriger une quantité.
+                </p>
+                <field name="line_ids" readonly="1">
+                    <tree create="false" delete="false" edit="false">
+                        <field name="denomination_id"/>
+                        <field name="denomination_value"/>
+                        <field name="quantity"/>
+                        <field name="subtotal"/>
+                        <field name="currency_id" invisible="1"/>
+                    </tree>
+                </field>
+                <group class="oe_subtotal_footer">
+                    <field name="counted_total"/>
+                </group>
+                <footer>
+                    <button name="action_back" string="Retour au comptage" type="object" class="btn-secondary"/>
+                    <button name="action_confirm_recap" string="Confirmer le comptage" type="object" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- TEMPS 3 — Écart : theoretical_total/variance n'existent sur AUCUN modèle avant la
+         création de celui-ci (recap.wizard.action_confirm_recap()) : c'est la toute première
+         fois que ces valeurs sont transmises au client. -->
+    <record id="view_microfinance_caisse_close_session_variance_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.caisse.close.session.variance.wizard.form</field>
+        <field name="model">microfinance.caisse.close.session.variance.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Clôture de session — écart">
+                <field name="source_wizard_id" invisible="1"/>
+                <field name="session_id" invisible="1"/>
+                <field name="currency_id" invisible="1"/>
+                <field name="line_ids" readonly="1">
+                    <tree create="false" delete="false" edit="false">
+                        <field name="denomination_id"/>
+                        <field name="denomination_value"/>
+                        <field name="quantity"/>
+                        <field name="subtotal"/>
                         <field name="currency_id" invisible="1"/>
                     </tree>
                 </field>
@@ -32,7 +105,8 @@
                            placeholder="Expliquez l'écart entre le comptage physique et le solde théorique..."/>
                 </group>
                 <footer>
-                    <button name="action_confirm" string="Confirmer la clôture" type="object" class="btn-primary"/>
+                    <button name="action_back" string="Retour au comptage" type="object" class="btn-secondary"/>
+                    <button name="action_confirm_close" string="Confirmer la clôture" type="object" class="btn-primary"/>
                     <button string="Annuler" class="btn-secondary" special="cancel"/>
                 </footer>
             </form>

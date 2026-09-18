@@ -4,7 +4,7 @@ from datetime import timedelta
 from psycopg2 import IntegrityError
 
 from odoo import fields
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tools import mute_logger
 
 from .common import MicrofinanceCommon
@@ -123,3 +123,138 @@ class TestCaisseSession(MicrofinanceCommon):
         session.action_close_session()
         with self.assertRaises(UserError):
             session.action_open_session()
+
+
+class TestCaisseSessionCashJournalRestriction(MicrofinanceCommon):
+    """Restriction du journal sélectionnable à l'ouverture d'une session de caisse guichet à
+    company_id.cash_journal_id (nouveau champ res.company) : le domain de vue ne fait que guider
+    l'UI, c'est la contrainte serveur ci-dessous qui bloque réellement un journal différent, y
+    compris par RPC/API. self.disbursement_journal est le cash_journal_id de la société de test
+    (cf. tests/common.py) ; self.payment_journal (type cash, même société) sert de journal
+    « faux » pour déclencher la contrainte."""
+
+    def test_create_session_with_wrong_journal_raises(self):
+        with self.assertRaises(ValidationError):
+            self.env['microfinance.caisse.session'].create({
+                'journal_id': self.payment_journal.id, 'date': fields.Date.today(),
+            })
+
+    def test_write_session_to_wrong_journal_raises(self):
+        session = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.disbursement_journal.id, 'date': fields.Date.today(),
+        })
+        with self.assertRaises(ValidationError):
+            session.journal_id = self.payment_journal.id
+
+    def test_create_session_with_correct_journal_succeeds(self):
+        session = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.disbursement_journal.id, 'date': fields.Date.today(),
+        })
+        self.assertEqual(session.journal_id, self.disbursement_journal)
+
+    def test_default_journal_id_matches_company_cash_journal(self):
+        session = self.env['microfinance.caisse.session'].create({'date': fields.Date.today()})
+        self.assertEqual(session.journal_id, self.env.company.cash_journal_id)
+        self.assertEqual(session.journal_id, self.disbursement_journal)
+
+    def test_onchange_company_id_reassigns_journal(self):
+        company_b = self.env['res.company'].create({
+            'name': 'Agence B restriction caisse (test)', 'agency_code': 'CJ1',
+        })
+        journal_b = self.env['account.journal'].create({
+            'name': 'Caisse agence B restriction (test)', 'code': 'CJB1', 'type': 'cash',
+            'company_id': company_b.id,
+        })
+        company_b.cash_journal_id = journal_b.id
+
+        session = self.env['microfinance.caisse.session'].new({
+            'journal_id': self.disbursement_journal.id,
+        })
+        session.company_id = company_b
+        session._onchange_company_id_journal()
+        self.assertEqual(session.journal_id, journal_b)
+
+
+class TestCaisseSessionReopen(MicrofinanceCommon):
+    """action_reopen_session() : même garde-fou que fiche_journee.action_reopen_day() (manager
+    uniquement, motif obligatoire), et resynchronise la fiche journalière liée si elle est
+    encore clôturée pour ne pas laisser action_open_session() bloquée juste après (cf.
+    AUDIT_session_zigzag §5 point 7)."""
+
+    def _manager_user(self):
+        # email requis : action_reopen_session() déclenche message_post (session ET fiche),
+        # qui échoue avec UserError si l'auteur n'a pas d'adresse configurée.
+        return self.env['res.users'].create({
+            'name': 'Manager reopen session (test)', 'login': 'manager_reopen_session_test',
+            'email': 'manager_reopen_session_test@example.com',
+            'groups_id': [(6, 0, [
+                self.env.ref('base.group_user').id,
+                self.env.ref('microfinance_loan_management.group_microfinance_manager').id,
+            ])],
+        })
+
+    def _cashier_user(self):
+        return self.env['res.users'].create({
+            'name': 'Cashier reopen session (test)', 'login': 'cashier_reopen_session_test',
+            'groups_id': [(6, 0, [
+                self.env.ref('base.group_user').id,
+                self.env.ref('microfinance_loan_management.group_microfinance_cashier').id,
+            ])],
+        })
+
+    def _closed_session(self):
+        session = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.disbursement_journal.id, 'date': fields.Date.today(),
+        })
+        session.action_open_session()
+        session.action_close_session()
+        return session
+
+    def test_reopen_requires_manager_group(self):
+        session = self._closed_session()
+        cashier = self._cashier_user()
+        session.with_user(cashier).reopen_reason = 'Correction nécessaire'
+        with self.assertRaises(AccessError):
+            session.with_user(cashier).action_reopen_session()
+        self.assertEqual(session.state, 'closed')
+
+    def test_reopen_requires_reason(self):
+        session = self._closed_session()
+        manager = self._manager_user()
+        with self.assertRaises(UserError):
+            session.with_user(manager).action_reopen_session()
+        self.assertEqual(session.state, 'closed')
+
+    def test_reopen_reopens_session_and_linked_fiche(self):
+        session = self._closed_session()
+        self.assertEqual(session.fiche_journee_id.state, 'closed')
+        manager = self._manager_user()
+        session.reopen_reason = 'Erreur de comptage détectée après clôture'
+        session.with_user(manager).action_reopen_session()
+        self.assertEqual(session.state, 'open')
+        self.assertEqual(session.fiche_journee_id.state, 'open')
+        self.assertFalse(session.reopen_reason)
+
+    def test_reopen_noop_when_not_closed(self):
+        today = fields.Date.today()
+        session = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.disbursement_journal.id, 'date': today,
+        })
+        session.action_open_session()
+        manager = self._manager_user()
+        session.with_user(manager).action_reopen_session()
+        self.assertEqual(session.state, 'open')
+
+    def test_open_session_after_reopen_reuses_same_session(self):
+        session = self._closed_session()
+        manager = self._manager_user()
+        session.reopen_reason = 'Correction'
+        session.with_user(manager).action_reopen_session()
+        wizard = self.env['microfinance.caisse.open.session.wizard'].with_user(manager).create({})
+        wizard.action_confirm()
+        self.assertEqual(
+            self.env['microfinance.caisse.session'].search_count([
+                ('journal_id', '=', self.disbursement_journal.id), ('date', '=', fields.Date.today()),
+            ]), 1,
+        )
+        self.assertEqual(session.state, 'open')

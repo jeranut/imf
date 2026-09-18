@@ -29,6 +29,14 @@
                     <field name="microfinance_social_grid_impression_next_loan_min_score"
                            invisible="not microfinance_social_grid_include_impression_next_loan"/>
                 </group>
+                <!-- Même groupes que la configuration des Coupures de caisse
+                     (menu_microfinance_config_caisse, views/microfinance_menus.xml). -->
+                <group string="Caisse guichet (microfinance)"
+                       groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance">
+                    <field name="cash_journal_id"/>
+                    <field name="microfinance_account_ecart_caisse_deficit_id"/>
+                    <field name="microfinance_account_ecart_caisse_excedent_id"/>
+                </group>
             </xpath>
         </field>
     </record>

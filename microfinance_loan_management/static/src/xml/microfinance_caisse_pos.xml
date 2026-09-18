@@ -38,7 +38,7 @@
                     <i class="fa fa-lock" role="img" aria-label="Aucune session"/>
                     <h2>Aucune session de caisse ouverte</h2>
                     <p>Ouvrez une session pour cette agence avant d'enregistrer des opérations au guichet.</p>
-                    <button type="button" class="btn btn-primary" t-on-click="openSessionForm">Ouvrir une session</button>
+                    <button type="button" class="btn btn-primary" t-on-click="openSessionWizard">Ouvrir une session</button>
                 </div>
             </t>
             <t t-else="">
@@ -50,7 +50,9 @@
                     </div>
                     <div class="o_microfinance_pos__header_balance">
                         <span>Solde caisse : </span>
-                        <strong t-esc="formatMoney(state.session.closing_balance)"/>
+                        <strong t-esc="formatMoney(state.session.theoretical_balance)"/>
+                        <button type="button" class="btn btn-outline-danger btn-sm o_microfinance_pos__close_session_btn"
+                                t-on-click="openCloseSessionWizard">Fermer la caisse</button>
                     </div>
                 </div>
 

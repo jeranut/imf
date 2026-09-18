@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 
 class MicrofinanceCaisseSession(models.Model):
@@ -9,9 +9,18 @@ class MicrofinanceCaisseSession(models.Model):
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'date desc, journal_id'
 
+    # Related exposé séparément (plutôt que company_id.cash_journal_id inline dans le domain
+    # ci-dessous) : le domain d'une vue est évalué côté client sur le evalContext de
+    # l'enregistrement, où un Many2one ne porte que son id, pas ses propres sous-champs -
+    # 'company_id.cash_journal_id' y échouerait silencieusement (attribut introuvable sur un
+    # entier). Un champ related à plat sur ce modèle, lui, est bien chargé dans ce contexte.
+    company_cash_journal_id = fields.Many2one(
+        related='company_id.cash_journal_id', string='Journal de caisse autorisé (agence)',
+    )
     journal_id = fields.Many2one(
         'account.journal', string='Journal de caisse', required=True, tracking=True,
-        domain="[('type', '=', 'cash'), ('company_id', '=', company_id)]",
+        domain="[('id', '=', company_cash_journal_id)]",
+        default=lambda self: self.env.company.cash_journal_id,
     )
     date = fields.Date(string='Date', required=True, default=fields.Date.context_today, tracking=True)
     company_id = fields.Many2one(
@@ -28,6 +37,11 @@ class MicrofinanceCaisseSession(models.Model):
         ('open', 'Ouverte'),
         ('closed', 'Clôturée'),
     ], string='État', default='draft', required=True, tracking=True)
+    reopen_reason = fields.Char(
+        string='Motif de réouverture',
+        help="À renseigner avant de cliquer sur « Rouvrir la session » : consigné dans le "
+             "suivi de la session (qui, quand, pourquoi), puis effacé après la réouverture.",
+    )
 
     # La session ne porte aucun solde propre : elle alimente microfinance.caisse.fiche.journee
     # (1 session = 1 fiche, cf. décisions actées) et se contente de relayer ses montants, plutôt
@@ -39,11 +53,78 @@ class MicrofinanceCaisseSession(models.Model):
     total_debit = fields.Monetary(related='fiche_journee_id.total_debit', readonly=True, string='Total débits du jour')
     total_credit = fields.Monetary(related='fiche_journee_id.total_credit', readonly=True, string='Total crédits du jour')
     closing_balance = fields.Monetary(related='fiche_journee_id.closing_balance', readonly=True, string='Solde de clôture calculé')
+    theoretical_balance = fields.Monetary(
+        compute='_compute_theoretical_balance', string='Solde théorique de la session',
+        help="opening_balance + mouvements réellement enregistrés pendant CETTE session "
+             "(microfinance.caisse.mouvement, retracés jusqu'à leur écriture comptable sur le "
+             "compte du journal de caisse), pas le solde du journal comptable de la journée "
+             "entière (fiche_journee). Non stocké : recalculé à chaque lecture, jamais périmé.",
+    )
 
     _sql_constraints = [
         ('journal_date_unique', 'unique(journal_id, date)',
          'Une seule session de caisse par journal et par jour.'),
     ]
+
+    @api.onchange('company_id')
+    def _onchange_company_id_journal(self):
+        for session in self:
+            session.journal_id = session.company_id.cash_journal_id
+
+    @api.constrains('journal_id', 'company_id')
+    def _check_journal_matches_company_cash_journal(self):
+        # Le domain du champ (ci-dessus) ne bloque que la saisie UI, pas un create()/write()
+        # par RPC ou API : cette contrainte serveur est la seule barrière réelle empêchant
+        # d'ouvrir une session sur un journal autre que le journal de caisse guichet configuré
+        # pour l'agence (company_id.cash_journal_id).
+        for session in self:
+            if session.journal_id and session.journal_id != session.company_id.cash_journal_id:
+                raise ValidationError(_(
+                    "Le journal « %(journal)s » n'est pas le journal de caisse guichet configuré "
+                    "pour l'agence %(company)s. Configurez-le dans Paramètres > Sociétés, "
+                    "ou choisissez le journal attendu."
+                ) % {'journal': session.journal_id.name, 'company': session.company_id.name})
+
+    def _get_session_moves(self):
+        """Écritures comptables réellement générées par LES mouvements de cette session
+        (microfinance.caisse.mouvement, ajouté par _inherit dans microfinance_savings_management
+        - modèle non référencé statiquement ici pour ne pas créer de dépendance manifeste
+        inversée, cf. AUDIT_session_zigzag). Chaque mouvement est retracé jusqu'à l'écriture
+        qu'il a réellement posée (transaction épargne, remboursement, décaissement, frais) :
+        pas de nouvelle écriture recréée ici, on relit ce qui a déjà été comptabilisé."""
+        self.ensure_one()
+        moves = self.env['account.move']
+        if 'mouvement_ids' not in self._fields:
+            return moves
+        for mouvement in self.mouvement_ids:
+            if mouvement.type in ('depot_epargne', 'retrait_epargne'):
+                move = mouvement.savings_transaction_id.move_id
+            elif mouvement.type == 'remboursement_credit':
+                move = mouvement.payment_id.move_id
+            elif mouvement.type == 'decaissement_credit':
+                move = mouvement.loan_id.disbursement_move_id
+            elif mouvement.type == 'frais_dossier':
+                move = mouvement.fee_move_id
+            else:
+                move = self.env['account.move']
+            if move:
+                moves |= move
+        return moves
+
+    @api.depends('opening_balance', 'journal_id.default_account_id', 'state')
+    def _compute_theoretical_balance(self):
+        for session in self:
+            account = session.journal_id.default_account_id
+            if session.state == 'draft' or not account:
+                session.theoretical_balance = session.opening_balance
+                continue
+            # Un décaissement réglé par chèque/virement (journal 'bank') poste sur le compte de
+            # ce journal, pas sur le compte caisse (account) : filtrer sur account_id exclut
+            # naturellement ces mouvements du solde ESPÈCES théorique, sans avoir à retracer le
+            # moyen de paiement choisi au guichet (cf. register_operation, Sous-lot D).
+            lines = session._get_session_moves().line_ids.filtered(lambda l: l.account_id == account)
+            net = sum(lines.mapped('debit')) - sum(lines.mapped('credit'))
+            session.theoretical_balance = session.opening_balance + net
 
     def action_open_session(self):
         for session in self:
@@ -72,9 +153,14 @@ class MicrofinanceCaisseSession(models.Model):
 
     def action_open_close_wizard(self):
         """Ouvre l'assistant de clôture avec comptage de billetage (sous-lot B). Seul point
-        d'entrée UI de la clôture depuis la fiche session : le bouton appelant directement
-        action_close_session a été remplacé par celui-ci. action_close_session reste appelée,
-        inchangée, par le wizard (et par le chemin guichet / les tests)."""
+        d'entrée UI de la clôture : appelé depuis le bouton "Fermer la caisse" de l'en-tête du
+        guichet, via orm.call + doAction() sur le dict brut renvoyé ici (pas de bouton
+        type="object" côté vue, qui passerait par l'enrichissement serveur de
+        ir.actions.act_window.read()). 'views' doit donc être fourni explicitement : 'view_mode'
+        seul suffit pour une action ENREGISTRÉE en base (lue via read()), pas pour un dict
+        construit à la main et transmis brut au client OWL - _preprocessAction() plante sinon
+        sur action.views.map() (cf. AUDIT_session_close_action_views). action_close_session
+        reste appelée, inchangée, par le wizard (et par les tests)."""
         self.ensure_one()
         if self.state != 'open':
             raise UserError(_('Seule une session ouverte peut être clôturée.'))
@@ -83,6 +169,7 @@ class MicrofinanceCaisseSession(models.Model):
             'name': _('Clôturer la session'),
             'res_model': 'microfinance.caisse.close.session.wizard',
             'view_mode': 'form',
+            'views': [[False, 'form']],
             'target': 'new',
             'context': {'default_session_id': self.id},
         }
@@ -111,3 +198,25 @@ class MicrofinanceCaisseSession(models.Model):
             session.fiche_journee_id.action_close_day()
             session.write({'state': 'closed'})
             session.message_post(body=_('Session clôturée par %s.') % self.env.user.name)
+
+    def action_reopen_session(self):
+        """Même garde-fou que fiche_journee.action_reopen_day() : réservé aux managers, motif
+        obligatoire (champ reopen_reason renseigné avant l'appel). Rouvre aussi la fiche
+        journalière liée si elle est encore clôturée, avec le même motif, pour que les deux
+        états restent synchronisés — sans quoi action_open_session() (qui refuse d'ouvrir une
+        session sur une fiche clôturée) resterait bloquée juste après cette réouverture."""
+        if not self.env.user.has_group('microfinance_loan_management.group_microfinance_manager'):
+            raise AccessError(_('Seul un manager peut rouvrir une session de caisse clôturée.'))
+        for session in self:
+            if session.state != 'closed':
+                continue
+            if not (session.reopen_reason or '').strip():
+                raise UserError(_(
+                    'Le motif de réouverture est requis avant de rouvrir cette session.'))
+            if session.fiche_journee_id and session.fiche_journee_id.state == 'closed':
+                session.fiche_journee_id.write({'reopen_reason': session.reopen_reason})
+                session.fiche_journee_id.action_reopen_day()
+            session.message_post(body=_(
+                'Session rouverte par %(user)s. Motif : %(reason)s'
+            ) % {'user': self.env.user.name, 'reason': session.reopen_reason})
+            session.write({'state': 'open', 'reopen_reason': False})

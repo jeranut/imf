@@ -23,14 +23,20 @@
                 <header>
                     <button name="action_open_session" string="Ouvrir la session" type="object" class="btn-primary" invisible="state != 'draft'"
                             groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager"/>
-                    <button name="action_open_close_wizard" string="Clôturer la session" type="object" class="btn-primary" invisible="state != 'open'"
-                            groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager"/>
+                    <!-- Pas de bouton de clôture ici : un seul chemin de fermeture désormais,
+                         le bouton « Fermer la caisse » dans l'en-tête de l'écran guichet
+                         (action_open_close_wizard reste appelé, mais uniquement depuis là -
+                         cf. AUDIT_session_zigzag §7 pt 2/3). -->
+                    <button name="action_reopen_session" string="Rouvrir la session" type="object"
+                            groups="microfinance_loan_management.group_microfinance_manager"
+                            invisible="state != 'closed'"/>
                     <field name="state" widget="statusbar"/>
                 </header>
                 <sheet>
                     <div class="oe_title">
                         <h1>
                             <field name="company_id" invisible="1"/>
+                            <field name="company_cash_journal_id" invisible="1"/>
                             <field name="journal_id" readonly="state != 'draft'"/>
                         </h1>
                     </div>
@@ -47,7 +53,11 @@
                             <field name="total_debit"/>
                             <field name="total_credit"/>
                             <field name="closing_balance"/>
+                            <field name="theoretical_balance"/>
                         </group>
+                    </group>
+                    <group string="Réouverture" invisible="state != 'closed'">
+                        <field name="reopen_reason" placeholder="Motif requis avant de cliquer sur « Rouvrir la session »..."/>
                     </group>
                 </sheet>
                 <chatter/>

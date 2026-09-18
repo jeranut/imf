@@ -54,3 +54,63 @@ class TestJournalHooks(MicrofinanceCommon):
             journal = product[field_name]
             self.assertTrue(journal, "Le défaut de %s n'a pas trouvé le journal CRE" % field_name)
             self.assertIn(journal.type, ('bank', 'cash'))
+
+
+class TestBackfillCashJournalId(MicrofinanceCommon):
+    """Backfill de res.company.cash_journal_id (restriction du journal de session de caisse
+    guichet, cf. models/res_company.py et migrations/17.0.1.14.0) à partir du journal de code
+    'CAI' déjà provisionné sur l'agence."""
+
+    def test_backfill_sets_cash_journal_from_cai_journal(self):
+        company = self.env['res.company'].create({
+            'name': 'Agence backfill avec CAI (test)', 'agency_code': 'BF1',
+        })
+        cai = self.env['account.journal'].create({
+            'name': 'Caisse', 'code': 'CAI', 'type': 'cash', 'company_id': company.id,
+        })
+        backfilled, missing = hooks._backfill_cash_journal_id(self.env)
+        self.assertIn(company.name, backfilled)
+        self.assertNotIn(company.name, missing)
+        self.assertEqual(company.cash_journal_id, cai)
+
+    def test_backfill_reports_missing_cai_journal_without_error(self):
+        # Les agences pas encore provisionnées (pas de journal CAI) ne doivent pas faire
+        # planter le script : elles sont seulement journalisées comme "missing", cash_journal_id
+        # reste vide.
+        company = self.env['res.company'].create({
+            'name': 'Agence backfill sans CAI (test)', 'agency_code': 'BF2',
+        })
+        backfilled, missing = hooks._backfill_cash_journal_id(self.env)
+        self.assertNotIn(company.name, backfilled)
+        self.assertIn(company.name, missing)
+        self.assertFalse(company.cash_journal_id)
+
+    def test_backfill_does_not_overwrite_existing_cash_journal_id(self):
+        company = self.env['res.company'].create({
+            'name': 'Agence backfill déjà configurée (test)', 'agency_code': 'BF3',
+        })
+        self.env['account.journal'].create({
+            'name': 'Caisse', 'code': 'CAI', 'type': 'cash', 'company_id': company.id,
+        })
+        already_set = self.env['account.journal'].create({
+            'name': 'Caisse déjà choisie', 'code': 'BF3C', 'type': 'cash', 'company_id': company.id,
+        })
+        company.cash_journal_id = already_set.id
+        backfilled, missing = hooks._backfill_cash_journal_id(self.env)
+        self.assertNotIn(company.name, backfilled)
+        self.assertNotIn(company.name, missing)
+        self.assertEqual(company.cash_journal_id, already_set)
+
+    def test_backfill_idempotent(self):
+        company = self.env['res.company'].create({
+            'name': 'Agence backfill idempotence (test)', 'agency_code': 'BF4',
+        })
+        cai = self.env['account.journal'].create({
+            'name': 'Caisse', 'code': 'CAI', 'type': 'cash', 'company_id': company.id,
+        })
+        hooks._backfill_cash_journal_id(self.env)
+        self.assertEqual(company.cash_journal_id, cai)
+        backfilled_again, missing_again = hooks._backfill_cash_journal_id(self.env)
+        self.assertNotIn(company.name, backfilled_again)
+        self.assertNotIn(company.name, missing_again)
+        self.assertEqual(company.cash_journal_id, cai)

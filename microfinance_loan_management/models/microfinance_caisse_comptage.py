@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 
 class MicrofinanceCaisseComptage(models.Model):
@@ -56,6 +56,38 @@ class MicrofinanceCaisseComptage(models.Model):
         related='session_id.currency_id', string='Devise', store=True, readonly=True,
     )
 
+    # Écriture d'écart en attente (Lot fermeture 3-temps) : même principe que cheque_state /
+    # account_cheques_attente_id / action_clear_cheque sur microfinance.savings.transaction
+    # (microfinance_savings_management) - un compte d'attente dédié (company.
+    # microfinance_account_ecart_caisse_deficit_id si l'écart est négatif, sinon
+    # microfinance_account_ecart_caisse_excedent_id) reçoit la contrepartie de l'écriture posée
+    # à la clôture, puis une seconde écriture, posée par action_reconcile_variance(), transfère
+    # le montant vers le compte de régularisation choisi par le manager. 'none' tant qu'aucun
+    # écart n'a été constaté (aucune écriture générée dans ce cas).
+    variance_state = fields.Selection([
+        ('none', 'Sans écart'),
+        ('en_attente', 'En attente de réconciliation'),
+        ('reconcilie', 'Réconcilié'),
+    ], string="État de l'écart", default='none', readonly=True, copy=False, tracking=True)
+    variance_move_id = fields.Many2one(
+        'account.move', string="Écriture d'écart", readonly=True, copy=False,
+        help="Écriture posée à la clôture, imputant l'écart constaté sur le compte de caisse du "
+             "journal de la session contre le compte d'attente d'écart de l'agence. Vide si "
+             "aucun écart n'a été constaté.",
+    )
+    reconciliation_account_id = fields.Many2one(
+        'account.account', string='Compte de régularisation',
+        help="Compte final vers lequel imputer l'écart (perte/gain de caisse, compte débiteur "
+             "du caissier...) — à choisir avant de cliquer sur « Réconcilier l'écart ». Sans "
+             "effet tant que variance_state n'est pas 'en_attente'.",
+    )
+    variance_clearing_move_id = fields.Many2one(
+        'account.move', string='Écriture de réconciliation', readonly=True, copy=False,
+        help="Écriture générée par action_reconcile_variance(), transférant le montant du "
+             "compte d'attente vers le compte de régularisation choisi. Vide tant que l'écart "
+             "n'est pas réconcilié.",
+    )
+
     @api.depends('session_id.journal_id', 'session_id.date')
     def _compute_name(self):
         for comptage in self:
@@ -78,6 +110,119 @@ class MicrofinanceCaisseComptage(models.Model):
                     "Le comptage présente un écart de %(variance).2f par rapport au solde "
                     "théorique : un motif est obligatoire pour enregistrer ce comptage."
                 ) % {'variance': comptage.variance})
+
+    def _post_variance_move(self):
+        """Appelée une seule fois, juste après la création du comptage (wizard de clôture,
+        temps 3) : pose l'écriture d'écart si variance != 0, sur le compte d'attente de
+        l'agence, jamais directement sur un compte de régularisation final (cf. docstring de
+        variance_state). No-op silencieux si l'écart est nul - aucune écriture n'est générée
+        dans ce cas, cohérent avec variance_state='none'.
+
+        sudo() ciblé sur la création/comptabilisation du move (le caissier n'a pas create sur
+        account.move) : même principe que _run_posting_sudo dans
+        microfinance_savings_management/models/microfinance_caisse_mouvement.py (décision Micka
+        Lot 1.1bis, option 2) - pas de nouveau groupe comptable pour ce seul besoin."""
+        self.ensure_one()
+        if abs(self.variance) <= 0.01:
+            return
+        session = self.session_id
+        company = session.company_id
+        # Écart négatif (manquant en caisse) -> compte deficit ; écart positif (excédent) ->
+        # compte excedent. Cf. docstring de la classe et help des deux champs sur res.company.
+        if self.variance > 0:
+            waiting_account = company.microfinance_account_ecart_caisse_excedent_id
+        else:
+            waiting_account = company.microfinance_account_ecart_caisse_deficit_id
+        if not waiting_account:
+            raise UserError(_(
+                "Configurez le compte d'attente d'écart de caisse (déficit/excédent) sur "
+                "l'agence %(company)s (Paramètres > Sociétés) avant de clôturer une session "
+                "avec un écart."
+            ) % {'company': company.name})
+        cash_account = session.journal_id.default_account_id
+        if not cash_account:
+            raise UserError(_(
+                "Le journal de caisse « %(journal)s » n'a pas de compte par défaut configuré."
+            ) % {'journal': session.journal_id.name})
+        amount = abs(self.variance)
+        # Surplus (compté > théorique) : plus d'espèces en caisse que prévu -> on débite le
+        # compte caisse (l'actif augmente) en contrepartie du compte d'attente. Manque (compté <
+        # théorique) : l'inverse.
+        if self.variance > 0:
+            cash_side = {'debit': amount, 'credit': 0.0}
+            waiting_side = {'debit': 0.0, 'credit': amount}
+        else:
+            cash_side = {'debit': 0.0, 'credit': amount}
+            waiting_side = {'debit': amount, 'credit': 0.0}
+        move = self.env['account.move'].sudo().create({
+            'date': fields.Date.context_today(self),
+            'journal_id': session.journal_id.id,
+            'ref': _('Écart de caisse - %s') % self.name,
+            'line_ids': [
+                (0, 0, dict(cash_side, name=_('Écart de caisse'), account_id=cash_account.id)),
+                (0, 0, dict(waiting_side, name=_('Écart de caisse - attente'), account_id=waiting_account.id)),
+            ],
+        })
+        move.sudo().action_post()
+        self.write({'variance_move_id': move.id, 'variance_state': 'en_attente'})
+
+    def action_reconcile_variance(self):
+        """Réconciliation manuelle de l'écart en attente (même rôle que action_clear_cheque) :
+        transfère le montant du compte d'attente vers le compte de régularisation choisi par le
+        manager (reconciliation_account_id, à renseigner avant l'appel)."""
+        if not self.env.user.has_group('microfinance_loan_management.group_microfinance_manager'):
+            raise AccessError(_("Seul un manager peut réconcilier un écart de caisse."))
+        for comptage in self:
+            if comptage.variance_state != 'en_attente':
+                raise UserError(_(
+                    "Cet écart n'est plus en attente de réconciliation (état actuel : %s)."
+                ) % dict(comptage._fields['variance_state'].selection).get(comptage.variance_state))
+            if not comptage.reconciliation_account_id:
+                raise UserError(_(
+                    "Choisissez un compte de régularisation avant de réconcilier cet écart."))
+            session = comptage.session_id
+            company = session.company_id
+            if comptage.variance > 0:
+                waiting_account = company.microfinance_account_ecart_caisse_excedent_id
+            else:
+                waiting_account = company.microfinance_account_ecart_caisse_deficit_id
+            # Journal d'opérations diverses, PAS le journal de caisse de la session : celui-ci
+            # a déjà sa fiche journalière clôturée à ce stade (la réconciliation intervient
+            # après coup, potentiellement plusieurs jours plus tard) - AccountMove.action_post()
+            # refuse toute nouvelle écriture sur un journal dont la fiche du jour est clôturée
+            # (cf. microfinance_caisse_fiche_journee.py), donc réutiliser session.journal_id
+            # ferait systématiquement échouer cette écriture.
+            misc_journal = self.env['account.journal'].search([
+                ('type', '=', 'general'), ('company_id', '=', company.id),
+            ], limit=1)
+            if not misc_journal:
+                raise UserError(_(
+                    "Aucun journal d'opérations diverses n'est configuré pour l'agence "
+                    "%(company)s : requis pour réconcilier un écart de caisse."
+                ) % {'company': company.name})
+            amount = abs(comptage.variance)
+            # Solde le compte d'attente (mouvement inverse de celui posé par _post_variance_move)
+            # contre le compte de régularisation choisi.
+            if comptage.variance > 0:
+                waiting_side = {'debit': amount, 'credit': 0.0}
+                dest_side = {'debit': 0.0, 'credit': amount}
+            else:
+                waiting_side = {'debit': 0.0, 'credit': amount}
+                dest_side = {'debit': amount, 'credit': 0.0}
+            move = self.env['account.move'].sudo().create({
+                'date': fields.Date.context_today(comptage),
+                'journal_id': misc_journal.id,
+                'ref': _('Réconciliation écart de caisse - %s') % comptage.name,
+                'line_ids': [
+                    (0, 0, dict(waiting_side, name=_('Réconciliation écart de caisse'), account_id=waiting_account.id)),
+                    (0, 0, dict(dest_side, name=_('Réconciliation écart de caisse'), account_id=comptage.reconciliation_account_id.id)),
+                ],
+            })
+            move.sudo().action_post()
+            comptage.write({'variance_clearing_move_id': move.id, 'variance_state': 'reconcilie'})
+            comptage.message_post(body=_('Écart de caisse réconcilié par %(user)s. Écriture : %(move)s') % {
+                'user': self.env.user.name, 'move': move.name,
+            })
 
 
 class MicrofinanceCaisseComptageLine(models.Model):

@@ -51,8 +51,10 @@
         }
 
         &_balance {
+            display: flex;
+            align-items: center;
             color: #64748b;
-            strong { color: #0f172a; font-size: 16px; margin-left: 4px; }
+            strong { color: #0f172a; font-size: 16px; margin-left: 4px; margin-right: 12px; }
         }
     }
 

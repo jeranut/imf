@@ -9,7 +9,7 @@ class AccountChartTemplate(models.AbstractModel):
 
     def _load(self, template_code, company, install_demo):
         """Après le chargement du plan PCEC 2005 sur une société, crée les sous-comptes
-        épargne dédiés (213001/2/3, 607301/2/3, 325005/6/7, 218001/2/3, 749003/4, 717004,
+        épargne dédiés (213001/2/3, 607301/2/3, 218001/2/3, 218004/5/6, 749003/4, 717004,
         467000) pour que les valeurs par défaut de microfinance.savings.product se résolvent
         sans saisie manuelle (sinon les champs Épargne Individuel/Groupe/Entreprise et
         Intérêts s'affichent vides, en rouge, sur une agence nouvellement créée).

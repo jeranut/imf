@@ -13,6 +13,7 @@
                 <field name="theoretical_total"/>
                 <field name="counted_total"/>
                 <field name="variance"/>
+                <field name="variance_state" widget="badge" optional="show"/>
                 <field name="currency_id" invisible="1"/>
             </tree>
         </field>
@@ -23,6 +24,12 @@
         <field name="model">microfinance.caisse.comptage</field>
         <field name="arch" type="xml">
             <form string="Comptage de billetage">
+                <header>
+                    <button name="action_reconcile_variance" string="Réconcilier l'écart" type="object" class="btn-primary"
+                            groups="microfinance_loan_management.group_microfinance_manager"
+                            invisible="variance_state != 'en_attente'"/>
+                    <field name="variance_state" widget="statusbar" statusbar_visible="en_attente,reconcilie" invisible="variance_state == 'none'"/>
+                </header>
                 <sheet>
                     <div class="oe_title">
                         <h1><field name="name" readonly="1"/></h1>
@@ -53,6 +60,11 @@
                     <group string="Écart">
                         <field name="variance_comment" readonly="1" nolabel="1"
                                placeholder="Aucun motif (comptage sans écart)."/>
+                    </group>
+                    <group string="Réconciliation de l'écart" invisible="variance_state == 'none'">
+                        <field name="reconciliation_account_id" readonly="variance_state != 'en_attente'"/>
+                        <field name="variance_move_id" readonly="1"/>
+                        <field name="variance_clearing_move_id" readonly="1" invisible="not variance_clearing_move_id"/>
                     </group>
                 </sheet>
                 <chatter/>

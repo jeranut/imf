@@ -49,6 +49,12 @@ LOAN_NEW_SUBACCOUNTS = {
     '717003': ('Commissions perçues - Commission sur crédit', 'income', False),
     '749001': ('Autres produits opérationnels divers - Papeterie crédit', 'income', False),
     '749002': ('Autres produits opérationnels divers - Pénalités crédits', 'income', False),
+    # TODO valider avec CEFOR : anciennement account_surpaiement_id -> 315000 (réutilisation
+    # directe, cf. ex-LOAN_DIRECT_REUSE_CODES). 219001 est un sous-compte dédié du poste 219
+    # "Autres sommes dues à la clientèle", plus proche sémantiquement d'un surpaiement client que
+    # 315 "Créditeurs divers" (générique tiers) — suffixe 001 choisi pour ne pas collisionner avec
+    # 219000, déjà utilisé par account_cheques_emis_attente_id (voir synthese_audit_pcec.md §2.3).
+    '219001': ('Autres sommes dues à la clientèle - Surpaiement', 'liability_current', False),
     # Sous-comptes de la classe 13 (Établissements de crédit) dédiés aux 3 journaux banque.
     '131001': ('Établissements de crédit - Banque opérations', 'asset_cash', False),
     '131002': ('Établissements de crédit - Banque épargne', 'asset_cash', False),
@@ -59,7 +65,15 @@ LOAN_NEW_SUBACCOUNTS = {
 # compte déjà chargé par plan_compta_pcec, sans création de sous-compte dédié.
 LOAN_DIRECT_REUSE_CODES = {
     'account_recouvrement_id': '741000',
-    'account_surpaiement_id': '315000',
+}
+
+# Champs res.company réutilisant directement un compte PCEC générique (comptes d'attente écart
+# de caisse - res_company.py), même logique que LOAN_DIRECT_REUSE_CODES mais sur res.company
+# plutôt que sur microfinance.loan.product : pas de sous-compte dédié par agence, un seul poste
+# PCEC partagé (324/3291), déjà chargé par plan_compta_pcec.
+ECART_CAISSE_DIRECT_REUSE_CODES = {
+    'microfinance_account_ecart_caisse_deficit_id': '324000',
+    'microfinance_account_ecart_caisse_excedent_id': '329100',
 }
 
 # Journaux créés pour chaque société utilisant le plan PCEC (chart_template == 'mg_pcec').
@@ -125,6 +139,23 @@ def _get_or_create_account(env, company, code, name, account_type, reconcile):
 def _create_subaccounts(env, company, subaccounts):
     for code, (name, account_type, reconcile) in subaccounts.items():
         _get_or_create_account(env, company, code, name, account_type, reconcile)
+
+
+def _fill_ecart_caisse_accounts(env, company):
+    """Pré-remplit microfinance_account_ecart_caisse_deficit_id/excedent_id (res.company) avec
+    le compte PCEC générique correspondant (ECART_CAISSE_DIRECT_REUSE_CODES), dès que le plan
+    PCEC est chargé pour cette société. default=_pcec_default(...) sur ces deux champs
+    (res_company.py) ne couvre que la CRÉATION d'une société neuve - jamais le cas, fréquent en
+    pratique, d'une société déjà existante qui choisit le plan PCEC après coup (Comptabilité >
+    Configuration) : à ce moment, le champ existe déjà (donc pas de default à évaluer) et reste
+    vide indéfiniment sans ce complément. Idempotent : ne touche jamais un champ déjà renseigné
+    (valeur automatique précédente ou choix manuel)."""
+    for field, code in ECART_CAISSE_DIRECT_REUSE_CODES.items():
+        if company[field]:
+            continue
+        account = _get_account(env, company, code)
+        if account:
+            company[field] = account.id
 
 
 def _create_journals(env, company):
@@ -211,6 +242,27 @@ def _backfill_bailleur_partner_ids(env):
             'company_id': False,
         })
         bailleur.partner_id = partner.id
+
+
+def _backfill_cash_journal_id(env):
+    """Renseigne res.company.cash_journal_id (journal de caisse guichet, restriction session
+    caisse) pour chaque société qui possède un journal de code 'CAI' et de type 'cash' -
+    n'écrase jamais une valeur déjà présente. Retourne (backfilled, missing) : listes de noms de
+    sociétés respectivement complétées et sans journal CAI trouvé (agences pas encore
+    provisionnées - cf. provision_company_pcec/JOURNALS - à ne pas faire planter le script,
+    seulement à signaler pour un rattrapage manuel une fois le journal créé)."""
+    Journal = env['account.journal']
+    backfilled, missing = [], []
+    for company in env['res.company'].search([('cash_journal_id', '=', False)]):
+        journal = Journal.search([
+            ('code', '=', 'CAI'), ('type', '=', 'cash'), ('company_id', '=', company.id),
+        ], limit=1)
+        if journal:
+            company.cash_journal_id = journal.id
+            backfilled.append(company.name)
+        else:
+            missing.append(company.name)
+    return backfilled, missing
 
 
 def _read_geo_csv(filename):
@@ -722,9 +774,10 @@ def _cleanup_existing_financial_lines(env):
 
 def provision_company_pcec(env, company):
     """Crée idempotemment, pour une société utilisant le plan PCEC (chart_template ==
-    'mg_pcec'), les sous-comptes dédiés par segment (LOAN_NEW_SUBACCOUNTS) et les journaux
-    standards (JOURNALS). Ne fait rien pour les sociétés sur un autre plan comptable (aucun
-    compte au format PCEC n'a de sens en dehors de ce plan).
+    'mg_pcec'), les sous-comptes dédiés par segment (LOAN_NEW_SUBACCOUNTS), les journaux
+    standards (JOURNALS), et pré-remplit les comptes d'attente écart de caisse
+    (ECART_CAISSE_DIRECT_REUSE_CODES). Ne fait rien pour les sociétés sur un autre plan
+    comptable (aucun compte au format PCEC n'a de sens en dehors de ce plan).
 
     Source unique appelée par :
       - post_init_hook (installation neuve du module) ;
@@ -737,6 +790,7 @@ def provision_company_pcec(env, company):
         return
     _create_subaccounts(env, company, LOAN_NEW_SUBACCOUNTS)
     _create_journals(env, company)
+    _fill_ecart_caisse_accounts(env, company)
 
 
 def post_init_hook(env):
@@ -755,6 +809,7 @@ def post_init_hook(env):
     _load_financial_reference_data(env)
     _cleanup_existing_financial_lines(env)
     _seed_social_score_brackets(env)
+    _backfill_cash_journal_id(env)
 
 
 # Valeurs par défaut des tranches de notation sociale (microfinance.social.score.bracket) :

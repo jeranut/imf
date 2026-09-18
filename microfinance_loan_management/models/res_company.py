@@ -3,6 +3,20 @@ from odoo import _, api, fields, models
 from odoo.exceptions import UserError, ValidationError
 
 
+def _pcec_default(code):
+    """Défaut calculé pour un champ account.account : recherche par code + société, jamais
+    par référence XML statique (les comptes PCEC sont dupliqués par société via le chart
+    template plan_compta_pcec). Retourne un recordset vide si le compte n'existe pas pour la
+    société courante (plan PCEC non chargé) : le champ reste simplement vide, comme avant
+    l'introduction de ce défaut. Dupliqué depuis microfinance_loan_product.py /
+    microfinance_savings_product.py, faute de module utilitaire partagé pour ce seul besoin."""
+    def _default(self):
+        return self.env['account.account'].search([
+            ('code', '=', code), ('company_id', '=', self.env.company.id),
+        ], limit=1)
+    return _default
+
+
 class ResCompany(models.Model):
     _inherit = 'res.company'
 
@@ -101,6 +115,37 @@ class ResCompany(models.Model):
              'peut pas être soumis au comité si l\'impression personnelle de l\'enquêteur sur '
              'le dossier précédent (surveyor_impression_score) est strictement inférieure à '
              'ce seuil.',
+    )
+
+    cash_journal_id = fields.Many2one(
+        'account.journal', string='Journal de caisse (guichet)',
+        domain="[('type', '=', 'cash'), ('company_id', '=', id)]",
+        help="Journal unique autorisé pour l'ouverture d'une session de caisse guichet dans "
+             "cette agence.",
+    )
+    microfinance_account_ecart_caisse_deficit_id = fields.Many2one(
+        'account.account', string="Compte d'attente écart de caisse (déficit)",
+        domain="[('account_type', '=', 'asset_current'), ('company_id', '=', id)]",
+        default=_pcec_default('324000'),
+        help="Compte de contrepartie de l'écriture posée à la clôture d'une session de caisse "
+             "quand un écart NÉGATIF (manquant en caisse : compté < théorique) est constaté : "
+             "le montant y reste en attente jusqu'à sa réconciliation manuelle par un manager "
+             "(même principe que le compte d'attente chèques - "
+             "microfinance.savings.product.account_cheques_attente_id). Normalement déjà "
+             "pré-rempli (compte PCEC 324 « Comptes d'attente à régulariser - actif ») : à ne "
+             "changer que pour un cas particulier.",
+    )
+    microfinance_account_ecart_caisse_excedent_id = fields.Many2one(
+        'account.account', string="Compte d'attente écart de caisse (excédent)",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', id)]",
+        default=_pcec_default('329100'),
+        help="Compte de contrepartie de l'écriture posée à la clôture d'une session de caisse "
+             "quand un écart POSITIF (excédent en caisse : compté > théorique) est constaté : "
+             "le montant y reste en attente jusqu'à son affectation manuelle par un manager "
+             "(même principe que le compte d'attente chèques - "
+             "microfinance.savings.product.account_cheques_attente_id). Normalement déjà "
+             "pré-rempli (compte PCEC 3291 « Écritures créditrices à régulariser ») : à ne "
+             "changer que pour un cas particulier.",
     )
 
     def _compute_loan_product_code_locked(self):

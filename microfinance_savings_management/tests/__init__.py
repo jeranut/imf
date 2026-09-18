@@ -14,6 +14,8 @@ from . import test_cheque_workflow
 from . import test_savings_account_number_derivation
 from . import test_savings_principal_account_on_create
 from . import test_caisse_pos
+from . import test_caisse_session_theoretical_balance
+from . import test_caisse_close_wizard_confirm
 from . import test_avis_epargne_exigee
 from . import test_savings_account_loan_link
 from . import test_savings_account_container

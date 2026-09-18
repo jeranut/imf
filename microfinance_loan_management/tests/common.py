@@ -61,6 +61,27 @@ class MicrofinanceCommon(TransactionCase):
             'company_id': company.id,
             'default_account_id': cls.bank_account.id,
         })
+        # Journal de caisse guichet unique de la société de test : requis depuis la contrainte
+        # microfinance.caisse.session._check_journal_matches_company_cash_journal. Les tests
+        # caisse existants ouvrent tous leurs sessions sur disbursement_journal (cf.
+        # tests/test_caisse_session*.py, test_caisse_cloture.py, ...), d'où ce choix plutôt que
+        # de créer un journal dédié inutilisé.
+        company.cash_journal_id = cls.disbursement_journal.id
+        # Comptes d'attente écart de caisse (temps 3 du wizard de clôture) : configurés par
+        # défaut ici, comme cash_journal_id ci-dessus, pour que tout test fermant une session
+        # avec un écart n'ait pas à les configurer lui-même. Deux comptes distincts depuis la
+        # scission deficit/excedent (écart négatif vs positif) - types alignés sur les comptes
+        # PCEC réels (324 actif / 3291 passif) plutôt que sur l'ancien compte unique TECART.
+        cls.caisse_ecart_deficit_account = cls.env['account.account'].create({
+            'name': "Attente écart de caisse test (déficit)", 'code': 'TECARTD',
+            'account_type': 'asset_current', 'company_id': company.id,
+        })
+        cls.caisse_ecart_excedent_account = cls.env['account.account'].create({
+            'name': "Attente écart de caisse test (excédent)", 'code': 'TECARTE',
+            'account_type': 'liability_current', 'company_id': company.id,
+        })
+        company.microfinance_account_ecart_caisse_deficit_id = cls.caisse_ecart_deficit_account.id
+        company.microfinance_account_ecart_caisse_excedent_id = cls.caisse_ecart_excedent_account.id
         # microfinance_partner_type='client' déclenche l'attribution du numéro de compte
         # permanent (microfinance_account_number), dont dérive maintenant la référence des
         # dossiers d'instruction (microfinance.loan.application.name, related) — sans ce

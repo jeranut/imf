@@ -146,22 +146,27 @@ class MicrofinanceSavingsProduct(models.Model):
         default=_pcec_default('607303'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
+    # TODO valider avec CEFOR : bascule de 325 vers 218, à confirmer que le mécanisme d'avance
+    # épargne est bien symétrique du mécanisme crédit. Anciennement 325005/6/7 ("Produits reçus
+    # ou constatés d'avance", un revenu différé) : ce sont en réalité des charges d'intérêt
+    # épargne dues par la CEFOR au client, donc rattachées à la famille 218 "Charges à payer",
+    # comme account_cout_interet_payer_* juste en dessous (voir audit synthese_audit_pcec.md §2.1).
     account_interets_avance_individuel_id = fields.Many2one(
         'account.account', string="Intérêts comptabilisés d'avance - Individuel",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
-        default=_pcec_default('325005'),
+        default=_pcec_default('218004'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_interets_avance_groupe_id = fields.Many2one(
         'account.account', string="Intérêts comptabilisés d'avance - Groupe",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
-        default=_pcec_default('325006'),
+        default=_pcec_default('218005'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_interets_avance_entreprise_id = fields.Many2one(
         'account.account', string="Intérêts comptabilisés d'avance - Entreprise",
         domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
-        default=_pcec_default('325007'),
+        default=_pcec_default('218006'),
         help="Peut rester vide si ce mécanisme n'est pas utilisé par CEFOR pour ce produit.",
     )
     account_cout_interet_payer_individuel_id = fields.Many2one(
@@ -197,10 +202,13 @@ class MicrofinanceSavingsProduct(models.Model):
         default=_pcec_default('717004'),
         help="Compte de comptabilisation des frais de tenue de compte. Requis uniquement si des frais sont prélevés pour ce produit.",
     )
+    # TODO valider avec CEFOR : bascule de 511200 vers 331120 (poste 33112 "Chèques à
+    # l'encaissement non disponibles", classe 3 "Comptes d'encaissement") — 511200 n'existe pas
+    # dans le PCEC officiel (voir synthese_audit_pcec.md §1.1).
     account_cheques_attente_id = fields.Many2one(
         'account.account', string="Compte d'attente chèques",
-        domain="[('account_type', 'in', ('asset_cash', 'asset_current')), ('company_id', '=', company_id)]",
-        default=_pcec_default('511200'),
+        domain="[('account_type', '=', 'asset_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('331120'),
         help="Compte de contrepartie pour un dépôt par chèque (payment_method='cheque') tant "
              "que le chèque n'est pas compensé (cheque_state='en_attente'). À la compensation "
              "(action_clear_cheque), le montant est transféré vers le compte du journal de "

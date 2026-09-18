@@ -1,6 +1,6 @@
 {
     'name': 'Comptabilité Malagasy (PCEC 2005 — Établissements de Crédit)',
-    'version': '17.0.1.0.0',
+    'version': '17.0.1.2.0',
     'category': 'Accounting/Localizations/Account Charts',
     'summary': 'Compta Malagasy PCEC 2005 — Plan Comptable des Établissements de Crédit, CSBF, Ariary MGA',
     'description': "<h2>Plan Comptable des Établissements de Crédit (PCEC 2005)</h2>"

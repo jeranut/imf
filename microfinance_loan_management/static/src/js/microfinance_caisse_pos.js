@@ -104,7 +104,7 @@ export class MicrofinanceCaissePos extends Component {
         const sessions = await this.orm.searchRead(
             "microfinance.caisse.session",
             [["state", "=", "open"], ["company_id", "=", this.company.currentCompany.id]],
-            ["id", "journal_id", "cashier_id", "date", "company_id", "currency_id", "opening_balance", "total_debit", "total_credit", "closing_balance"],
+            ["id", "journal_id", "cashier_id", "date", "company_id", "currency_id", "opening_balance", "total_debit", "total_credit", "theoretical_balance"],
             { order: "date desc", limit: 1 }
         );
         if (sessions.length) {
@@ -120,11 +120,15 @@ export class MicrofinanceCaissePos extends Component {
         this.state.loadingSession = false;
     }
 
-    openSessionForm() {
+    // Seul point d'entrée de l'ouverture de session depuis l'écran bloquant "Aucune session de
+    // caisse ouverte" : appelle directement le wizard d'ouverture (qui trouve/crée la session
+    // du jour et l'ouvre), sans détour par le formulaire backend générique de
+    // microfinance.caisse.session (cf. AUDIT_session_zigzag §3).
+    openSessionWizard() {
         this.env.services.action.doAction(
             {
                 type: "ir.actions.act_window",
-                res_model: "microfinance.caisse.session",
+                res_model: "microfinance.caisse.open.session.wizard",
                 name: "Ouvrir une session de caisse",
                 views: [[false, "form"]],
                 target: "new",
@@ -132,6 +136,20 @@ export class MicrofinanceCaissePos extends Component {
             },
             { onClose: () => this.loadSession() }
         );
+    }
+
+    // Bouton "Fermer la caisse" de l'en-tête (visible en permanence tant que la session est
+    // ouverte, à l'emplacement de "Solde caisse : ...") : seul point d'entrée de la fermeture
+    // (cf. AUDIT_session_zigzag §7 pt 2/3 - le bouton équivalent du formulaire backend
+    // "Sessions de caisse" a été retiré). Réutilise action_open_close_wizard, déjà responsable
+    // de construire l'action d'ouverture du wizard de comptage — un seul endroit qui sait
+    // comment ouvrir la clôture, appelé soit par ce bouton, soit (garde d'état) par du code
+    // serveur, jamais dupliqué côté client.
+    async openCloseSessionWizard() {
+        const action = await this.orm.call(
+            "microfinance.caisse.session", "action_open_close_wizard", [this.state.session.id]
+        );
+        this.env.services.action.doAction(action, { onClose: () => this.loadSession() });
     }
 
     async loadMouvements() {

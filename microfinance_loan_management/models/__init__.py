@@ -35,6 +35,7 @@ from . import microfinance_caisse_fiche_journee
 from . import microfinance_caisse_session
 from . import microfinance_caisse_denomination
 from . import microfinance_caisse_comptage
+from . import microfinance_caisse_comptage_brouillon
 from . import microfinance_portfolio_snapshot
 from . import res_partner
 from . import res_config_settings

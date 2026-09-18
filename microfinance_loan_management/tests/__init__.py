@@ -72,5 +72,7 @@ from . import test_disbursement_concurrent_guard
 from . import test_disbursement_cheque_workflow
 from . import test_caisse_comptage
 from . import test_caisse_close_wizard
+from . import test_caisse_open_wizard
 from . import test_caisse_session_security
 from . import test_agent_portfolio_dashboard
+from . import test_res_company_ecart_caisse_accounts

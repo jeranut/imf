@@ -114,6 +114,41 @@ class TestPcecChart(TransactionCase):
         ])
         self.assertTrue(cash_prefix_accounts, 'Class 1 (10 Valeurs en caisse) should be loaded')
 
+    def test_pcec_family_32_comptes_regularisation(self):
+        """Regression guard for the '32 Comptes de Régularisation' family (PCEC p.76-77) :
+        libellé et account_type exacts pour chaque compte, corrigés dans ce chantier (321,
+        324, 325, 326+3261/3262, 329+3291/3292/3293 — étaient soit mal libellés, soit
+        rattachés au mauvais account_type, notamment 329/3291 qui étaient en asset_current
+        alors que le chapitre 329 est explicitement PASSIF dans le texte officiel)."""
+        expected = {
+            '321000': ("Charges payées ou constatées d'avance *", 'asset_current'),
+            '324000': ("Comptes d'attente à régulariser - actif *", 'asset_current'),
+            '325000': ('Produits reçus ou constatés d\'avance', 'liability_current'),
+            '326000': ('Produits réservés *', 'liability_current'),
+            '326100': ('Produits sur échéances de crédit non imputées', 'liability_current'),
+            '326200': ('Produits sur créances litigieuses douteuses ou contentieuses', 'liability_current'),
+            '329000': ('Autres comptes de régularisation - passif *', 'liability_current'),
+            '329100': ('Écritures créditrices à régulariser', 'liability_current'),
+            '329200': ('Produits réservés sur crédits sains', 'liability_current'),
+            '329300': ('Principal à récupérer sur crédits réintégrés', 'asset_receivable'),
+        }
+        accounts = self.env['account.account'].search([
+            ('company_id', '=', self.company.id),
+            ('code', 'in', list(expected)),
+        ])
+        found = {account.code: (account.name, account.account_type) for account in accounts}
+        self.assertEqual(
+            set(found), set(expected),
+            'Comptes attendus de la famille 32 introuvables : %s' % (set(expected) - set(found)),
+        )
+        for code, (name, account_type) in expected.items():
+            self.assertEqual(found[code][0], name, f'Libellé incorrect pour {code}')
+            self.assertEqual(found[code][1], account_type, f'account_type incorrect pour {code}')
+        self.assertTrue(
+            accounts.filtered(lambda a: a.code == '329300').reconcile,
+            'Le compte 329300 (créance à recouvrer) doit être réconciliable',
+        )
+
     def test_pcec_taxes_point_to_pcec_accounts(self):
         """The Madagascar VAT taxes loaded for this company post to accounts belonging to
         this same PCEC company, not to some other company's (e.g. softeam_l10n_mg pcg_*)."""
