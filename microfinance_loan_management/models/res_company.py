@@ -81,7 +81,9 @@ class ResCompany(models.Model):
         'microfinance.fond.credit', string='Fonds de crédit par défaut',
         domain="[('active', '=', True), "
                "'|', ('date_cloture', '=', False), ('date_cloture', '>=', context_today().strftime('%Y-%m-%d')), "
-               "'|', '&', ('scope', '=', 'single_company'), ('company_id', '=', id), ('scope', '=', 'multi_company')]",
+               "'|', '&', ('scope', '=', 'single_company'), ('company_id', '=', id), "
+               "'&', ('scope', '=', 'multi_company'), "
+               "'|', ('allocation_required', '=', False), ('allocation_ids.company_id', '=', id)]",
         help="Fonds bailleur rotatif proposé par défaut à la création d'un nouveau crédit dans "
              "cette société (pré-remplissage de microfinance.loan.fond_credit_id, simple aide à "
              "la saisie - reste librement modifiable par l'utilisateur avant décaissement, sans "
@@ -94,6 +96,46 @@ class ResCompany(models.Model):
              "group_microfinance_manager est portée uniquement par la vue "
              "(microfinance_res_company_views.xml).",
     )
+    microfinance_fond_account_default_id = fields.Many2one(
+        'account.account', string='Compte bailleur par défaut (fonds de crédit)',
+        domain="[('account_type', 'in', ('liability_current', 'liability_non_current', 'equity')), "
+               "('company_id', '=', id)]",
+        help="Compte comptable bailleur (microfinance.fond.credit.account_id) proposé par défaut "
+             "à la création d'un nouveau fonds de crédit rotatif pour cette société - simple aide "
+             "à la saisie, reste librement modifiable sur chaque fonds, y compris juste après sa "
+             "création. Aucun effet rétroactif : changer ce défaut ne touche jamais les fonds déjà "
+             "créés (comportement identique à microfinance_fond_credit_default_id ci-dessus). "
+             "Défaut vide = comportement actuel inchangé (le compte reste à saisir manuellement, "
+             "_check_account_required continue de bloquer si passer_gl est actif sans compte). Pas "
+             "de groups= au niveau champ (même raison que ci-dessus : ne pas casser la lecture du "
+             "défaut par un non-manager à la création d'un fonds) : restriction à "
+             "group_microfinance_manager portée uniquement par la vue "
+             "(microfinance_res_company_views.xml).",
+    )
+
+    @api.constrains('microfinance_fond_account_default_id')
+    def _check_fond_account_default_id(self):
+        # Défense en profondeur : le domaine du champ (UI) exclut déjà les comptes d'un autre
+        # type ou d'une autre société, mais un write()/import direct doit être bloqué aussi -
+        # même raisonnement que MicrofinanceFondCredit._check_account_type.
+        allowed_types = ('liability_current', 'liability_non_current', 'equity')
+        for company in self:
+            account = company.microfinance_fond_account_default_id
+            if not account:
+                continue
+            if account.account_type not in allowed_types:
+                raise ValidationError(_(
+                    'Le compte bailleur par défaut doit être un compte de type dette ou fonds '
+                    'propres (liability_current, liability_non_current ou equity).'
+                ))
+            if account.company_id != company:
+                raise ValidationError(_(
+                    'Le compte bailleur par défaut de "%(company)s" doit appartenir à cette '
+                    'société (compte "%(account)s" rattaché à "%(account_company)s").'
+                ) % {
+                    'company': company.name, 'account': account.display_name,
+                    'account_company': account.company_id.name,
+                })
 
     microfinance_social_grid_include_impression_in_total = fields.Boolean(
         string="Grille sociale : inclure l'impression de l'enquêteur dans le total du dossier",
@@ -123,6 +165,16 @@ class ResCompany(models.Model):
         help="Journal unique autorisé pour l'ouverture d'une session de caisse guichet dans "
              "cette agence.",
     )
+    disbursement_journal_ids = fields.Many2many(
+        'account.journal', string='Journaux de décaissement autorisés (guichet)',
+        domain="[('type', 'in', ('bank', 'cash')), ('company_id', '=', id)]",
+        help="Restreint la liste des journaux proposés à l'écran « Décaissement crédit » du "
+             "guichet caisse à ceux sélectionnés ici (ex. Crédits, Caisse, Banque-Crédits) — "
+             "exclut ainsi les journaux sans rapport avec le crédit (Épargne, Banque-Épargne) "
+             "qui apparaissaient jusque-là sans distinction. Laissé vide : aucun filtre "
+             "supplémentaire, tous les journaux bank/cash de l'agence restent proposés "
+             "(rétrocompatibilité pour une agence pas encore configurée).",
+    )
     microfinance_account_ecart_caisse_deficit_id = fields.Many2one(
         'account.account', string="Compte d'attente écart de caisse (déficit)",
         domain="[('account_type', '=', 'asset_current'), ('company_id', '=', id)]",
@@ -147,6 +199,40 @@ class ResCompany(models.Model):
              "pré-rempli (compte PCEC 3291 « Écritures créditrices à régulariser ») : à ne "
              "changer que pour un cas particulier.",
     )
+
+    _COLLECTION_DAY_LABELS = {
+        'monday': 'Alatsinainy',
+        'tuesday': 'Talata',
+        'wednesday': 'Alarobia',
+        'thursday': 'Alakamisy',
+        'friday': 'Zoma',
+    }
+
+    collection_day = fields.Selection(
+        [
+            ('monday', 'Lundi'),
+            ('tuesday', 'Mardi'),
+            ('wednesday', 'Mercredi'),
+            ('thursday', 'Jeudi'),
+            ('friday', 'Vendredi'),
+        ], string='Jour de collecte', default='monday', required=True,
+        help="Jour de la semaine où cette agence collecte les remboursements. Un seul jour par "
+             "agence (pas par produit). Sert de date limite : la date d'échéance brute calculée "
+             "par périodicité (microfinance.loan._build_installment_commands) est arrondie en "
+             "avant jusqu'à la prochaine occurrence de ce jour (microfinance.loan."
+             "_roll_forward_to_collection_day) - le client peut payer avant, mais cette date "
+             "reste la date officielle affichée sur l'échéancier et le contrat. Défaut 'monday' : "
+             "reprend le jour codé en dur (ALATSINAINY) dans report_contrat_credit.xml avant "
+             "l'introduction de ce champ, pour ne rien changer au comportement existant tant "
+             "qu'une agence n'a pas été reconfigurée explicitement.",
+    )
+
+    def get_collection_day_label(self):
+        """Libellé malgache du jour de collecte (Alatsinainy/Talata/Alarobia/Alakamisy/Zoma),
+        pour le rapport de contrat de crédit (report_contrat_credit.xml) - remplace l'ancien
+        texte 'ALATSINAINY' codé en dur, identique pour toutes les agences."""
+        self.ensure_one()
+        return self._COLLECTION_DAY_LABELS.get(self.collection_day, '')
 
     def _compute_loan_product_code_locked(self):
         Product = self.env['microfinance.loan.product']
@@ -178,3 +264,31 @@ class ResCompany(models.Model):
         if 'partner_id' in vals:
             self.mapped('partner_id').write({'microfinance_partner_type': 'agence'})
         return res
+
+    is_microfinance_parent = fields.Boolean(
+        string='Société mère (fonds bailleurs)', compute='_compute_is_microfinance_parent',
+        help="Vrai si cette société est la société mère désignée dans les paramètres. Non stocké : "
+             "sert uniquement à masquer la création/modification dans les vues des agences.",
+    )
+
+    @api.model
+    def _get_microfinance_parent(self):
+        """Société mère désignée dans les paramètres (recordset vide si aucune)."""
+        param = self.env['ir.config_parameter'].sudo().get_param('microfinance.parent_company_id')
+        if not param or not param.isdigit():
+            return self.browse()
+        return self.sudo().browse(int(param)).exists()
+
+    @api.depends_context('company')
+    def _compute_is_microfinance_parent(self):
+        parent = self._get_microfinance_parent()
+        for company in self:
+            company.is_microfinance_parent = bool(parent) and company.id == parent.id
+
+    @api.model
+    def _check_microfinance_parent_only(self):
+        """Garde « société mère uniquement » : sans mère configurée, aucune restriction
+        (comportement d'origine). Sinon la société courante doit être la mère."""
+        parent = self._get_microfinance_parent()
+        if parent and self.env.company.id != parent.id:
+            raise UserError(_('Seule la société mère (%s) peut effectuer cette opération.') % parent.name)

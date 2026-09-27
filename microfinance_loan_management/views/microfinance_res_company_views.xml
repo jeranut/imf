@@ -15,6 +15,7 @@
                 <group string="Identification agence (microfinance)">
                     <field name="agency_code" placeholder="ex. IS"/>
                     <field name="loan_product_code_prefix" readonly="loan_product_code_locked"/>
+                    <field name="collection_day"/>
                 </group>
                 <!-- groups ici uniquement (pas de groups= au niveau champ Python) : réservé à
                      group_microfinance_manager, cohérent avec le menu Configuration déjà réservé
@@ -22,6 +23,7 @@
                      microfinance.loan pour un simple agent créant un crédit. -->
                 <group string="Crédit (microfinance)" groups="microfinance_loan_management.group_microfinance_manager">
                     <field name="microfinance_fond_credit_default_id"/>
+                    <field name="microfinance_fond_account_default_id"/>
                 </group>
                 <group string="Grille sociale (microfinance)" groups="microfinance_loan_management.group_microfinance_manager">
                     <field name="microfinance_social_grid_include_impression_in_total"/>
@@ -34,6 +36,7 @@
                 <group string="Caisse guichet (microfinance)"
                        groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance">
                     <field name="cash_journal_id"/>
+                    <field name="disbursement_journal_ids" widget="many2many_tags"/>
                     <field name="microfinance_account_ecart_caisse_deficit_id"/>
                     <field name="microfinance_account_ecart_caisse_excedent_id"/>
                 </group>

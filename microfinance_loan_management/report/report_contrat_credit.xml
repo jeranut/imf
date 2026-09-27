@@ -11,10 +11,12 @@
     <!-- ==========================================================================
          FORMAT PAPIER — A4 portrait, aucune bande d'en-tête/pied wkhtmltopdf (la mise
          en page est 100 % dans le template, via web.basic_layout).
-         Marges resserrées (13 mm côtés, 8/6 mm haut/bas) pour que le contrat complet
-         + le tableau de signatures tiennent sur UNE seule page : avant ce lot les
-         marges Word d'origine (~2 cm côtés) rejetaient le bloc signatures seul en
-         page 2 (page-break-inside:avoid sur .cc-nowrap-block, cf. template).
+         Marges resserrées (10 mm côtés, 8 mm haut/bas) et dpi 108 pour que le contrat
+         complet + le tableau de signatures tiennent sur UNE seule page, y compris avec
+         des noms/adresses longs et un garant (mesuré : >= 8 % de hauteur libre). dpi 108
+         plutôt qu'une police plus petite : wkhtmltopdf arrondit les tailles de police au
+         pixel entier (10 pt et 9,5 pt donnent le même rendu), le dpi réduit tout de façon
+         uniforme, sans palier.
          Paperformat DÉDIÉ (default=False, référencé uniquement par
          action_report_contrat_credit) — aucun impact sur les autres rapports du
          dépôt mutualisé (EAT/MIIA).
@@ -25,12 +27,12 @@
         <field name="format">A4</field>
         <field name="orientation">Portrait</field>
         <field name="margin_top">8</field>
-        <field name="margin_bottom">6</field>
-        <field name="margin_left">13</field>
-        <field name="margin_right">13</field>
+        <field name="margin_bottom">8</field>
+        <field name="margin_left">10</field>
+        <field name="margin_right">10</field>
         <field name="header_line" eval="False"/>
         <field name="header_spacing">0</field>
-        <field name="dpi">96</field>
+        <field name="dpi">108</field>
         <field name="disable_shrinking" eval="True"/>
     </record>
 
@@ -66,12 +68,17 @@
                     <style>
                         .contrat_credit {
                             font-family: 'Times New Roman', 'Liberation Serif', 'Nimbus Roman', serif;
-                            font-size: 11pt;
-                            line-height: 1.32;
+                            font-size: 10pt;
+                            line-height: 1.2;
                             color: #000000;
                             text-align: justify;
+                            /* Un contrat = une page. Le saut après est ignoré par wkhtmltopdf en fin
+                               de document (chaque contrat est un document distinct, cf.
+                               _prepare_html) : vérifié, aucune page blanche entre/après les contrats. */
+                            page-break-inside: avoid;
+                            page-break-after: always;
                         }
-                        .contrat_credit p { margin: 0 0 4pt 0; }
+                        .contrat_credit p { margin: 0 0 3pt 0; }
                         /* Ancien repère de calibrage jaune retiré (décision Micka) : ne reste
                            que le gras là où il était déjà appliqué. */
                         .contrat_credit .cc-hl { font-weight: bold; }
@@ -91,12 +98,12 @@
                            aucune ligne de signature n'est scindee, mais la grille suit le texte
                            sur la meme page. */
                         .contrat_credit table.cc-sign {
-                            width: 100%; border-collapse: collapse; margin-top: 12pt;
+                            width: 100%; border-collapse: collapse; margin-top: 8pt;
                             text-align: center; table-layout: fixed;
                         }
-                        .contrat_credit table.cc-sign tr { page-break-inside: avoid; }
+                        .contrat_credit table.cc-sign, .contrat_credit table.cc-sign tr { page-break-inside: avoid; }
                         .contrat_credit table.cc-sign td { border: 1px solid #000; padding: 3pt; }
-                        .contrat_credit table.cc-sign tr.cc-sign-blank td { height: 90px; }
+                        .contrat_credit table.cc-sign tr.cc-sign-blank td { height: 40px; }
                     </style>
 
                     <!-- ==================== EN-TÊTE : logo + infos agence ==================== -->
@@ -208,7 +215,7 @@
                     </p>
 
                     <p>
-                        Ny famerenam-bola dia isaky ny <b style="text-decoration:underline;">ALATSINAINY</b> maraina
+                        Ny famerenam-bola dia isaky ny <b style="text-decoration:underline;" t-esc="o.company_id.get_collection_day_label()"/> maraina
                         ao amin'ny masoivoho <span t-esc="o.company_id.street"/> nahazoana fampindramana.
                     </p>
 
