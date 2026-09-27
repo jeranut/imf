@@ -38,16 +38,15 @@ class MicrofinanceLoanPaymentWizard(models.TransientModel):
                 wizard.journal_id = journal
 
     def action_create_payment(self):
+        """Bloqué en défense en profondeur (AUDIT_anomalies_ampitatafika_ambanidia_20260921.md
+        §1), en plus du retrait du bouton d'ouverture côté fiche crédit
+        (action_open_payment_wizard) : ce wizard postait un microfinance.loan.payment sans
+        jamais créer de microfinance.caisse.mouvement ni exiger de session de caisse ouverte,
+        rendant le remboursement invisible du solde/ticket de session. Le modèle wizard reste en
+        place (Form() encore utilisé par tests/test_payment_prefill.py pour vérifier le
+        préremplissage montant/journal), seule sa validation est neutralisée."""
         self.ensure_one()
-        if self.amount <= 0:
-            raise UserError(_('Montant invalide.'))
-        payment = self.env['microfinance.loan.payment'].create({
-            'loan_id': self.loan_id.id,
-            'amount': self.amount,
-            'payment_date': self.payment_date,
-            'journal_id': self.journal_id.id,
-            'note': self.note,
-        })
-        if self.post_now:
-            payment.action_post()
-        return {'type': 'ir.actions.act_window', 'res_model': 'microfinance.loan.payment', 'res_id': payment.id, 'view_mode': 'form'}
+        raise UserError(_(
+            "Un remboursement de crédit ne peut plus être enregistré depuis cet assistant : "
+            "utilisez le Guichet Caisse (session de caisse ouverte), seul point d'entrée qui "
+            "trace l'opération dans le solde et le ticket de la session."))

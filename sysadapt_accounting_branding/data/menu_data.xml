@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        noupdate="0" : ces valeurs sont réappliquées à chaque -u de ce module.
+        Un -u de `account` ou `base_accounting_kit` réinitialise le nom et l'icône
+        du menu : relancer ensuite -u sysadapt_accounting_branding.
+        Seul le menu racine est touché ; le sous-menu « Invoicing/Facturation »
+        (account.account_invoicing_menu) est volontairement laissé tel quel.
+    -->
+    <data noupdate="0">
+        <record id="account.menu_finance" model="ir.ui.menu">
+            <field name="name">Comptabilité</field>
+            <field name="web_icon">sysadapt_accounting_branding,static/description/icon.png</field>
+        </record>
+
+        <!--
+            Le <record> ci-dessus n'écrit que la valeur en_US. Les traductions
+            fr_* (« Facturation ») ne sont pas écrasées par i18n/fr.po lors d'un -u
+            (sans l option i18n-overwrite) : on les réécrit ici. Une langue non installée
+            est ignorée sans erreur.
+        -->
+        <function model="ir.ui.menu" name="write" context="{'lang': 'fr_FR'}"
+                  eval="[[ref('account.menu_finance')], {'name': 'Comptabilité'}]"/>
+        <function model="ir.ui.menu" name="write" context="{'lang': 'fr_BE'}"
+                  eval="[[ref('account.menu_finance')], {'name': 'Comptabilité'}]"/>
+    </data>
+</odoo>

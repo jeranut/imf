@@ -10,9 +10,14 @@ export class MicrofinanceLoanDashboard extends Component {
     // setActiveTopic() ci-dessous (plus de chaine 'analyses' codee en dur pour decider qui a des
     // graphiques ApexCharts a detruire/remonter - hasCharts le porte explicitement, "fonds" en a
     // besoin depuis qu'il recoit les graphiques fonds bailleurs deplaces hors de "analyses").
+    // "portefeuille" est marque hidden : retire de la navigation interne du Tableau de bord
+    // (accès désormais uniquement via le menu Crédits > Mon portefeuille, action
+    // action_microfinance_agent_portfolio qui ouvre ce même composant avec le contexte
+    // {'dashboard_topic': 'portefeuille'}) mais reste un topic valide pour setActiveTopic()/le
+    // t-if de contenu - hidden ne fait que l'exclure de visibleTopics (nav), pas de TOPICS.
     static TOPICS = [
         { id: "apercu", label: "Vue d'ensemble", icon: "fa-tachometer" },
-        { id: "portefeuille", label: "Mon portefeuille", icon: "fa-briefcase", hasCharts: true },
+        { id: "portefeuille", label: "Mon portefeuille", icon: "fa-briefcase", hasCharts: true, hidden: true },
         { id: "analyses", label: "Analyses", icon: "fa-bar-chart", hasCharts: true },
         { id: "fonds", label: "Fonds bailleurs", icon: "fa-university", hasCharts: true },
         { id: "activite", label: "Activite recente", icon: "fa-history" },
@@ -24,6 +29,10 @@ export class MicrofinanceLoanDashboard extends Component {
         this.orm = useService("orm");
         this.actionService = useService("action");
         this.topics = MicrofinanceLoanDashboard.TOPICS;
+        // Liste utilisee par la nav (t-foreach) : exclut les topics hidden (cf. "portefeuille"
+        // ci-dessus), sans retirer leur entree de this.topics dont setActiveTopic()/onMounted()
+        // ont besoin pour l'ouverture directe via contexte dashboard_topic.
+        this.visibleTopics = this.topics.filter((t) => !t.hidden);
         // activeTopic : vrai systeme d'onglets (un seul topic rendu a la fois via t-if dans le
         // template, pas juste une ancre/scroll) - "apercu" (Vue d'ensemble) est le topic par
         // defaut au chargement.
@@ -51,6 +60,11 @@ export class MicrofinanceLoanDashboard extends Component {
                 table: { rows: [], total: 0, offset: 0 },
                 tableLoading: false,
                 search: "",
+                // Chantier décaissement provisoire : crédits activés pas encore libérés pour
+                // décaissement au guichet (get_agent_upcoming_disbursements), section
+                // "Décaissements à venir" - distincte de la table principale ci-dessus qui ne
+                // porte que sur le portefeuille déjà décaissé.
+                upcomingDisbursements: [],
             },
         });
         this.charts = [];
@@ -159,22 +173,29 @@ export class MicrofinanceLoanDashboard extends Component {
                 agent.loaded = true;
                 return;
             }
-            const [kpis, monthly, parList, cumulList, dueDates, history] = await Promise.all([
+            // get_par_buckets_by_agent + get_cumulative_par_by_agent fusionnés en un seul appel
+            // (perf portefeuille agent, sous-lot B, docs_dev/perf_portefeuille_agent/) : les deux
+            // recalculaient indépendamment le même _par_by_agent_raw() côté serveur.
+            // loadAgentTable(0) inclus dans ce même Promise.all (sous-lot D) : attendait
+            // auparavant la résolution des 6 autres appels avant de partir, un aller-retour
+            // réseau de plus que nécessaire à chaque chargement/changement d'agent.
+            const [kpis, monthly, parData, dueDates, history, upcoming] = await Promise.all([
                 this.orm.call("microfinance.loan", "get_agent_portfolio_kpis", [officerId]),
                 this.orm.call("microfinance.loan", "get_agent_monthly_kpis", [officerId]),
-                this.orm.call("microfinance.loan", "get_par_buckets_by_agent", [officerId]),
-                this.orm.call("microfinance.loan", "get_cumulative_par_by_agent", [officerId]),
+                this.orm.call("microfinance.loan", "get_par_data_by_agent", [officerId]),
                 this.orm.call("microfinance.loan", "get_agent_due_dates_panel", [officerId]),
                 this.orm.call("microfinance.loan", "get_par_history_by_agent", [officerId]),
+                this.orm.call("microfinance.loan", "get_agent_upcoming_disbursements", [officerId]),
+                this.loadAgentTable(0),
             ]);
             agent.kpis = kpis;
             agent.monthly = monthly;
-            agent.par = parList[0] || null;
-            agent.cumulPar = cumulList[0] || null;
+            agent.par = parData.buckets[0] || null;
+            agent.cumulPar = parData.cumulative[0] || null;
             agent.dueDates = dueDates;
             agent.history = history;
+            agent.upcomingDisbursements = upcoming;
             agent.loaded = true;
-            await this.loadAgentTable(0);
             // Re-rendu des graphiques de cet onglet avec les nouvelles séries.
             if (this.state.activeTopic === "portefeuille") {
                 this.shouldRenderCharts = true;
@@ -270,13 +291,8 @@ export class MicrofinanceLoanDashboard extends Component {
     openAgentShortcut(kind) {
         const officerId = this.state.agent.selectedOfficerId;
         if (kind === "new_client") {
-            this.actionService.doAction({
-                type: "ir.actions.act_window",
-                res_model: "res.partner",
-                name: "Nouveau client",
-                views: [[false, "form"]],
-                target: "current",
-                context: { default_microfinance_partner_type: "client" },
+            this.actionService.doAction("microfinance_loan_management.action_microfinance_client", {
+                viewType: "form",
             });
             return;
         }
@@ -411,17 +427,6 @@ export class MicrofinanceLoanDashboard extends Component {
         this.actionService.doAction("microfinance_loan_management.action_microfinance_installment");
     }
 
-    /**
-     * Réutilise action_open_payment_wizard (déjà en place côté microfinance.loan, avec son
-     * pré-remplissage montant/journal) plutôt que de reconstruire le contexte de l'assistant en
-     * JS : le bouton "Encaisser" du panneau "Échéances du jour" ouvre ainsi exactement le même
-     * assistant que le bouton équivalent sur la fiche crédit.
-     */
-    async openPaymentWizard(loanId) {
-        const action = await this.orm.call("microfinance.loan", "action_open_payment_wizard", [[loanId]]);
-        this.actionService.doAction(action);
-    }
-
     destroyCharts() {
         for (const chart of this.charts) {
             chart.destroy();
@@ -534,9 +539,10 @@ export class MicrofinanceLoanDashboard extends Component {
                 series: [
                     { name: "Contributions", data: data.fond_multi_chart.contributions },
                     { name: "Decaissements", data: data.fond_multi_chart.decaissements },
+                    { name: "Allocations", data: data.fond_multi_chart.allocations || [] },
                 ],
                 xaxis: { categories: data.fond_multi_chart.labels },
-                colors: ["#0891b2", "#2563eb"],
+                colors: ["#0891b2", "#2563eb", "#7c3aed"],
                 plotOptions: { bar: { borderRadius: 5, columnWidth: "55%" } },
                 dataLabels: { enabled: false },
                 grid: { borderColor: "#e2e8f0" },

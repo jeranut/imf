@@ -33,7 +33,7 @@
             <t t-else="">
             <div class="o_microfinance_dashboard__body">
                 <nav class="o_microfinance_dashboard__nav">
-                    <button t-foreach="topics" t-as="topic" t-key="topic.id" type="button"
+                    <button t-foreach="visibleTopics" t-as="topic" t-key="topic.id" type="button"
                             t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === topic.id ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
                             t-att-title="topic.label"
                             t-on-click="() => this.setActiveTopic(topic.id)">
@@ -281,6 +281,41 @@
 
                 <section class="o_microfinance_panel o_microfinance_panel--table">
                     <div class="o_microfinance_panel__title">
+                        <h2>Décaissements à venir</h2>
+                        <span class="o_microfinance_dashboard__hint">Crédits activés, en attente de libération vers la caisse (date de décaissement provisoire pas encore atteinte).</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle o_microfinance_table">
+                            <thead>
+                                <tr>
+                                    <th>Dossier</th>
+                                    <th>Client</th>
+                                    <th class="text-end">Montant</th>
+                                    <th>Date d'activation</th>
+                                    <th>Date de décaissement provisoire</th>
+                                    <th>Confirmée</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="state.agent.upcomingDisbursements" t-as="row" t-key="row.id"
+                                    class="o_microfinance_agent_table__row" t-on-click="() => this.openLoanRecord(row.id)">
+                                    <td t-esc="row.dossier"/>
+                                    <td t-esc="row.partner_name"/>
+                                    <td class="text-end" t-esc="formatMoney(row.amount)"/>
+                                    <td t-esc="formatDate(row.activation_date)"/>
+                                    <td t-esc="formatDate(row.disbursement_date_planned)"/>
+                                    <td><i t-attf-class="fa {{ row.disbursement_date_confirmed ? 'fa-check text-success' : 'fa-clock-o text-muted' }}"/></td>
+                                </tr>
+                                <tr t-if="!state.agent.upcomingDisbursements.length">
+                                    <td colspan="6" class="text-center text-muted py-4">Aucun décaissement à venir.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section class="o_microfinance_panel o_microfinance_panel--table">
+                    <div class="o_microfinance_panel__title">
                         <h2>Clients du portefeuille</h2>
                         <input type="text" class="form-control form-control-sm o_microfinance_agent_table__search"
                                placeholder="Rechercher un client ou un dossier..."
@@ -505,7 +540,6 @@
                                     <span t-esc="line.loan_name + ' - Echeance ' + line.sequence"/>
                                 </div>
                                 <div class="o_microfinance_activity_list__amount" t-esc="formatMoney(line.residual_amount)"/>
-                                <button type="button" class="btn btn-outline-primary btn-sm" t-on-click="() => this.openPaymentWizard(line.loan_id)">Encaisser</button>
                             </li>
                             <li t-if="!todayInstallments.length" class="o_microfinance_activity_list__empty">Aucune echeance aujourd'hui.</li>
                         </ul>

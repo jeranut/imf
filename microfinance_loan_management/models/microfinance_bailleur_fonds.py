@@ -5,6 +5,7 @@ from odoo import api, fields, models
 class MicrofinanceBailleurFonds(models.Model):
     _name = 'microfinance.bailleur.fonds'
     _description = 'Bailleur de fonds microfinance'
+    _inherit = ['microfinance.fond.parent.mixin']
     _order = 'name'
 
     partner_id = fields.Many2one(
@@ -24,6 +25,7 @@ class MicrofinanceBailleurFonds(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
+        self._check_parent_only()
         for vals in vals_list:
             if not vals.get('partner_id'):
                 # sudo() : la création du bailleur est ouverte à group_microfinance_manager
@@ -41,3 +43,11 @@ class MicrofinanceBailleurFonds(models.Model):
                 # mais le laisser si fourni ne pose pas de problème (super().create() écrira
                 # sur le related, donc sur le partner qu'on vient de créer avec le même nom).
         return super().create(vals_list)
+
+    def write(self, vals):
+        self._check_parent_only()
+        return super().write(vals)
+
+    def unlink(self):
+        self._check_parent_only()
+        return super().unlink()

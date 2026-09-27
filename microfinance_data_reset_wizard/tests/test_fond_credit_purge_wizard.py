@@ -1,0 +1,153 @@
+# -*- coding: utf-8 -*-
+from odoo.exceptions import UserError
+
+from .common import MicrofinanceDataResetCommon
+
+
+class TestMicrofinanceFondCreditPurgeWizard(MicrofinanceDataResetCommon):
+    """Toutes les exécutions "réelles" portent sur des agences de test isolées
+    (jamais self.env.company, cf. commentaire de TestMicrofinanceDataResetWizard) —
+    self.company_a est la société ciblée par la purge, self.company_b sert à vérifier
+    qu'une société HORS PÉRIMÈTRE n'est jamais touchée (exigence explicite de la
+    demande initiale)."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.PurgeWizard = cls.env['microfinance.fond.credit.purge.wizard'].sudo()
+        cls.bailleur = cls.env['microfinance.bailleur.fonds'].create({'name': 'Bailleur Test Purge'})
+
+    def setUp(self):
+        super().setUp()
+        self.company_a, self.product_a, _sp_a, _pj_a, self.partner_a = self._setup_second_company('PA')
+        self.company_b, self.product_b, _sp_b, _pj_b, self.partner_b = self._setup_second_company('PB')
+        self.account_a = self._create_liability_account(self.company_a, 'PAFONDGL')
+        self.account_b = self._create_liability_account(self.company_b, 'PBFONDGL')
+
+    def _create_liability_account(self, company, code):
+        return self.env['account.account'].create({
+            'name': 'Dette bailleur %s' % code, 'code': code,
+            'account_type': 'liability_current', 'company_id': company.id,
+        })
+
+    def _create_fond(self, company, account, **kwargs):
+        vals = {
+            'name': 'Fonds %s' % company.name,
+            'bailleur_id': self.bailleur.id,
+            'company_id': company.id,
+            'date_debut': '2020-01-01',
+            'account_id': account.id,
+            'passer_gl': False,  # pas d'écriture comptable à générer : hors périmètre de ce test
+        }
+        vals.update(kwargs)
+        return self.env['microfinance.fond.credit'].create(vals)
+
+    def _make_purge_wizard(self, companies, **kwargs):
+        vals = {'company_ids': [(6, 0, companies.ids)]}
+        vals.update(kwargs)
+        return self.PurgeWizard.create(vals)
+
+    # 1. Isolation : purge ciblant company_a ne touche jamais un fonds de company_b.
+    def test_purge_does_not_affect_out_of_scope_company(self):
+        fond_a = self._create_fond(self.company_a, self.account_a)
+        fond_b = self._create_fond(self.company_b, self.account_b)
+
+        wizard = self._make_purge_wizard(self.company_a)
+        self.env['ir.config_parameter'].sudo().set_param(
+            'microfinance.fond_credit_purge_apply', 'True')
+        wizard.i_confirm = True
+        wizard.confirm_text = 'SUPPRIMER'
+        wizard.action_run_execute()
+
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertFalse(fond_a.exists(), "Le fonds de la société ciblée doit être supprimé.")
+        self.assertTrue(fond_b.exists(), "Le fonds d'une société HORS PÉRIMÈTRE ne doit jamais être touché.")
+        self.assertEqual(fond_b.company_id, self.company_b)
+
+    # 2. Dry-run : rollback effectif, rien n'est supprimé (ni dans, ni hors périmètre).
+    def test_dry_run_rolls_back(self):
+        fond_a = self._create_fond(self.company_a, self.account_a)
+        wizard = self._make_purge_wizard(self.company_a)
+        wizard.action_run_dry_run()
+
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertTrue(fond_a.exists())
+        self.assertIn('fonds supprimé', wizard.log)
+
+    # 3. Exécution réelle refusée sans le paramètre système (dry-run par défaut).
+    def test_execute_blocked_without_system_parameter(self):
+        self._create_fond(self.company_a, self.account_a)
+        self.env['ir.config_parameter'].sudo().set_param('microfinance.fond_credit_purge_apply', 'False')
+        wizard = self._make_purge_wizard(self.company_a, i_confirm=True, confirm_text='SUPPRIMER')
+        with self.assertRaises(UserError):
+            wizard.action_run_execute()
+
+    # 4. Fonds bloqué par des contributions (ondelete='restrict') : purgé en cascade
+    #    avec le fonds, sans jamais toucher l'account.move déjà posté.
+    def test_purge_cascades_contributions_without_touching_posted_move(self):
+        fond_a = self._create_fond(self.company_a, self.account_a, passer_gl=True)
+        journal = self.env['account.journal'].create({
+            'name': 'Banque PA', 'code': 'PABQ', 'type': 'bank', 'company_id': self.company_a.id,
+            'default_account_id': self.account_a.id,
+        })
+        contribution = self.env['microfinance.fond.contribution'].create({
+            'fond_id': fond_a.id, 'type_mouvement': 'depot', 'amount': 1000.0,
+            'mode_paiement': 'virement', 'journal_id': journal.id,
+        })
+        contribution.action_post()
+        move = contribution.move_id
+        self.assertTrue(move and move.state == 'posted')
+
+        wizard = self._make_purge_wizard(self.company_a)
+        self.env['ir.config_parameter'].sudo().set_param('microfinance.fond_credit_purge_apply', 'True')
+        wizard.i_confirm = True
+        wizard.confirm_text = 'SUPPRIMER'
+        wizard.action_run_execute()
+
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertFalse(fond_a.exists())
+        self.assertFalse(contribution.exists())
+        self.assertTrue(move.exists(), "L'écriture comptable postée ne doit jamais être supprimée.")
+        self.assertEqual(move.state, 'posted')
+
+    # 5. Fonds référencé par un crédit non décaissé : bloqué par défaut (action 'stop').
+    def test_fund_with_non_disbursed_loan_blocked_by_default(self):
+        fond_a = self._create_fond(self.company_a, self.account_a)
+        loan = self.env['microfinance.loan'].create({
+            'partner_id': self.partner_a.id, 'product_id': self.product_a.id,
+            'company_id': self.company_a.id, 'loan_amount': 1000.0, 'term': 6,
+            'fond_credit_id': fond_a.id,
+        })
+        wizard = self._make_purge_wizard(self.company_a)
+        self.env['ir.config_parameter'].sudo().set_param('microfinance.fond_credit_purge_apply', 'True')
+        wizard.i_confirm = True
+        wizard.confirm_text = 'SUPPRIMER'
+        wizard.action_run_execute()
+
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertTrue(fond_a.exists(), "Un fonds référencé par un crédit non décaissé reste bloqué par défaut.")
+        self.assertTrue(loan.exists())
+        self.assertEqual(loan.fond_credit_id, fond_a)
+
+    # 6. Fonds référencé par un crédit décaissé : jamais touché, quelle que soit l'option.
+    def test_fund_with_disbursed_loan_never_purged(self):
+        fond_a = self._create_fond(self.company_a, self.account_a)
+        loan = self.env['microfinance.loan'].create({
+            'partner_id': self.partner_a.id, 'product_id': self.product_a.id,
+            'company_id': self.company_a.id, 'loan_amount': 1000.0, 'term': 6,
+            'fond_credit_id': fond_a.id,
+        })
+        # disbursement_date est readonly=True côté champ (jamais écrit hors action_disburse) :
+        # write direct légitime uniquement en test, pour simuler un crédit déjà décaissé sans
+        # dérouler tout le circuit d'approbation/activation, hors sujet ici.
+        loan.disbursement_date = '2024-01-01'
+
+        wizard = self._make_purge_wizard(self.company_a, blocking_loan_action='delete_test_loan')
+        self.env['ir.config_parameter'].sudo().set_param('microfinance.fond_credit_purge_apply', 'True')
+        wizard.i_confirm = True
+        wizard.confirm_text = 'SUPPRIMER'
+        wizard.action_run_execute()
+
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertTrue(fond_a.exists(), "Un fonds avec un crédit DÉCAISSÉ ne doit jamais être supprimé.")
+        self.assertTrue(loan.exists())

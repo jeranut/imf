@@ -28,9 +28,12 @@ from . import microfinance_geo_region
 from . import microfinance_geo_district
 from . import microfinance_geo_commune
 from . import microfinance_geo_fokontany
+from . import microfinance_fond_parent_mixin
 from . import microfinance_bailleur_fonds
 from . import microfinance_fond_credit
 from . import microfinance_fond_contribution
+from . import microfinance_fond_allocation
+from . import microfinance_fond_partage
 from . import microfinance_caisse_fiche_journee
 from . import microfinance_caisse_session
 from . import microfinance_caisse_denomination

@@ -117,7 +117,10 @@ class TestPartnerType(MicrofinanceCommon):
         }).partner_id
         client_partner = self.env['res.partner'].with_context(
             microfinance_context=True, default_microfinance_partner_type='client',
-        ).create({'name': 'Client Test Origine', 'microfinance_client_type': 'individual'})
+        ).create({
+            'name': 'Client Test Origine', 'microfinance_client_type': 'individual',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': '600000000003',
+        })
 
         self.assertEqual(agence_partner.microfinance_partner_type, 'agence')
         self.assertEqual(bailleur_partner.microfinance_partner_type, 'bailleur')

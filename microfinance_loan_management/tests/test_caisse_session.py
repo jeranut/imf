@@ -68,6 +68,49 @@ class TestCaisseSession(MicrofinanceCommon):
             session.action_open_session()
         self.assertEqual(session.state, 'draft')
 
+    def test_open_session_blocked_when_same_cashier_has_another_open_session(self):
+        # Reproduit AUDIT_anomalies_ampitatafika_ambanidia_20260921.md §2 (Ambanidia) : une
+        # session laissée ouverte (ici depuis avant-hier) puis une seconde ouverte sur le même
+        # journal, pour le même caissier -> c'est ce qui a fait basculer silencieusement le
+        # guichet OWL d'une session à l'autre (limit 1, order date desc), vidant le ticket.
+        stale = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.disbursement_journal.id,
+            'date': fields.Date.today() - timedelta(days=2),
+        })
+        stale.action_open_session()
+        session = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.disbursement_journal.id, 'date': fields.Date.today(),
+        })
+        with self.assertRaises(UserError):
+            session.action_open_session()
+        self.assertEqual(session.state, 'draft')
+        self.assertEqual(stale.state, 'open')
+
+    def test_open_session_allowed_for_a_different_cashier(self):
+        # Un autre caissier doit pouvoir ouvrir sa propre session, y compris sur le même
+        # journal (cas réel : une seule caisse par agence) tant que la date diffère de la
+        # session déjà ouverte par le premier caissier - le garde-fou est par caissier, pas
+        # par journal.
+        other_cashier = self.env['res.users'].create({
+            'name': 'Autre caissier (test)', 'login': 'autre_caissier_open_session_test',
+            'groups_id': [(6, 0, [
+                self.env.ref('base.group_user').id,
+                self.env.ref('microfinance_loan_management.group_microfinance_cashier').id,
+            ])],
+        })
+        first = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.disbursement_journal.id,
+            'date': fields.Date.today() - timedelta(days=2),
+        })
+        first.action_open_session()
+        second = self.env['microfinance.caisse.session'].create({
+            'journal_id': self.disbursement_journal.id, 'date': fields.Date.today(),
+            'cashier_id': other_cashier.id,
+        })
+        second.action_open_session()
+        self.assertEqual(first.state, 'open')
+        self.assertEqual(second.state, 'open')
+
     def test_close_session_closes_linked_fiche(self):
         today = fields.Date.today()
         session = self.env['microfinance.caisse.session'].create({

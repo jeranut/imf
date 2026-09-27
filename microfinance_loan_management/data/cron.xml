@@ -30,4 +30,14 @@
         <field name="numbercall">-1</field>
         <field name="active">False</field>
     </record>
+    <record id="ir_cron_microfinance_release_ready_disbursements" model="ir.cron">
+        <field name="name">Microfinance: libération quotidienne des décaissements provisoires atteints</field>
+        <field name="model_id" ref="model_microfinance_loan"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_release_ready_disbursements()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
 </odoo>

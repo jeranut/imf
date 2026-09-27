@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_account_form_inherit_savings" model="ir.ui.view">
+        <field name="name">microfinance.loan.account.form.inherit.savings</field>
+        <field name="model">microfinance.loan.account</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_account_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet/group[1]" position="before">
+                <div class="oe_button_box" name="button_box">
+                    <button name="action_view_savings_accounts" type="object" class="oe_stat_button" icon="fa-bank">
+                        <field name="savings_account_count" widget="statinfo" string="Épargne"/>
+                    </button>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>

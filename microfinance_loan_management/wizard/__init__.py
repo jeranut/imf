@@ -7,3 +7,4 @@ from . import microfinance_loan_contract_signature_wizard
 from . import microfinance_caisse_open_session_wizard
 from . import microfinance_caisse_close_session_wizard
 from . import account_move_line_writeoff_wizard_disbursement
+from . import microfinance_loan_activation_confirm_wizard

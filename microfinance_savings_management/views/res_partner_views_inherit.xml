@@ -5,6 +5,18 @@
         <field name="model">res.partner</field>
         <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_partner_form"/>
         <field name="arch" type="xml">
+            <!-- Investigation du 2026-09-24 (docs_dev/epargne_auto/AUDIT_doublons_creation_client.md
+                 §13, point 1) : microfinance_account_number (= N du conteneur crédit ET du
+                 conteneur épargne) n'était affiché NULLE PART sur la fiche client - seulement
+                 accessible en cliquant sur les boutons "Compte crédit"/"Épargne", qui n'affichent
+                 qu'un COMPTE, pas le numéro lui-même. C'est la cause du symptôme signalé par
+                 Micka ("aucun numéro n'apparaît"), pas un défaut d'attribution du numéro. -->
+            <xpath expr="//div[hasclass('oe_title')]/h1" position="after">
+                <div class="text-muted"
+                     invisible="not context.get('microfinance_context') or not microfinance_account_number">
+                    <field name="microfinance_account_number" readonly="1" nolabel="1"/>
+                </div>
+            </xpath>
             <xpath expr="//div[hasclass('oe_button_box')]" position="inside">
                 <button class="oe_stat_button" type="object" name="action_view_microfinance_savings" icon="fa-bank"
                     invisible="not context.get('microfinance_context')">

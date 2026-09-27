@@ -1,2 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_microfinance_data_reset_wizard_system,microfinance.data.reset.wizard.system,model_microfinance_data_reset_wizard,base.group_system,1,1,1,1
+access_microfinance_fond_credit_purge_wizard_manager,microfinance.fond.credit.purge.wizard.manager,model_microfinance_fond_credit_purge_wizard,microfinance_loan_management.group_microfinance_manager,1,1,1,1

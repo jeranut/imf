@@ -8,6 +8,11 @@ from odoo.exceptions import ValidationError
 # Paramètres) : pas de champ dupliqué par société, ne s'applique qu'aux nouveaux dossiers.
 MICROFINANCE_PRODUCT_POLICY_PARAM = 'microfinance_loan_management.microfinance_product_policy'
 
+# États d'un crédit « en cours » au sens du blocage inter-agences (un client ne peut pas être
+# créé ni obtenir de crédit dans une agence tant qu'il en a un dans une autre). 'active' inclut
+# le crédit activé mais pas encore décaissé ; 'approved' et 'written_off' sont exclus.
+ACTIVE_LOAN_STATES = ('active', 'defaulted')
+
 
 class ResPartner(models.Model):
     _inherit = 'res.partner'
@@ -91,6 +96,41 @@ class ResPartner(models.Model):
         for partner in self:
             if not partner.company_id:
                 raise ValidationError(_('La société (agence) est obligatoire pour un client microfinance.'))
+
+    @api.constrains('microfinance_partner_type', 'microfinance_client_type', 'is_company',
+                    'microfinance_id_type', 'microfinance_id_number')
+    def _check_microfinance_cin_required(self):
+        # Uniquement pour un client particulier : un garant, un conjoint ou une société partagent
+        # le même bloc identité sans être clients. Nécessaire au blocage inter-agences, qui
+        # identifie un client par son CIN. Lit toujours la valeur stockée sur le record (jamais
+        # vals) : le N° CIN saisi (microfinance_id_number_display) y est ramené avant la
+        # validation par _microfinance_fold_id_number_display().
+        if not self.env.context.get('microfinance_context'):
+            return
+        for partner in self:
+            if (partner.microfinance_partner_type != 'client' or partner.is_company
+                    or partner.microfinance_client_type != 'individual'):
+                continue
+            number = partner.microfinance_id_number or ''
+            if partner.microfinance_id_type in ('passport', 'other'):
+                if not number.strip():
+                    raise ValidationError(_("Le numéro de la pièce d'identité est obligatoire pour un client particulier."))
+            elif not re.sub(r'\D', '', number):
+                raise ValidationError(_('Le numéro de CIN est obligatoire pour un client particulier.'))
+
+    @api.model
+    def _microfinance_fold_id_number_display(self, vals, id_type):
+        """Remplace « N° CIN » (microfinance_id_number_display, calculé non stocké) par le champ
+        stocké microfinance_id_number dans vals, avec la même normalisation que son inverse
+        (chiffres seuls pour un CIN, valeur brute sinon).
+
+        Odoo valide les contraintes des champs stockés AVANT d'exécuter l'inverse d'un champ non
+        stocké (models.py write/_create) : sans ce repli, la contrainte de CIN obligatoire voit
+        un numéro encore vide au moment où l'agent vient de le saisir."""
+        if 'microfinance_id_number_display' not in vals:
+            return
+        value = vals.pop('microfinance_id_number_display') or ''
+        vals['microfinance_id_number'] = re.sub(r'\D', '', value) if id_type == 'cin' else value
 
     # --- Numéro de compte client (permanent) ---
     # Attribué une seule fois, à la création de la fiche, dès que ce contact est reconnu comme
@@ -373,12 +413,47 @@ class ResPartner(models.Model):
             'sticky': False,
         })
 
+    @api.model
+    def _check_no_active_loan_elsewhere(self, cin, company_id):
+        """Bloque si un client de même CIN a un crédit en cours (ACTIVE_LOAN_STATES) dans une
+        autre agence que company_id. Point de vérité unique du blocage inter-agences.
+
+        Limite connue et acceptée : aucun verrou inter-agences, deux agences qui décaissent au
+        même instant pour un même CIN peuvent passer toutes les deux."""
+        digits = re.sub(r'\D', '', cin or '')
+        if not digits:
+            return
+        # sudo() limité à cette recherche : la règle multi-société masque les autres agences.
+        other_loans = self.env['microfinance.loan'].sudo().search([
+            ('company_id', '!=', company_id),
+            ('state', 'in', ACTIVE_LOAN_STATES),
+            ('partner_id.microfinance_id_type', '=', 'cin'),
+            ('partner_id.microfinance_id_number', '!=', False),
+        ]).filtered(
+            lambda loan: re.sub(r'\D', '', loan.partner_id.microfinance_id_number or '') == digits
+        )
+        if not other_loans:
+            return
+        agencies = sorted(set(other_loans.mapped('company_id.name')))
+        raise ValidationError(_(
+            "Ce client a un crédit en cours dans une autre agence : %s. Il doit d'abord solder "
+            "son crédit, puis demander un transfert de compte vers cette agence."
+        ) % ', '.join(agencies))
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
             # Jamais saisi manuellement, même à la création : uniquement attribué par
             # _assign_microfinance_account_number() ci-dessus, sur la base de la séquence dédiée.
             vals.pop('microfinance_account_number', None)
+            self._microfinance_fold_id_number_display(vals, vals.get('microfinance_id_type'))
+            if self.env.context.get('microfinance_context') and vals.get('microfinance_id_type') == 'cin':
+                # Avant super().create() : évite de consommer un numéro de compte permanent
+                # (séquence non transactionnelle) pour un client finalement refusé.
+                self._check_no_active_loan_elsewhere(
+                    vals.get('microfinance_id_number') or vals.get('microfinance_id_number_display'),
+                    vals.get('company_id') or self.env.company.id,
+                )
         partners = super().create(vals_list)
         for partner in partners:
             if partner.microfinance_partner_type == 'client':
@@ -394,6 +469,10 @@ class ResPartner(models.Model):
                     partner._get_or_create_microfinance_loan_account()
         return partners
 
+    _MICROFINANCE_CIN_GUARD_FIELDS = {
+        'microfinance_id_type', 'microfinance_id_number', 'microfinance_id_number_display', 'company_id',
+    }
+
     def write(self, vals):
         if 'microfinance_account_number' in vals and not self.env.context.get(
             'microfinance_allow_account_number_write'
@@ -402,6 +481,26 @@ class ResPartner(models.Model):
                 'Le numéro de compte client est permanent : il ne peut jamais être modifié '
                 'manuellement.'
             ))
+        if 'microfinance_id_number_display' in vals:
+            if 'microfinance_id_type' not in vals and len(set(self.mapped('microfinance_id_type'))) > 1:
+                # Types de pièce différents : la normalisation dépend de chaque fiche.
+                for partner in self:
+                    partner.write(dict(vals))
+                return True
+            vals = dict(vals)
+            self._microfinance_fold_id_number_display(
+                vals, vals.get('microfinance_id_type', self[:1].microfinance_id_type))
+        if self.env.context.get('microfinance_context') and self._MICROFINANCE_CIN_GUARD_FIELDS & set(vals):
+            for partner in self:
+                id_type = vals.get('microfinance_id_type', partner.microfinance_id_type)
+                if id_type != 'cin':
+                    continue
+                if 'microfinance_id_number' in vals or 'microfinance_id_number_display' in vals:
+                    cin = vals.get('microfinance_id_number') or vals.get('microfinance_id_number_display')
+                else:
+                    cin = partner.microfinance_id_number
+                self._check_no_active_loan_elsewhere(
+                    cin, vals.get('company_id') or partner.company_id.id or self.env.company.id)
         result = super().write(vals)
         if self.env.context.get('microfinance_context') and 'microfinance_selected_product_id' in vals:
             for partner in self:

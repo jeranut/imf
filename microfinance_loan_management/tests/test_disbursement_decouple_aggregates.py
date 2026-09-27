@@ -117,7 +117,9 @@ class TestDecoupleFondTotals(_NoFundMixin, MicrofinanceCommon):
         # action_activate() (via _check_fond_disponibilite) l'exige.
         loan = self._approve_loan(loan_amount=2000.0, term=4)
         loan.fond_credit_id = fond.id
-        loan.action_activate()
+        # action_activate() ouvre désormais un wizard de confirmation (chantier décaissement
+        # provisoire) - _activate_with_auto_confirm() reste le chemin direct pour les tests.
+        loan._activate_with_auto_confirm()
         self.assertFalse(loan.disbursement_date)
 
         fond.invalidate_recordset(['total_decaisse'])

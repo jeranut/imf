@@ -30,6 +30,7 @@ class TestApplicationKycSync(MicrofinanceCommon):
         cls.client_partner = cls.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test KYC',
             'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin',
             'microfinance_id_number': '555666777888',
             'microfinance_id_issue_date': '2020-01-15',
             'microfinance_id_issue_place': 'Antananarivo',

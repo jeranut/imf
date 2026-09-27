@@ -15,6 +15,12 @@
                             <field name="microfinance_product_policy" widget="radio"/>
                         </setting>
                     </block>
+                    <block title="Fonds bailleurs" id="microfinance_parent_company_settings">
+                        <setting string="Société mère"
+                            help="Seule cette société peut configurer les bailleurs de fonds et les fonds de crédit, saisir les contributions et partager un fonds entre les agences (elle-même incluse). Sans société mère, aucune restriction n'est appliquée.">
+                            <field name="microfinance_parent_company_id" options="{'no_create': True, 'no_open': True}"/>
+                        </setting>
+                    </block>
                 </app>
             </xpath>
         </field>

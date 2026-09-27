@@ -7,6 +7,7 @@ from . import microfinance_savings_transaction
 from . import microfinance_caisse_mouvement
 from . import microfinance_loan_product_extension
 from . import microfinance_loan_extension
+from . import microfinance_loan_account_extension
 from . import microfinance_loan_application_extension
 from . import microfinance_loan_payment_extension
 from . import microfinance_dashboard_extension

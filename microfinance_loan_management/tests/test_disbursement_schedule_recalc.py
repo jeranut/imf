@@ -9,8 +9,10 @@ from .common import MicrofinanceCommon
 
 class TestDisbursementScheduleRecalc(MicrofinanceCommon):
     """Sous-lot B du découplage activation / décaissement (docs_dev/guichet_caisse/
-    AUDIT_decaissement.md) : à l'activation l'échéancier reste ancré sur approval_date ;
-    au décaissement effectif il est recalé sur disbursement_date."""
+    AUDIT_decaissement.md), mis à jour pour le chantier décaissement provisoire
+    (docs_dev/decaissement_provisoire/) : à l'activation l'échéancier est désormais recalé sur
+    disbursement_date_planned (plus sur l'ancienne approval_date, potentiellement obsolète) ;
+    au décaissement effectif il est de nouveau recalé, cette fois sur disbursement_date."""
 
     def setUp(self):
         super().setUp()
@@ -34,9 +36,19 @@ class TestDisbursementScheduleRecalc(MicrofinanceCommon):
         old_principal = sum(old.mapped('principal_amount'))
         self.assertEqual(old_first_due, past + delta)
 
-        loan.action_activate()
-        # Après activation seulement : échéancier encore inchangé (toujours ancré sur le passé).
-        self.assertEqual(loan.installment_ids.sorted('sequence')[0].due_date, old_first_due)
+        # Date provisoire attendue, calculée AVANT activation (pure fonction de
+        # repayment_frequency_id + date du jour, cf. _compute_disbursement_date_planned_default) :
+        # sert de référence pour vérifier que l'activation recale bien dessus, plus sur
+        # l'ancienne approval_date figée dans le passé.
+        expected_planned = loan._compute_disbursement_date_planned_default()
+        # action_activate() ouvre désormais un wizard de confirmation (chantier décaissement
+        # provisoire) - _activate_with_auto_confirm() reste le chemin direct pour les tests.
+        loan._activate_with_auto_confirm()
+        # Après activation : échéancier recalé sur disbursement_date_planned (chantier
+        # décaissement provisoire), plus sur l'ancienne approval_date figée dans le passé.
+        self.assertEqual(loan.disbursement_date_planned, expected_planned)
+        self.assertEqual(loan.installment_ids.sorted('sequence')[0].due_date, expected_planned + delta)
+        self.assertNotEqual(loan.installment_ids.sorted('sequence')[0].due_date, old_first_due)
         self.assertFalse(loan.disbursement_date)
 
         loan.action_process_disbursement()
@@ -59,7 +71,9 @@ class TestDisbursementScheduleRecalc(MicrofinanceCommon):
             for i in loan.installment_ids.sorted('sequence')
         ]
 
-        loan.action_activate()
+        # action_activate() ouvre désormais un wizard de confirmation (chantier décaissement
+        # provisoire) - _activate_with_auto_confirm() reste le chemin direct pour les tests.
+        loan._activate_with_auto_confirm()
         loan.action_process_disbursement()
 
         after = [

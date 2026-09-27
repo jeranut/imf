@@ -29,4 +29,29 @@
         <field name="domain_force">['|', ('company_id', 'in', company_ids), ('company_id', '=', False)]</field>
         <field name="groups" eval="[]"/>
     </record>
+
+    <!-- microfinance.fond.allocation : cloisonnement strict par agence (pas de clause OR) : chaque
+         agence ne voit que sa propre part des fonds partagés. Création/modification réservées au
+         partage (contexte technique, cf. models/microfinance_fond_allocation.py). -->
+    <record id="microfinance_fond_allocation_company_rule" model="ir.rule">
+        <field name="name">Microfinance allocation de fonds : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_fond_allocation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <!-- Partage : visible seulement de la société qui l'a établi (la mère) ; les agences ne voient
+         que leur allocation. Les lignes suivent l'en-tête. -->
+    <record id="microfinance_fond_partage_company_rule" model="ir.rule">
+        <field name="name">Microfinance partage de fonds : société mère uniquement</field>
+        <field name="model_id" ref="model_microfinance_fond_partage"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+    <record id="microfinance_fond_partage_line_company_rule" model="ir.rule">
+        <field name="name">Microfinance parts de partage de fonds : société mère uniquement</field>
+        <field name="model_id" ref="model_microfinance_fond_partage_line"/>
+        <field name="domain_force">[('partage_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
 </odoo>

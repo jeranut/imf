@@ -55,3 +55,17 @@ class SavingsCommon(MicrofinanceCommon):
             account._create_transaction('deposit', opening_amount)
         account.action_activate()
         return account
+
+    def _create_context_client(self, cin, **kwargs):
+        """Client créé COMME DEPUIS L'INTERFACE (microfinance_context=True) : c'est ce contexte
+        qui déclenche la création du conteneur épargne (AGENCE/I/N) en même temps que le
+        conteneur crédit (AGENCE/N), à l'enregistrement de la fiche - cf. res_partner.py
+        (microfinance_savings_management). CIN unique exigé par la garde inter-agences du module
+        crédit."""
+        vals = {
+            'name': 'Client Contexte Test %s' % cin, 'microfinance_partner_type': 'client',
+            'microfinance_client_type': 'individual',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': cin,
+        }
+        vals.update(kwargs)
+        return self.env['res.partner'].with_context(microfinance_context=True).create(vals)

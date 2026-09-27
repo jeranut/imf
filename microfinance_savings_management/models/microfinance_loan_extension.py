@@ -276,20 +276,3 @@ class MicrofinanceLoan(models.Model):
             except Exception:
                 _logger.exception('Échec du prélèvement automatique sur épargne pour le crédit %s', loan.name)
 
-    @api.model_create_multi
-    def create(self, vals_list):
-        # Conteneur épargne (Lot 1.4, docs_dev/epargne_exigee_display/
-        # AUDIT_LOT0_conteneur_epargne.md) : créé au 1er crédit, symétrique du conteneur crédit
-        # (microfinance.loan.account, microfinance_loan_management). Ne peut pas être ajouté
-        # dans microfinance_loan.py (microfinance_loan_management) : ce module ne connaît pas
-        # microfinance.savings.account, la dépendance va dans l'autre sens - d'où cet override
-        # ici, dans le module qui étend déjà microfinance.loan. super().create() applique
-        # d'abord toute la logique déjà en place côté crédit (numéro permanent, conteneur
-        # crédit), avant que cet override n'ajoute le conteneur épargne pour chaque partenaire
-        # concerné - idempotent (_get_or_create_microfinance_savings_container), donc sans
-        # risque sur un 2ème crédit du même client.
-        loans = super().create(vals_list)
-        for partner in loans.mapped('partner_id'):
-            partner._get_or_create_microfinance_savings_container()
-        return loans
-        return True

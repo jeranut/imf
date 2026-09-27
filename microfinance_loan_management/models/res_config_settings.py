@@ -17,3 +17,11 @@ class ResConfigSettings(models.TransientModel):
              "nouveaux dossiers : les dossiers et crédits déjà créés sous l'ancienne "
              "politique ne sont jamais affectés rétroactivement.",
     )
+
+    microfinance_parent_company_id = fields.Many2one(
+        'res.company', string='Société mère (fonds bailleurs)',
+        config_parameter='microfinance.parent_company_id',
+        help="Société qui configure seule les bailleurs et les fonds de crédit, et les partage "
+             "entre les agences (elle-même incluse). Tant qu'aucune société mère n'est "
+             "désignée, le fonctionnement des fonds reste celui d'origine (aucune restriction).",
+    )

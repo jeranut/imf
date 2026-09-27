@@ -91,11 +91,19 @@ class MicrofinanceCaisseSession(models.Model):
         - modèle non référencé statiquement ici pour ne pas créer de dépendance manifeste
         inversée, cf. AUDIT_session_zigzag). Chaque mouvement est retracé jusqu'à l'écriture
         qu'il a réellement posée (transaction épargne, remboursement, décaissement, frais) :
-        pas de nouvelle écriture recréée ici, on relit ce qui a déjà été comptabilisé."""
+        pas de nouvelle écriture recréée ici, on relit ce qui a déjà été comptabilisé.
+
+        Les mouvements 'frais_dossier' sont retournés séparément (fee_moves) : leur écriture
+        est postée sur product_id.fee_journal_id, un journal/compte configuré par produit et
+        par agence (pas le journal de caisse de la session), qui ne coïncide avec aucun compte
+        caisse aujourd'hui mais n'a aucune garantie structurelle de le rester (cf.
+        AUDIT_solde_caisse_frais_dossier) - _compute_theoretical_balance ne peut donc pas se
+        fier au filtre account_id pour ce type, et doit les compter par mouvement.amount."""
         self.ensure_one()
         moves = self.env['account.move']
+        fee_moves = self.env['account.move']
         if 'mouvement_ids' not in self._fields:
-            return moves
+            return moves, fee_moves
         for mouvement in self.mouvement_ids:
             if mouvement.type in ('depot_epargne', 'retrait_epargne'):
                 move = mouvement.savings_transaction_id.move_id
@@ -105,11 +113,14 @@ class MicrofinanceCaisseSession(models.Model):
                 move = mouvement.loan_id.disbursement_move_id
             elif mouvement.type == 'frais_dossier':
                 move = mouvement.fee_move_id
+                if move:
+                    fee_moves |= move
+                continue
             else:
                 move = self.env['account.move']
             if move:
                 moves |= move
-        return moves
+        return moves, fee_moves
 
     @api.depends('opening_balance', 'journal_id.default_account_id', 'state')
     def _compute_theoretical_balance(self):
@@ -118,13 +129,44 @@ class MicrofinanceCaisseSession(models.Model):
             if session.state == 'draft' or not account:
                 session.theoretical_balance = session.opening_balance
                 continue
+            moves, fee_moves = session._get_session_moves()
             # Un décaissement réglé par chèque/virement (journal 'bank') poste sur le compte de
             # ce journal, pas sur le compte caisse (account) : filtrer sur account_id exclut
             # naturellement ces mouvements du solde ESPÈCES théorique, sans avoir à retracer le
-            # moyen de paiement choisi au guichet (cf. register_operation, Sous-lot D).
-            lines = session._get_session_moves().line_ids.filtered(lambda l: l.account_id == account)
-            net = sum(lines.mapped('debit')) - sum(lines.mapped('credit'))
-            session.theoretical_balance = session.opening_balance + net
+            # moyen de paiement choisi au guichet (cf. register_operation, Sous-lot D). Les
+            # écritures de frais_dossier (fee_moves) sont explicitement exclues de ce filtre,
+            # même si leur compte venait à coïncider avec account : elles sont comptées à part
+            # ci-dessous (net_fees), jamais via account.move.line, pour éviter tout double
+            # comptage en cas de coïncidence de compte.
+            lines = moves.line_ids.filtered(lambda l: l.account_id == account and l.move_id not in fee_moves)
+            net_cash = sum(lines.mapped('debit')) - sum(lines.mapped('credit'))
+            fee_mouvements = session.mouvement_ids.filtered(lambda m: m.type == 'frais_dossier')
+            net_fees = sum(fee_mouvements.mapped('amount'))
+            session.theoretical_balance = session.opening_balance + net_cash + net_fees
+
+    def _check_cashier_has_no_other_open_session(self, cashier_id, exclude_session_id=False):
+        """Un même caissier ne peut pas avoir deux sessions 'open' en parallèle (même sur des
+        journaux ou des dates différents) : c'est ce qui a permis le bug AUDIT_anomalies_
+        ampitatafika_ambanidia_20260921.md §2 (Ambanidia) - une session laissée ouverte au-delà
+        d'un jour, plus une seconde ouverte ensuite sur le même journal, ont fait basculer
+        silencieusement le guichet OWL d'une session à l'autre (limit 1, order date desc) sans
+        que le caissier s'en aperçoive, vidant le ticket affiché. Appelée uniquement ici
+        (action_open_session, point de passage unique : le wizard d'ouverture termine toujours
+        par session.action_open_session()) plutôt que dupliquée côté wizard, pour ne pas risquer
+        de bloquer à tort la réouverture idempotente de la session du jour déjà 'open'."""
+        domain = [('cashier_id', '=', cashier_id), ('state', '=', 'open')]
+        if exclude_session_id:
+            domain.append(('id', '!=', exclude_session_id))
+        other = self.search(domain, limit=1)
+        if other:
+            raise UserError(_(
+                "%(cashier)s a déjà une session de caisse ouverte (%(journal)s, %(date)s) : "
+                "clôturez-la avant d'en ouvrir une nouvelle."
+            ) % {
+                'cashier': other.cashier_id.name,
+                'journal': other.journal_id.name,
+                'date': other.date,
+            })
 
     def action_open_session(self):
         for session in self:
@@ -132,6 +174,8 @@ class MicrofinanceCaisseSession(models.Model):
                 continue
             if session.state == 'closed':
                 raise UserError(_('Cette session est déjà clôturée.'))
+            session._check_cashier_has_no_other_open_session(
+                session.cashier_id.id, exclude_session_id=session.id)
             fiche = self.env['microfinance.caisse.fiche.journee'].search([
                 ('journal_id', '=', session.journal_id.id),
                 ('date', '=', session.date),

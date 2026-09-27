@@ -43,6 +43,16 @@ Réservé aux administrateurs techniques (base.group_system) — outil
 d'administration technique, pas un outil métier accessible aux gestionnaires
 microfinance. Toujours faire un backup complet avant toute exécution réelle :
 action irréversible.
+
+Inclut un second wizard, indépendant, de purge des fonds de crédit rotatif
+(microfinance.fond.credit) — contributions, allocations et partages
+associés supprimés avec le fonds (contraintes FK ondelete='restrict'), les
+écritures comptables déjà postées étant toujours conservées. Réservé au
+groupe métier group_microfinance_manager (pas group_system) : DRY-RUN par
+défaut, verrouillé en plus par le paramètre système
+microfinance.fond_credit_purge_apply (à activer explicitement pour une
+exécution réelle). Cf. docs_dev/fond_credit/AUDIT_suppression_fonds.md du
+module microfinance_loan_management.
     """,
     'author': 'Micka',
     'license': 'LGPL-3',
@@ -59,6 +69,7 @@ action irréversible.
     'data': [
         'security/ir.model.access.csv',
         'wizard/microfinance_data_reset_wizard_views.xml',
+        'wizard/microfinance_fond_credit_purge_wizard_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

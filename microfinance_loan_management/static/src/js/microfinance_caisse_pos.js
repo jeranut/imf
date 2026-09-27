@@ -176,7 +176,7 @@ export class MicrofinanceCaissePos extends Component {
         const companyId = this.state.session.company_id[0];
         this.state.listLoading = true;
         try {
-            const [disbursements, installments, fees, journals] = await Promise.all([
+            const [disbursements, installments, fees, journals, companies] = await Promise.all([
                 this.orm.call("microfinance.loan", "get_pending_disbursements", [companyId]),
                 this.orm.call("microfinance.loan.installment", "get_pending_or_late", [companyId]),
                 this.orm.call("microfinance.loan", "get_pending_fees", [companyId]),
@@ -185,11 +185,20 @@ export class MicrofinanceCaissePos extends Component {
                     [["type", "in", ["bank", "cash"]], ["company_id", "=", companyId]],
                     ["id", "name", "code", "type"]
                 ),
+                this.orm.read("res.company", [companyId], ["disbursement_journal_ids"]),
             ]);
             this.state.pendingDisbursements = disbursements;
             this.state.pendingInstallments = installments;
             this.state.pendingFees = fees;
-            this.state.availableJournals = journals;
+            // Restreint aux journaux explicitement autorisés au décaissement par l'agence
+            // (company.disbursement_journal_ids) quand cette liste est configurée, en plus du
+            // filtre type/société déjà appliqué côté serveur ci-dessus : évite de proposer des
+            // journaux sans rapport avec le crédit (ex. Épargne, Banque-Épargne). Liste vide =
+            // agence pas encore configurée -> aucun filtre supplémentaire (rétrocompatibilité).
+            const allowedJournalIds = companies[0]?.disbursement_journal_ids || [];
+            this.state.availableJournals = allowedJournalIds.length
+                ? journals.filter((journal) => allowedJournalIds.includes(journal.id))
+                : journals;
         } finally {
             this.state.listLoading = false;
         }

@@ -1,8 +1,32 @@
 # -*- coding: utf-8 -*-
+import logging
+
 from dateutil.relativedelta import relativedelta
 
-from odoo import api, fields, models, _
+from odoo import api, fields, models, tools, _
 from odoo.exceptions import UserError, ValidationError
+
+_logger = logging.getLogger(__name__)
+
+# Le conteneur épargne partage désormais l'espace de noms AGENCE/I/N avec les comptes épargne
+# réels de type volontaire, mais avec le MÊME N que le conteneur crédit (microfinance.loan.account,
+# lui-même = res.partner.microfinance_account_number) - jamais une séquence propre. Créé en
+# premier, à l'enregistrement du client (cf. res_partner.py._get_or_create_microfinance_savings_
+# container, appelée depuis create()), ce qui réserve mécaniquement ce nom - correctif du
+# 2026-09-24, abroge l'« Option A » (conteneur AGENCE/IC/<...>, docs_dev/epargne_auto/
+# AUDIT_doublons_creation_client.md §11-12).
+#
+# Option B (§15 du même rapport) : le dry-run sur MOWGLI a montré que réserver le N du client
+# SANS aligner la séquence des comptes réels de type I laisse un risque de collision durable
+# (compteur COMPTES et séquence .I dérivant indépendamment l'un de l'autre au fil du temps -
+# écart mesuré de 105 sur l'agence IS). _get_savings_sequence_code ci-dessous fusionne donc les
+# deux compteurs : un compte réel de type I tire désormais son numéro de LA MÊME séquence
+# ir.sequence que le numéro de compte permanent du client (code 'microfinance.partner.account',
+# microfinance_loan_management/models/res_partner.py) - aucun fichier du module crédit modifié,
+# la fusion se fait uniquement en réutilisant le même code de séquence depuis ce module-ci. G et
+# T (garantie, dépôt à terme) restent sur leur séquence propre : aucun conteneur ne les utilise.
+CONTAINER_UNIQUE_INDEX = 'microfinance_savings_account_container_uniq_idx'
+SHARED_ACCOUNT_NUMBER_SEQUENCE_CODE = 'microfinance.partner.account'
 
 
 class MicrofinanceSavingsAccount(models.Model):
@@ -13,18 +37,22 @@ class MicrofinanceSavingsAccount(models.Model):
 
     name = fields.Char(string='Référence', default='Nouveau', copy=False, readonly=True, tracking=True)
     partner_id = fields.Many2one('res.partner', string='Titulaire', required=True, tracking=True)
-    # Conteneur épargne (Lot 1.2, docs_dev/epargne_exigee_display/AUDIT_LOT0_conteneur_epargne.md)
-    # : un enregistrement strictement vide (pas de produit, jamais de solde/transaction),
-    # symétrique de microfinance.loan.account côté crédit - un par client, créé automatiquement
-    # au 1er crédit (Lot 1.4, pas encore implémenté à ce stade). product_id n'est donc plus
-    # `required=True` au niveau champ (un conteneur n'en a pas) : la contrainte devient
-    # conditionnelle, cf. _check_product_required_unless_container ci-dessous.
+    # Conteneur épargne (docs_dev/epargne_auto/AUDIT_doublons_creation_client.md) : un
+    # enregistrement strictement vide (pas de produit, jamais de solde/transaction), symétrique
+    # de microfinance.loan.account côté crédit - un SEUL par client et par société, créé en
+    # même temps que le conteneur crédit, à l'enregistrement du client
+    # (res_partner.py._get_or_create_microfinance_savings_container, appelée depuis create()) -
+    # plus jamais au 1er crédit. product_id n'est donc pas `required=True` au niveau champ (un
+    # conteneur n'en a pas) : la contrainte devient conditionnelle, cf.
+    # _check_product_required_unless_container ci-dessous.
     is_container = fields.Boolean(
         string='Conteneur (sans produit)', default=False, copy=False, readonly=True,
-        help="Coché uniquement pour l'enregistrement conteneur créé automatiquement par client "
-             "(référence de base synchronisée avec le compte crédit) - jamais de produit, de "
-             "solde, ni de transaction. Les comptes épargne réels du client sont rattachés en "
-             "dessous dans la référence (séquence par type), pas sur ce champ.",
+        help="Coché uniquement pour l'enregistrement conteneur créé automatiquement à "
+             "l'enregistrement du client (référence AGENCE/I/N, où N est le même numéro que le "
+             "compte crédit du client) - jamais de produit, de solde, ni de transaction. C'est "
+             "le seul compte épargne créé automatiquement pour un client : tout autre compte "
+             "épargne réel du client (is_container=False) est créé manuellement, sur sa propre "
+             "numérotation AGENCE/I/NNNNNN partagée entre clients.",
     )
     product_id = fields.Many2one('microfinance.savings.product', string="Produit d'épargne", tracking=True)
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True, tracking=True)
@@ -46,6 +74,9 @@ class MicrofinanceSavingsAccount(models.Model):
     transaction_ids = fields.One2many('microfinance.savings.transaction', 'account_id', string='Transactions')
     transaction_count = fields.Integer(string='Nombre de transactions', compute='_compute_counts')
     loan_count = fields.Integer(compute='_compute_loan_count')
+    loan_account_id = fields.Many2one(
+        'microfinance.loan.account', string='Compte crédit', compute='_compute_loan_account_id',
+    )
     last_transaction_date = fields.Date(string='Dernière transaction', compute='_compute_last_transaction_date', store=True)
     is_dormant = fields.Boolean(compute='_compute_is_dormant', string='Éligible dormance')
     closure_reason_type = fields.Selection([
@@ -69,6 +100,35 @@ class MicrofinanceSavingsAccount(models.Model):
     def _get_account_type_code(self, product):
         return self._PRODUCT_TYPE_CODE.get(product.product_type, 'I')
 
+    def init(self):
+        """Un seul conteneur épargne par client et par société (index unique PARTIEL : les
+        comptes réels, eux, peuvent légitimement être multiples pour un même client). Posé
+        seulement si la base ne contient aucun doublon de conteneur : sinon on journalise les
+        cas et on ne pose rien - un CREATE UNIQUE INDEX échouerait et bloquerait la mise à
+        jour du module. Sans état dans le filtre : un conteneur ne peut être ni activé ni
+        clôturé (cf. action_activate / action_close), l'état ne peut donc pas l'écarter."""
+        super().init()
+        cr = self.env.cr
+        if tools.index_exists(cr, CONTAINER_UNIQUE_INDEX):
+            return
+        cr.execute("""
+            SELECT partner_id, company_id, array_agg(id ORDER BY id)
+              FROM microfinance_savings_account
+             WHERE is_container
+             GROUP BY partner_id, company_id
+            HAVING count(*) > 1
+        """)
+        duplicates = cr.fetchall()
+        if duplicates:
+            _logger.warning(
+                "Index unique des conteneurs épargne NON posé : %d client(s)/société(s) ont "
+                "plusieurs conteneurs (partner_id, company_id, ids) : %s. À fusionner avant de "
+                "relancer la mise à jour du module.", len(duplicates), duplicates)
+            return
+        cr.execute(
+            "CREATE UNIQUE INDEX %s ON microfinance_savings_account (partner_id, company_id) "
+            "WHERE is_container" % CONTAINER_UNIQUE_INDEX)
+
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
@@ -85,40 +145,69 @@ class MicrofinanceSavingsAccount(models.Model):
                     vals['name'] = self._get_savings_account_name(company, type_code)
         return super().create(vals_list)
 
+    def _get_container_target_name(self, company, partner):
+        """Nom cible du conteneur épargne : ``<code agence>/I/<N>``, où N est le suffixe de
+        ``res.partner.microfinance_account_number`` - le MÊME N que le conteneur crédit
+        (microfinance.loan.account, dont le nom est directement copié de ce champ). Ne consomme
+        AUCUNE séquence propre : le nom est purement dérivé du numéro de compte permanent du
+        client, déjà attribué à ce stade (res_partner.py._assign_microfinance_account_number,
+        appelée avant la création du conteneur épargne dans le create() de res.partner).
+
+        Renvoie False si le client n'a pas encore de numéro de compte permanent pour cette
+        société (ne devrait pas arriver dans le flux normal : réservé aux appels directs hors
+        create(), ex. migration sur une donnée incomplète)."""
+        if not partner.microfinance_account_number or '/' not in partner.microfinance_account_number:
+            return False
+        return '%s/I/%s' % (company.agency_code, partner.microfinance_account_number.rsplit('/', 1)[1])
+
     def _get_savings_container_name(self, company, partner):
-        """Conteneur épargne (Lot 1.4, docs_dev/epargne_exigee_display/
-        AUDIT_LOT0_conteneur_epargne.md) : réutilise directement le numéro de compte permanent
-        du client, préfixé 'I' (AGENCE/I/SUFFIXE) - même procédé que microfinance.loan.account.
-        _get_loan_account_name() côté crédit (microfinance_loan_management), à qui ce numéro
-        doit rester synchronisé (même suffixe numérique). Repli sur la séquence indépendante du
-        type 'I' (comme un compte réel classique) si le client n'a pas encore de numéro
-        permanent - résiduel après le Lot 1.1 (tout partenaire empruntant en obtient un dès son
-        1er crédit, avant l'appel à cette méthode)."""
-        if partner.microfinance_account_number:
-            agency, suffix = partner.microfinance_account_number.split('/', 1)
-            candidate = '%s/I/%s' % (agency, suffix)
-            if not self.search_count([('name', '=', candidate)]):
-                return candidate
-        return self._get_next_available_savings_account_name(company, 'I')
+        """Conteneur épargne : AGENCE/I/N, N = numéro de compte permanent du client (cf.
+        _get_container_target_name). Aucun repli silencieux ni suffixe automatique : si le nom
+        cible existe déjà ou ne peut pas être dérivé, on lève une erreur explicite plutôt que de
+        désynchroniser le conteneur du compte crédit - même principe que pour le compte crédit
+        lui-même (microfinance.loan.account._get_loan_account_name)."""
+        name = self._get_container_target_name(company, partner)
+        if not name:
+            raise ValidationError(_(
+                "Impossible de nommer le conteneur épargne de %(partner)s (société %(company)s) : "
+                "aucun numéro de compte permanent disponible pour cette société - le compte "
+                "crédit conteneur doit être créé avant le conteneur épargne."
+            ) % {'partner': partner.display_name, 'company': company.display_name})
+        # sudo() limité à ce comptage : l'unicité du nom ne doit pas dépendre des règles
+        # d'accès de l'utilisateur courant (le nom porte le code agence, mais un compte d'une
+        # autre société pourrait être masqué).
+        if self.sudo().search_count([('name', '=', name)]):
+            raise ValidationError(_(
+                "Le nom de conteneur épargne « %(name)s » existe déjà : impossible de créer le "
+                "conteneur de %(partner)s sans risquer une désynchronisation avec son compte "
+                "crédit. Vérifiez les comptes épargne existants avant de relancer."
+            ) % {'name': name, 'partner': partner.display_name})
+        return name
 
     def _get_savings_account_name(self, company, type_code):
         """Tout compte épargne réel - le premier d'un type donné pour un client comme les
-        suivants - tire désormais son numéro de la séquence partagée par type
-        (AGENCE/TYPE/NNNNNN, indépendante par type_code, partagée entre tous les clients de
-        l'agence), plus jamais du numéro de compte permanent du client.
-
-        Changement de comportement assumé (Lot 1.3, docs_dev/epargne_exigee_display/
-        AUDIT_LOT0_conteneur_epargne.md, validé par Micka le 31/08/2026) : avant ce Lot, le 1er
-        compte d'un type donné reprenait directement ce numéro (IS/000001 -> IS/I/000001,
-        cf. historique dans test_savings_account_number_derivation.py, réécrit en conséquence).
-        Le numéro de compte permanent devient exclusivement réservé au conteneur épargne (Lot
-        1.4, pas encore implémenté à ce stade - aucune dépendance technique entre les deux
-        méthodes ici)."""
+        suivants - tire son numéro de la séquence partagée par type (AGENCE/TYPE/NNNNNN,
+        indépendante par type_code, partagée entre tous les clients de l'agence), plus jamais du
+        numéro de compte permanent du client : ce numéro est réservé au conteneur épargne
+        (AGENCE/I/N, cf. _get_savings_container_name), créé EN PREMIER à l'enregistrement du
+        client. _get_next_available_savings_account_name (ci-dessous) saute tout nom déjà pris,
+        donc un compte réel de type I ne peut jamais revenir sur le nom du conteneur d'un client
+        (le sien ou celui d'un autre) - les trous que cela crée dans la séquence .I sont
+        acceptés (cf. docs_dev/epargne_auto/AUDIT_doublons_creation_client.md)."""
         return self._get_next_available_savings_account_name(company, type_code)
+
+    def _get_savings_sequence_code(self, type_code):
+        """Code de séquence ir.sequence pour un type de compte réel. Type 'I' (volontaire) :
+        fusionné avec le compteur du numéro de compte permanent du client (cf. commentaire
+        d'en-tête, Option B) - c'est le même espace de noms que le conteneur épargne
+        (AGENCE/I/N). G et T gardent leur séquence dédiée, indépendante par société."""
+        if type_code == 'I':
+            return SHARED_ACCOUNT_NUMBER_SEQUENCE_CODE
+        return 'microfinance.savings.account.%s' % type_code
 
     def _get_next_available_savings_account_name(self, company, type_code):
         while True:
-            number = company._get_or_create_numbering_sequence('microfinance.savings.account.%s' % type_code)
+            number = company._get_or_create_numbering_sequence(self._get_savings_sequence_code(type_code))
             candidate = '%s/%s/%s' % (company.agency_code, type_code, number)
             if not self.search_count([('name', '=', candidate)]):
                 return candidate
@@ -164,6 +253,25 @@ class MicrofinanceSavingsAccount(models.Model):
     def _compute_loan_count(self):
         for account in self:
             account.loan_count = len(account.partner_id.microfinance_loan_ids)
+
+    @api.depends('partner_id')
+    def _compute_loan_account_id(self):
+        for account in self:
+            account.loan_account_id = self.env['microfinance.loan.account'].search(
+                [('partner_id', '=', account.partner_id.id)], limit=1
+            ) if account.partner_id else False
+
+    def action_view_loan_account(self):
+        self.ensure_one()
+        if not self.loan_account_id:
+            return False
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Compte crédit'),
+            'res_model': 'microfinance.loan.account',
+            'view_mode': 'form',
+            'res_id': self.loan_account_id.id,
+        }
 
     def action_view_loans(self):
         self.ensure_one()

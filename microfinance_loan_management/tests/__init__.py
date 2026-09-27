@@ -76,3 +76,6 @@ from . import test_caisse_open_wizard
 from . import test_caisse_session_security
 from . import test_agent_portfolio_dashboard
 from . import test_res_company_ecart_caisse_accounts
+from . import test_client_blocage_inter_agences
+from . import test_fond_partage
+from . import test_disbursement_planned_date

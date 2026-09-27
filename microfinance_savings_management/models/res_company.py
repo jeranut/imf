@@ -24,12 +24,14 @@ class ResCompany(models.Model):
     microfinance_savings_default_product_id = fields.Many2one(
         'microfinance.savings.product', string="Produit d'épargne par défaut",
         domain="[('company_id', '=', id), ('product_type', '=', 'voluntary')]",
-        help="Produit utilisé pour ouvrir automatiquement le compte d'épargne principal d'un "
-             "client à la création de son premier dossier d'instruction de crédit (cf. "
-             "res.partner._get_or_create_microfinance_savings_principal_account(), module "
-             "Gestion de l'épargne). Symétrique à microfinance_fond_credit_default_id (crédit). "
-             "Si laissé vide, aucun compte n'est ouvert automatiquement — l'agence n'a "
-             "simplement pas encore configuré de produit d'épargne par défaut.",
+        help="Non consommé automatiquement depuis le 2026-09-24 (correctif numérotation, "
+             "docs_dev/epargne_auto/AUDIT_doublons_creation_client.md §13) : l'ouverture "
+             "automatique d'un compte épargne réel sur ce produit à la création de la fiche "
+             "client a été supprimée. Le seul compte épargne créé automatiquement est "
+             "désormais le conteneur (AGENCE/I/N, même numéro que le compte crédit), qui "
+             "n'utilise aucun produit. Ce champ reste configurable mais n'a plus d'effet "
+             "avant qu'un usage manuel (choix par défaut à la création d'un compte épargne "
+             "supplémentaire) ne lui soit redonné.",
     )
 
     def _compute_savings_product_code_locked(self):

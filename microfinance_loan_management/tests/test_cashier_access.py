@@ -19,10 +19,17 @@ class TestCashierAccess(MicrofinanceNoFundMixin, MicrofinanceCommon):
             ])],
         })
 
-    def test_cashier_can_prefill_payment_form_from_loan(self):
+    def test_cashier_cannot_create_payment_form_from_loan(self):
+        # Rendu obsolète par AUDIT_anomalies_ampitatafika_ambanidia_20260921.md §3 : un caissier
+        # pouvait auparavant enregistrer un remboursement en dehors de toute session de caisse
+        # via ce formulaire (bouton "Enregistrer remboursement"/menu "Analyse paiements"), sans
+        # jamais créer de microfinance.caisse.mouvement, donc invisible du solde/ticket de
+        # session. group_microfinance_cashier n'a plus create/write sur ce modèle
+        # (ir.model.access.csv) : seul le guichet caisse (sudo scopé, cf.
+        # microfinance_caisse_mouvement.py) peut encore créer un remboursement pour ce rôle.
         loan = self._activate_loan(loan_amount=900.0, term=3)
         cashier = self._cashier_user()
-        with Form(self.env['microfinance.loan.payment'].with_user(cashier)) as payment_form:
-            payment_form.loan_id = loan
-        payment = payment_form.save()
-        self.assertEqual(payment.journal_id, self.product.payment_journal_id)
+        with self.assertRaises(AccessError):
+            with Form(self.env['microfinance.loan.payment'].with_user(cashier)) as payment_form:
+                payment_form.loan_id = loan
+            payment_form.save()

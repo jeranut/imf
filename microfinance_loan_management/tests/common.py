@@ -157,9 +157,17 @@ class MicrofinanceCommon(TransactionCase):
         """Crédit 'active' mais PAS encore décaissé (disbursement_date vide) — état transitoire
         introduit par le découplage activation / décaissement (docs_dev/guichet_caisse/
         AUDIT_decaissement.md). Pour les tests qui vérifient explicitement ce cas ; ne pas
-        détourner _activate_loan, qui doit continuer à produire un crédit réellement décaissé."""
+        détourner _activate_loan, qui doit continuer à produire un crédit réellement décaissé.
+
+        Depuis le chantier décaissement provisoire (docs_dev/decaissement_provisoire/),
+        action_activate() n'active plus directement : elle ouvre un wizard de confirmation
+        (microfinance.loan.activation.confirm.wizard). Ce helper utilise donc
+        _activate_with_auto_confirm() - le chemin direct sans wizard, qui auto-confirme la date
+        provisoire ET marque le crédit immédiatement libéré pour décaissement
+        (disbursement_release_ready=True), pour ne rien changer au comportement observable par
+        la quasi-totalité de la suite de tests (qui ne teste pas le wizard lui-même)."""
         loan = self._approve_loan(**kwargs)
-        loan.action_activate()
+        loan._activate_with_auto_confirm()
         return loan
 
     def _activate_loan(self, **kwargs):

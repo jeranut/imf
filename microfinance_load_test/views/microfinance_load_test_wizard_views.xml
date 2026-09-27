@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_load_test_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.load.test.wizard.form</field>
+        <field name="model">microfinance.load.test.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Load test">
+                <div class="alert alert-danger" role="alert">
+                    Ne jamais utiliser sur une instance de production : génère des clients et
+                    crédits factices qui polluent la base et les statistiques métier.
+                </div>
+                <group>
+                    <field name="product_id"/>
+                    <field name="count"/>
+                </group>
+                <footer>
+                    <button name="action_generate" type="object" string="Générer" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_load_test_wizard" model="ir.actions.act_window">
+        <field name="name">Load test</field>
+        <field name="res_model">microfinance.load.test.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_microfinance_load_test_root" name="Outils de test" sequence="100"
+              groups="microfinance_load_test.group_microfinance_load_test"/>
+    <menuitem id="menu_microfinance_load_test_wizard" name="Load test"
+              parent="menu_microfinance_load_test_root"
+              action="action_microfinance_load_test_wizard" sequence="10"/>
+</odoo>

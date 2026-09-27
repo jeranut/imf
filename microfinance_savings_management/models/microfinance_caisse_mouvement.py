@@ -117,7 +117,13 @@ class MicrofinanceCaisseMouvement(models.Model):
             loan = self.env['microfinance.loan'].browse(loan_id)
             if loan.company_id != session.company_id:
                 raise UserError(_("Ce crédit n'appartient pas à l'agence de la session en cours."))
-            payment = self.env['microfinance.loan.payment'].create({
+            # sudo() : depuis AUDIT_anomalies_ampitatafika_ambanidia_20260921.md §3,
+            # group_microfinance_cashier n'a plus create/write sur microfinance.loan.payment
+            # (correctif du bouton "Enregistrer remboursement"/menu "Analyse paiements" hors
+            # guichet). Le guichet reste le seul chemin de création : sudo scopé à cette seule
+            # création, après la re-vérification d'agence ci-dessus, sur le même modèle de
+            # "sudo strictement circonscrit à ce point d'entrée" que _run_posting_sudo.
+            payment = self.env['microfinance.loan.payment'].sudo().create({
                 'loan_id': loan.id,
                 'amount': amount,
                 'journal_id': session.journal_id.id,
@@ -285,7 +291,9 @@ class MicrofinanceCaisseMouvement(models.Model):
         if loan.company_id != session.company_id:
             raise UserError(_("Ce crédit n'appartient pas à l'agence de la session en cours."))
 
-        payment = self.env['microfinance.loan.payment'].create({
+        # sudo() : voir le commentaire équivalent dans register_operation() (branche
+        # remboursement_credit) - même raison, même garde d'agence déjà faite ci-dessus.
+        payment = self.env['microfinance.loan.payment'].sudo().create({
             'loan_id': loan.id,
             'amount': loan_amount,
             'journal_id': session.journal_id.id,

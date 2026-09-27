@@ -134,3 +134,79 @@ class TestCaisseSessionTheoreticalBalance(SavingsCommon):
     # Récapitulatif -> Écart) est testé end-to-end dans test_caisse_close_wizard_confirm.py :
     # theoretical_total n'existe plus sur le wizard de comptage (temps 1) et n'est calculé
     # qu'à la confirmation du récapitulatif (temps 2 -> 3), cf. AUDIT_session_close_3temps.
+
+    # --- frais_dossier : compté par mouvement.amount, jamais par account.move.line (cf.
+    # AUDIT_solde_caisse_frais_dossier) - product.fee_journal_id est un compte configuré par
+    # produit/agence (131001, 100002...), distinct du compte caisse de la session
+    # (session.journal_id.default_account_id) dans les 4 agences vérifiées aujourd'hui, mais
+    # sans aucune garantie structurelle que ça reste vrai (nouveau produit, reconfiguration).
+
+    def _setup_fee_product(self, fee_amount=30.0, fee_journal=None):
+        receivable = self.env['account.account'].create({
+            'name': 'Frais à recevoir théorique test', 'code': 'TFEERCTHEO',
+            'account_type': 'asset_current', 'reconcile': True, 'company_id': self.env.company.id,
+        })
+        od_journal = self.env['account.journal'].create({
+            'name': 'OD frais théorique test', 'code': 'TODFTHEO', 'type': 'general',
+            'company_id': self.env.company.id,
+        })
+        self.product.write({
+            'fee_type': 'fixed', 'fee_amount': fee_amount, 'fee_charged_before_disbursement': True,
+            'account_commission_credit_id': self.savings_fee_account.id,
+            'account_fee_receivable_id': receivable.id,
+            'fee_journal_id': (fee_journal or self.savings_deposit_journal).id,
+            'fee_engagement_journal_id': od_journal.id,
+        })
+        return receivable
+
+    def test_theoretical_balance_counts_frais_dossier_on_distinct_fee_account(self):
+        # product.fee_journal_id pointe vers un compte DIFFÉRENT du compte caisse de la
+        # session (reproduit la configuration réelle des 4 agences provisionnées) : avant
+        # correctif, le filtre account.move.line de _compute_theoretical_balance exclut
+        # structurellement cette écriture -> theoretical_balance resterait à 0.0 au lieu du
+        # montant du frais encaissé. Ce test doit échouer sur le code non corrigé.
+        fee_account = self.env['account.account'].create({
+            'name': 'Frais dossier compte distinct test', 'code': 'TFEEDISTACC',
+            'account_type': 'income_other', 'company_id': self.env.company.id,
+        })
+        fee_journal = self.env['account.journal'].create({
+            'name': 'Frais dossier journal distinct test', 'code': 'TFEEDISTJ', 'type': 'cash',
+            'company_id': self.env.company.id, 'default_account_id': fee_account.id,
+        })
+        self.assertNotEqual(fee_account.id, self.bank_account.id)
+        self._setup_fee_product(fee_amount=30.0, fee_journal=fee_journal)
+        loan = self._approve_loan_not_disbursed(loan_amount=1000.0, term=3)
+        loan.action_send_fee_to_cashier()
+        session = self._open_session()  # journal_id = self.disbursement_journal (compte self.bank_account)
+        self.env['microfinance.caisse.mouvement'].register_operation(
+            session.id, 'frais_dossier', self.partner.id, 0.0, False, loan.id,
+        )
+        session.invalidate_recordset(['theoretical_balance'])
+        self.assertAlmostEqual(session.theoretical_balance, 30.0, places=2)
+
+    def test_theoretical_balance_frais_dossier_not_double_counted_when_accounts_coincide(self):
+        # Simule la coïncidence (product.fee_journal_id.default_account_id ==
+        # session.journal_id.default_account_id) qui n'existe pas aujourd'hui sur les 4
+        # agences provisionnées mais n'est garantie par rien : le frais doit rester compté
+        # UNE SEULE FOIS (via mouvement.amount), pas une deuxième fois via account.move.line
+        # simplement parce que son écriture tombe sur le même compte que le dépôt épargne.
+        fee_journal = self.disbursement_journal  # default_account_id = self.bank_account, comme la session
+        self.assertEqual(fee_journal.default_account_id, self.bank_account)
+        self._setup_fee_product(fee_amount=30.0, fee_journal=fee_journal)
+        loan = self._approve_loan_not_disbursed(loan_amount=1000.0, term=3)
+        loan.action_send_fee_to_cashier()
+
+        account = self._create_active_account(opening_amount=0.0)
+        session = self._open_session()  # même compte caisse (self.bank_account) que fee_journal
+        self.env['microfinance.caisse.mouvement'].register_operation(
+            session.id, 'depot_epargne', self.partner.id, 300.0, account.id, False,
+        )
+        self.env['microfinance.caisse.mouvement'].register_operation(
+            session.id, 'frais_dossier', self.partner.id, 0.0, False, loan.id,
+        )
+        session.invalidate_recordset(['theoretical_balance'])
+        # 300 (dépôt épargne, compté via account.move.line) + 30 (frais, compté via
+        # mouvement.amount) = 330 ; PAS 360 (double comptage du frais si son écriture,
+        # postée sur le même compte que le dépôt, n'était pas explicitement exclue du
+        # filtre account.move.line).
+        self.assertAlmostEqual(session.theoretical_balance, 330.0, places=2)

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import psycopg2
+
 from odoo import _, api, fields, models
 
 
@@ -16,95 +18,62 @@ class ResPartner(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        # Ouverture du compte épargne principal dès la création du contact client — seul
-        # déclencheur désormais (cf. correctif numérotation, décision validée par Micka :
-        # l'ancien déclencheur au 1er dossier de crédit, _get_or_create_loan_application, est
-        # supprimé). Un client déjà en base avant ce correctif et qui n'a pas encore de compte
-        # épargne n'en obtiendra plus automatiquement, même en visant un crédit plus tard —
-        # nécessiterait un script de rattrapage séparé, non demandé à ce stade.
+        # Ouverture du conteneur épargne (couple avec le conteneur crédit, même N) dès la
+        # création du contact client — SEUL compte épargne créé automatiquement (correctif du
+        # 2026-09-24, docs_dev/epargne_auto/AUDIT_doublons_creation_client.md §13 : abroge
+        # l'« Option A » du 21/09 où un « compte principal » réel coexistait avec un conteneur
+        # créé plus tard, au 1er crédit — cf. microfinance_loan_extension.py, où cette création
+        # a été retirée). Un client déjà en base avant ce correctif et qui n'a pas encore de
+        # conteneur n'en obtient pas automatiquement rétroactivement : cf. migration dédiée
+        # (container_migration.py).
         # super().create() remonte jusqu'à res_partner.py (microfinance_loan_management), qui
-        # attribue microfinance_account_number avant de revenir ici — condition nécessaire pour
-        # que la dérivation du numéro de compte épargne (AGENCE/TYPE/NNNNNN) fonctionne.
+        # attribue microfinance_account_number ET crée le conteneur crédit (microfinance.loan.
+        # account) avant de revenir ici — condition nécessaire pour que le conteneur épargne
+        # puisse reprendre le même N (cf. microfinance_savings_account.py._get_container_target_
+        # name). Ordre garanti par les dépendances de module (microfinance_savings_management
+        # dépend de microfinance_loan_management, donc chargé après : son create() encadre celui
+        # de loan_management, qui s'exécute avant que ce code ne reprenne la main).
         partners = super().create(vals_list)
         if self.env.context.get('microfinance_context'):
             for partner in partners:
                 if partner.microfinance_partner_type == 'client':
-                    partner._get_or_create_microfinance_savings_principal_account()
+                    partner._get_or_create_microfinance_savings_container()
         return partners
 
-    def _get_or_create_microfinance_savings_principal_account(self):
-        """Ouvre (ou réutilise) le compte d'épargne principal du client sur le produit
-        d'épargne par défaut de son agence (res.company.microfinance_savings_default_product_id),
-        appelée depuis create() ci-dessus. Idempotent : sans effet si un compte sur ce produit
-        existe déjà pour ce client.
-
-        Sans effet non plus si l'agence n'a pas encore configuré de produit d'épargne par défaut
-        — choix délibéré, pas une erreur : Micka n'a pas demandé de bloquer la création du client
-        dans ce cas, le comportement reste best-effort, jamais bloquant. En revanche une
-        notification alerte l'utilisateur dans ce cas précis (demande explicite de Micka,
-        2026-08-15) : silencieux en base ne doit pas dire invisible côté agent, sinon l'absence
-        de compte épargne passe inaperçue jusqu'à ce qu'un agent la découvre par hasard."""
-        self.ensure_one()
-        company = self.company_id or self.env.company
-        product = company.microfinance_savings_default_product_id
-        if not product:
-            self._notify_microfinance_savings_default_product_missing(company)
-            return False
-        Account = self.env['microfinance.savings.account']
-        existing = Account.search([
-            ('partner_id', '=', self.id), ('product_id', '=', product.id),
-        ], limit=1)
-        if existing:
-            return existing
-        return Account.create({
-            'partner_id': self.id,
-            'product_id': product.id,
-            'company_id': company.id,
-        })
-
     def _get_or_create_microfinance_savings_container(self):
-        """Ouvre (ou réutilise) le conteneur épargne de ce client pour sa société - appelée
-        depuis microfinance.loan.create() (microfinance_loan_extension.py), au 1er crédit,
-        symétrique de res.partner._get_or_create_microfinance_loan_account() (microfinance_
-        loan_management) côté crédit. Idempotent par recherche préalable (pas de contrainte SQL
-        dédiée comme côté crédit - microfinance.savings.account joue un double rôle, conteneur
-        ET compte réel, une contrainte unique(partner_id, company_id) plate casserait les
-        comptes réels multiples déjà supportés ; une contrainte partielle - WHERE is_container -
-        demanderait une migration SQL hors du patron déjà utilisé dans ce module, jugée
-        disproportionnée ici, cf. docs_dev/epargne_exigee_display/
-        AUDIT_LOT0_conteneur_epargne.md). Distinct du "compte principal"
-        (_get_or_create_microfinance_savings_principal_account ci-dessus, déclenché à la
-        création du client, un vrai compte sur le produit par défaut de l'agence) : les deux
-        coexistent (décision Micka, Option A), aucune dépendance entre eux."""
+        """Ouvre (ou réutilise) l'UNIQUE conteneur épargne de ce client pour sa société - appelée
+        depuis create() ci-dessus, à l'enregistrement du client, symétrique de res.partner.
+        _get_or_create_microfinance_loan_account() (microfinance_loan_management) côté crédit,
+        avec lequel il partage son N. RÈGLE : un conteneur par client ET par société (pas par
+        crédit ni par produit) - même cardinalité que le compte crédit
+        (unique(partner_id, company_id)).
+
+        C'est désormais le SEUL compte épargne créé automatiquement : il n'y a plus de « compte
+        principal » distinct (abrogé, cf. create() ci-dessus). Tout compte épargne réel
+        supplémentaire reste une création manuelle (bouton « Épargne » du crédit, menu Épargne).
+
+        Idempotent à deux niveaux : recherche préalable (sudo() limité à cette recherche, pour
+        ne pas dépendre des règles d'accès) puis index unique partiel en base
+        (microfinance_savings_account_container_uniq_idx) qui couvre deux créations concurrentes."""
         self.ensure_one()
         company = self.company_id or self.env.company
         Account = self.env['microfinance.savings.account']
-        existing = Account.search([
-            ('partner_id', '=', self.id), ('company_id', '=', company.id), ('is_container', '=', True),
-        ], limit=1)
+        domain = [('partner_id', '=', self.id), ('company_id', '=', company.id), ('is_container', '=', True)]
+        existing = Account.sudo().search(domain, limit=1)
         if existing:
-            return existing
-        return Account.create({
-            'partner_id': self.id, 'company_id': company.id, 'is_container': True,
-        })
-
-    def _notify_microfinance_savings_default_product_missing(self, company):
-        self.ensure_one()
-        message = _(
-            "Aucun compte épargne n'a été ouvert pour %(partner)s : l'agence « %(company)s » "
-            "n'a pas encore de produit d'épargne par défaut configuré.\n\n"
-            "Pour corriger : Réglages → Utilisateurs & Sociétés → Sociétés → %(company)s, "
-            "renseigner le champ « Produit d'épargne par défaut » (accès manager crédit "
-            "requis). Les prochains clients de cette agence auront alors leur compte ouvert "
-            "automatiquement — ce client-ci devra être traité manuellement si un compte est "
-            "nécessaire dès maintenant."
-        ) % {'partner': self.name, 'company': company.name}
-        self.env['bus.bus']._sendone(self.env.user.partner_id, 'simple_notification', {
-            'type': 'warning',
-            'title': _('Compte épargne non ouvert'),
-            'message': message,
-            'sticky': True,
-        })
+            return Account.browse(existing.id)
+        try:
+            with self.env.cr.savepoint():
+                return Account.create({
+                    'partner_id': self.id, 'company_id': company.id, 'is_container': True,
+                })
+        except psycopg2.IntegrityError:
+            # Course avec une création concurrente : l'index unique a refusé la nôtre, on
+            # réutilise celle qui a gagné.
+            existing = Account.sudo().search(domain, limit=1)
+            if existing:
+                return Account.browse(existing.id)
+            raise
 
     def action_view_microfinance_savings(self):
         self.ensure_one()

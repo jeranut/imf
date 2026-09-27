@@ -2,22 +2,21 @@
 <odoo>
 
     <record id="paperformat_carnet_remboursement" model="report.paperformat">
-        <field name="name">CEFOR Carnet Remboursement (Paysage)</field>
+        <field name="name">CEFOR Carnet Remboursement (A4 Paysage)</field>
         <field name="default" eval="False"/>
-        <field name="format">custom</field>
-        <!-- Pas de champ orientation ici : avec format=custom, _build_wkhtmltopdf_args()
-             passe les options wkhtmltopdf de largeur/hauteur de page telles quelles (odoo/
-             addons/base/models/ir_actions_report.py), puis ajouterait l'option d'orientation
-             landscape par-dessus, ce qui fait PIVOTER une seconde fois le rectangle déjà
-             couché (297x150) et produit une page portrait (constaté : 425x842pt au lieu de
-             842x425pt). page_width/page_height ci-dessous encodent déjà la forme paysage
-             voulue, sans qu'il soit besoin d'une orientation explicite. -->
-        <field name="page_width">297</field>
-        <field name="page_height">150</field>
+        <!-- Format standard A4 + orientation Landscape (et non custom 297x150 comme avant) : avec
+             format=custom, Odoo passe la largeur/hauteur telles quelles puis ajoute
+             l'option d'orientation, ce qui pivote deux fois le rectangle. Un carnet = une page A4
+             paysage (297 x 210 mm), recto seul. Ce paperformat n'est utilisé que par l'action
+             du carnet : le modifier n'affecte aucun autre rapport. -->
+        <field name="format">A4</field>
+        <field name="orientation">Landscape</field>
+        <field name="page_width">0</field>
+        <field name="page_height">0</field>
         <field name="margin_top">8</field>
-        <field name="margin_bottom">6</field>
-        <field name="margin_left">6</field>
-        <field name="margin_right">6</field>
+        <field name="margin_bottom">8</field>
+        <field name="margin_left">8</field>
+        <field name="margin_right">8</field>
         <field name="header_line" eval="False"/>
         <field name="header_spacing">0</field>
         <field name="dpi">90</field>
@@ -37,42 +36,54 @@
         <t t-foreach="docs" t-as="o">
             <t t-call="web.basic_layout">
                 <style>
+                    /* wkhtmltopdf (QtWebKit ancien) : pas de flex/grid/vh/vw - mise en page en
+                       tableau à 2 colonnes, dimensions verticales en mm. Zone utile : A4 paysage
+                       297 x 210 mm moins 8 mm de marge = 281 x 194 mm. */
                     * { box-sizing: border-box; }
                     .carnet-page { font-family: Arial, Helvetica, sans-serif; font-size: 11px; }
-                    .carnet-flex { display:flex; align-items:flex-start; }
-                    .carnet-col-left { width: 48%; margin-right: 1.5%; display:flex; flex-direction:column; }
-                    .carnet-col-right { width: 50.5%; border: 1.5px solid #000; padding: 8px 10px; }
-                    table.carnet-table { width:100%; border-collapse: collapse; }
-                    table.carnet-table th, table.carnet-table td { border: 1px solid #000; text-align:center; padding:2px; height: 16px; font-size:10px; }
+                    table.carnet-layout { width: 100%; table-layout: fixed; border-collapse: collapse; }
+                    table.carnet-layout > tbody > tr { page-break-inside: avoid; }
+                    /* Colonnes 50/50 exactes : le carnet se plie au milieu de la page (marges
+                       symétriques, donc centre de la page = 50 % de la zone utile). Le tableau
+                       d'échéances reste entièrement à gauche du pli, la fiche à droite. */
+                    td.carnet-col-left { width: 50%; vertical-align: top; padding: 0 4mm 0 0; }
+                    td.carnet-col-right { width: 50%; vertical-align: top; padding: 0 0 0 4mm; }
+                    .carnet-fiche { border: 1.5px solid #000; padding: 3mm 4mm; page-break-inside: avoid; }
+                    table.carnet-table { width: 100%; border-collapse: collapse; }
+                    table.carnet-table tr { page-break-inside: avoid; }
+                    table.carnet-table th, table.carnet-table td { border: 1px solid #000; text-align: center; padding: 0; height: 7mm; line-height: 1; font-size: 10px; }
                     table.carnet-table th { font-weight: bold; }
-                    .carnet-foot { margin-top:8px; font-size:9.5px; line-height:1.5; }
-                    .carnet-signature { text-align:center; margin-top:8px; }
-                    .carnet-header-title { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
-                    /* Encart emprunteur (NY MPINDRAM-BOLA / MOMBAMOMBA) : agencement calqué
-                       sur reference_mise_en_page_carnet.png - libellés et valeurs en deux
-                       colonnes (deux-points alignés via .cr-label), sections sans cadre,
-                       interlignes aérés, paire Datin'ny findramana / Mpikarakara resserrée
-                       (.cr-tight). .carnet-box, .carnet-box-title, .carnet-row ne servent
-                       qu'ici (le verso utilise .carnet-foot). */
-                    .carnet-box { margin-bottom: 10px; }
-                    .carnet-box-title { text-align:center; font-weight:bold; font-size: 13px; margin: 2px 0 13px; }
-                    .carnet-row { margin-bottom: 10px; line-height: 1.25; }
-                    .carnet-row .cr-label { display:inline-block; min-width: 34%; vertical-align: top; }
-                    .carnet-row .cr-sec { margin-left: 18px; }
-                    .carnet-row.cr-tight { margin-bottom: 2px; }
+                    .carnet-foot { margin-top: 5mm; font-size: 10px; line-height: 1.6; }
+                    table.carnet-header-title { width: 100%; border-collapse: collapse; margin-bottom: 2mm; }
+                    table.carnet-header-title td { vertical-align: middle; padding: 0; }
+                    table.carnet-header-title td.carnet-logo { text-align: right; }
+                    /* Encart emprunteur (NY MPINDRAM-BOLA / MOMBAMOMBA) : libellés et valeurs en
+                       deux colonnes (deux-points alignés via .cr-label), sections sans cadre,
+                       paire Datin'ny findramana / Mpikarakara resserrée (.cr-tight). */
+                    .carnet-box { margin-bottom: 4mm; page-break-inside: avoid; }
+                    .carnet-box-title { text-align: center; font-weight: bold; font-size: 12px; margin: 0 0 3mm; }
+                    .carnet-row { margin-bottom: 2.6mm; line-height: 1.2; page-break-inside: avoid; }
+                    .carnet-row .cr-label { display: inline-block; min-width: 34%; vertical-align: top; }
+                    .carnet-row .cr-sec { margin-left: 12px; }
+                    .carnet-row.cr-tight { margin-bottom: 0.5mm; }
                     .carnet-highlight { background-color: #ffe066; padding: 0 3px; }
-                    /* Odoo ne définit aucune règle globale page-break-after sur .page (ce
-                       n'est utile qu'entre documents séparés, un par fichier wkhtmltopdf -
-                       cf. _prepare_html()) : deux div.page frères DANS le même document
-                       doivent forcer eux-mêmes le saut de page, sinon wkhtmltopdf les
-                       enchaîne et coupe le verso en deux (constaté sans cette règle). */
+                    .carnet-signature { text-align: center; margin-top: 4mm; }
+                    table.carnet-layout td.carnet-verso-right { border-left: 1.5px solid #000; padding: 0 0 0 4mm; }
+                    table.carnet-layout td.carnet-verso-left { padding: 0 4mm 0 0; }
+                    /* Recto puis verso dans le même document : saut de page après le recto. Aucun
+                       saut après le verso - chaque carnet est un document HTML distinct (un
+                       div.article par prêt, cf. _prepare_html()) que wkhtmltopdf enchaîne sur une
+                       nouvelle page, un saut final ajouterait une page blanche par prêt. */
                     .carnet-page-recto { page-break-after: always; }
                 </style>
 
-                <!-- PAGE 1 : RECTO -->
+                <!-- PAGE 1 : RECTO (A4 paysage) : tableau d'échéances + attestation à gauche du pli,
+                     fiche MASOIVOHO CEFOR à droite du pli (mise en page en tableau, cf. CSS). -->
                 <div class="page carnet-page carnet-page-recto">
-                    <div class="carnet-flex">
-                        <div class="carnet-col-left">
+                    <table class="carnet-layout">
+                        <tbody>
+                        <tr>
+                        <td class="carnet-col-left">
                             <table class="carnet-table">
                                 <thead>
                                     <tr>
@@ -110,9 +121,13 @@
                                 mitotaly……………………………………………………………………………………………………Ar izay voasoratra etsy ambony
                                 ny vola voaloako raha tsy misy fanitsiana hitan'ny CEFOR aorian'izao andro izao
                             </div>
-                        </div>
-                        <div class="carnet-col-right">
-                            <div class="carnet-header-title">
+                        </td>
+                        <td class="carnet-col-right">
+                        <div class="carnet-fiche">
+                            <table class="carnet-header-title">
+                              <tbody>
+                              <tr>
+                              <td>
                                 <!-- Dynamisé - docs_dev/carnet_remboursement/AUDIT_encart_agence.md
                                      (Lot 0) + décision Micka : o.company_id.street tel quel, sans
                                      repli sur o.company_id.name - une société dont la fiche
@@ -125,12 +140,15 @@
                                      rester cohérent avec la seule autre convention logo du
                                      module. -->
                                 <div>MASOIVOHO <strong t-field="o.company_id.street"/></div>
-                                <div>
-                                    <img t-if="o.company_id.logo"
-                                         t-att-src="image_data_uri(o.company_id.logo)"
-                                         style="max-height:38px;max-width:130px;"/>
-                                </div>
-                            </div>
+                              </td>
+                              <td class="carnet-logo">
+                                <img t-if="o.company_id.logo"
+                                     t-att-src="image_data_uri(o.company_id.logo)"
+                                     style="max-height:34px;max-width:120px;"/>
+                              </td>
+                              </tr>
+                              </tbody>
+                            </table>
                             <div class="carnet-box">
                                 <div class="carnet-box-title">NY MPINDRAM-BOLA</div>
                                 <!-- Champs confirmés dans le codebase réel (pas de suppositions) :
@@ -204,19 +222,26 @@
                                 <div class="carnet-row"><span class="cr-label"><u>Faharetan'ny findramam-bola</u> :</span> <strong><t t-esc="o.get_loan_duration_days()"/> andro</strong><span class="cr-sec">Agent BL : <strong><t t-esc="env.user.name"/></strong></span></div>
                             </div>
                         </div>
-                    </div>
+                        </td>
+                        </tr>
+                        </tbody>
+                    </table>
                 </div>
 
-                <!-- PAGE 2 : VERSO -->
+                <!-- PAGE 2 : VERSO (A4 paysage) : deux tableaux d'échéances côte à côte. -->
                 <div class="page carnet-page">
-                    <div class="carnet-flex">
-                        <div class="carnet-col-left">
+                    <table class="carnet-layout">
+                        <tbody>
+                        <tr>
+                        <td class="carnet-verso-left" style="width:50%; vertical-align:top;">
                             <t t-call="microfinance_loan_management.report_carnet_verso_bloc"/>
-                        </div>
-                        <div class="carnet-col-right" style="border-left: 1.5px solid #000; border-top:0; border-right:0; border-bottom:0; padding: 0 0 0 10px;">
+                        </td>
+                        <td class="carnet-verso-right" style="width:50%; vertical-align:top;">
                             <t t-call="microfinance_loan_management.report_carnet_verso_bloc"/>
-                        </div>
-                    </div>
+                        </td>
+                        </tr>
+                        </tbody>
+                    </table>
                 </div>
 
             </t>

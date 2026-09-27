@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="module_category_microfinance_load_test" model="ir.module.category">
+        <field name="name">Outils de test</field>
+        <field name="sequence">100</field>
+    </record>
+
+    <!-- Groupe totalement indépendant de group_microfinance_user : un utilisateur
+         normal ne doit jamais l'obtenir par héritage. -->
+    <record id="group_microfinance_load_test" model="res.groups">
+        <field name="name">Génération de données de test</field>
+        <field name="category_id" ref="module_category_microfinance_load_test"/>
+    </record>
+</odoo>

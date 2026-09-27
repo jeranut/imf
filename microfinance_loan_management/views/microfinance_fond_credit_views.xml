@@ -60,7 +60,21 @@
                         <field name="total_decaisse" string="Total décaissé"/>
                         <field name="total_rembourse" string="Total remboursé"/>
                         <field name="solde_disponible" string="Solde disponible"/>
+                        <field name="reste_partageable" string="Reste partageable"
+                               invisible="scope != 'multi_company'"/>
                     </group>
+                    <notebook invisible="scope != 'multi_company'">
+                        <page string="Allocations par agence" name="allocations">
+                            <field name="allocation_ids" readonly="1">
+                                <tree>
+                                    <field name="company_id" string="Agence"/>
+                                    <field name="amount_allocated" string="Montant alloué"/>
+                                    <field name="montant_utilise" string="Montant utilisé"/>
+                                    <field name="solde_disponible" string="Solde disponible"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
                 </sheet>
                 <chatter/>
             </form>
@@ -92,6 +106,11 @@
         <field name="name">Fonds de crédit</field>
         <field name="res_model">microfinance.fond.credit</field>
         <field name="view_mode">tree,form</field>
+        <!-- default_scope : présélection UI uniquement (fonds partagés désormais le cas le
+             plus courant à la création depuis ce menu). Le défaut modèle du champ scope reste
+             'single_company' (microfinance_fond_credit.py) : un create() direct (import/API,
+             ou tout autre point d'entrée sans passer par cette action) n'est pas affecté. -->
+        <field name="context">{'default_scope': 'multi_company'}</field>
     </record>
 
     <!-- Rapport "Utilisation des fonds" : vue liste + pivot sur microfinance.fond.credit

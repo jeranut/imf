@@ -128,7 +128,9 @@ class TestRepaymentAccounting(MicrofinanceNoFundMixin, MicrofinanceCommon):
         loan_b.application_ids.write({'committee_first_decision': 'accepted'})
         loan_b.action_approve()
         # Flux découplé : activation puis décaissement effectif (remplace action_disburse() déprécié).
-        loan_b.action_activate()
+        # action_activate() ouvre désormais un wizard de confirmation (chantier décaissement
+        # provisoire) - _activate_with_auto_confirm() reste le chemin direct pour les tests.
+        loan_b._activate_with_auto_confirm()
         loan_b.action_process_disbursement()
 
         first_b = loan_b.installment_ids.sorted('sequence')[0]

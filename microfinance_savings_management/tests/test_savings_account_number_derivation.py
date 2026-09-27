@@ -56,6 +56,7 @@ class TestSavingsAccountNumberDerivation(SavingsCommon):
         account2 = self._create_account()  # 2e compte, client #1
         partner2 = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Numéro 2', 'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': '800000000001',
             'microfinance_client_type': 'individual',
         })
         account3 = self._create_account(partner_id=partner2.id)  # 1er compte, client #2

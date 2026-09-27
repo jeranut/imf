@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import base64
+
 from .test_fond_bailleur import TestFondBailleurCommon
 
 
@@ -86,6 +88,9 @@ class TestFondDashboardMultiCompanyChart(TestFondBailleurCommon):
             'loan_amount': 1000.0,
             'term': 3,
             'fond_credit_id': fond.id,
+            # Prérequis d'activation (cf. common._create_loan) : sans rapport avec ce test.
+            'signed_contract': base64.b64encode(b'test signed contract'),
+            'signed_contract_filename': 'contrat_signe_test.pdf',
         })
         loan_b.action_generate_schedule()
         loan_b.write({'state': 'approved'})
@@ -190,6 +195,9 @@ class TestFondMatrix(TestFondBailleurCommon):
             'loan_amount': amount,
             'term': 3,
             'fond_credit_id': fond.id,
+            # Prérequis d'activation (cf. common._create_loan) : sans rapport avec ce test.
+            'signed_contract': base64.b64encode(b'test signed contract'),
+            'signed_contract_filename': 'contrat_signe_test.pdf',
         })
         loan_b.action_generate_schedule()
         loan_b.write({'state': 'approved'})

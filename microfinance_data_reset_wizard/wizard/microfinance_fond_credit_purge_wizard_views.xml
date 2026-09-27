@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_microfinance_fond_credit_purge_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.purge.wizard.form</field>
+        <field name="model">microfinance.fond.credit.purge.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Purge des fonds de crédit rotatif">
+                <div class="alert alert-danger" role="alert">
+                    <strong>⚠️ Action irréversible.</strong>
+                    Supprime définitivement les fonds de crédit rotatif (microfinance.fond.credit)
+                    des agences sélectionnées, ainsi que leurs contributions, allocations et
+                    partages (lignes filles obligatoirement supprimées avant le fonds — contrainte
+                    FK ondelete='restrict'). Les écritures comptables (account.move) déjà postées
+                    sont TOUJOURS conservées intactes.
+                    Un crédit déjà décaissé référençant un fonds bloque toujours ce fonds.
+                    <strong>Faites un backup complet de la base avant toute exécution réelle.</strong>
+                    L'exécution réelle exige en plus que le paramètre système
+                    <code>microfinance.fond_credit_purge_apply</code> soit à
+                    <code>True</code> (désactivé par défaut).
+                </div>
+
+                <group>
+                    <field name="company_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                    <field name="blocking_loan_action"/>
+                </group>
+
+                <group>
+                    <field name="i_confirm"/>
+                    <field name="confirm_text" invisible="not i_confirm"/>
+                </group>
+
+                <field name="has_error" invisible="1"/>
+                <div class="alert alert-danger" role="alert" invisible="not has_error">
+                    <strong>⚠️ Une erreur est survenue.</strong> Voir la ligne "ERREUR" dans le
+                    journal ci-dessous.
+                </div>
+
+                <group string="Journal des résultats" invisible="not log">
+                    <field name="log" nolabel="1" widget="text" readonly="1"
+                           style="font-family: monospace; white-space: pre-wrap;"/>
+                </group>
+
+                <footer>
+                    <button name="action_preview" type="object"
+                            string="Aperçu (lecture seule)" class="btn-secondary"/>
+                    <button name="action_run_dry_run" type="object"
+                            string="Simulation (dry-run)" class="btn-primary"/>
+                    <button name="action_run_execute" type="object"
+                            string="Exécution réelle" class="btn-danger"
+                            confirm="Cette action va supprimer définitivement les fonds de crédit sélectionnés. Confirmer ?"/>
+                    <button name="action_reset_wizard" type="object"
+                            string="Réinitialiser" class="btn-secondary"/>
+                    <button string="Fermer" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_fond_credit_purge_wizard" model="ir.actions.act_window">
+        <field name="name">Purge des fonds de crédit rotatif</field>
+        <field name="res_model">microfinance.fond.credit.purge.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+    <menuitem id="menu_microfinance_fond_credit_purge_wizard"
+              name="Purge des fonds de crédit"
+              parent="menu_microfinance_data_reset_wizard_root"
+              action="action_microfinance_fond_credit_purge_wizard"
+              groups="microfinance_loan_management.group_microfinance_manager"/>
+
+</odoo>

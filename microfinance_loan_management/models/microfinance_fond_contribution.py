@@ -6,7 +6,7 @@ from odoo.exceptions import UserError, ValidationError
 class MicrofinanceFondContribution(models.Model):
     _name = 'microfinance.fond.contribution'
     _description = 'Contribution bailleur sur fonds de crédit'
-    _inherit = ['mail.thread', 'mail.activity.mixin']
+    _inherit = ['mail.thread', 'mail.activity.mixin', 'microfinance.fond.parent.mixin']
     _order = 'date desc, id desc'
 
     fond_id = fields.Many2one(
@@ -59,7 +59,25 @@ class MicrofinanceFondContribution(models.Model):
         ('posted', 'Validé'),
     ], string='État', default='draft', required=True, tracking=True, copy=False)
 
+    def _check_parent_only_shared(self):
+        """Contributions d'un fonds partagé : saisies depuis la société mère uniquement. Les
+        contributions des fonds legacy (agence unique) restent saisies par leur agence."""
+        if any(contrib.fond_id.scope == 'multi_company' for contrib in self):
+            self._check_parent_only()
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        fonds = self.env['microfinance.fond.credit'].browse([v['fond_id'] for v in vals_list if v.get('fond_id')])
+        if any(fond.scope == 'multi_company' for fond in fonds):
+            self._check_parent_only()
+        return super().create(vals_list)
+
+    def unlink(self):
+        self._check_parent_only_shared()
+        return super().unlink()
+
     def write(self, vals):
+        self._check_parent_only_shared()
         if self.ids and 'saisie_company_id' in vals:
             for contrib in self:
                 if vals['saisie_company_id'] != contrib.saisie_company_id.id:
@@ -117,6 +135,7 @@ class MicrofinanceFondContribution(models.Model):
         }
 
     def action_post(self):
+        self._check_parent_only_shared()
         for contrib in self:
             if contrib.state == 'posted':
                 raise UserError(_('Cette contribution est déjà validée.'))

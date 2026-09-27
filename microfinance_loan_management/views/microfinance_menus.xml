@@ -92,12 +92,13 @@
     <menuitem id="menu_microfinance_guarantee_valuation_rule" name="Ratios de valorisation des garanties" parent="menu_microfinance_config_credit" action="action_microfinance_guarantee_valuation_rule" sequence="5"/>
     <menuitem id="menu_microfinance_loan_progressive_program" name="Programmes progressifs" parent="menu_microfinance_config_credit" action="action_microfinance_loan_progressive_program" sequence="6"/>
     <menuitem id="menu_microfinance_profession" name="Professions" parent="menu_microfinance_config_social_profile" action="action_microfinance_profession" sequence="1"/>
-    <menuitem id="menu_microfinance_bailleur_fonds" name="Bailleurs de fonds" parent="menu_microfinance_config_financing" action="action_microfinance_bailleur_fonds" sequence="1"/>
-    <menuitem id="menu_microfinance_fond_credit" name="Fonds de crédit" parent="menu_microfinance_config_financing" action="action_microfinance_fond_credit" sequence="2"/>
-    <menuitem id="menu_microfinance_financial_designation_income" name="Désignations de revenus familiaux" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_income" sequence="3"/>
-    <menuitem id="menu_microfinance_financial_designation_activity_expense" name="Désignations de dépenses d'activité" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_activity_expense" sequence="4"/>
-    <menuitem id="menu_microfinance_financial_designation_family_expense" name="Désignations de dépenses familiales" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_family_expense" sequence="5"/>
-    <menuitem id="menu_microfinance_financial_frequency" name="Fréquences de montant" parent="menu_microfinance_config_financing" action="action_microfinance_financial_frequency" sequence="6"/>
+    <menuitem id="menu_microfinance_bailleur_fonds" name="Bailleurs de fonds" parent="menu_microfinance_config_financing" action="action_microfinance_bailleur_fonds" sequence="10"/>
+    <menuitem id="menu_microfinance_fond_credit" name="Fonds de crédit" parent="menu_microfinance_config_financing" action="action_microfinance_fond_credit" sequence="20"/>
+    <menuitem id="menu_microfinance_fond_partage" name="Partage des fonds" parent="menu_microfinance_config_financing" action="action_microfinance_fond_partage" sequence="30"/>
+    <menuitem id="menu_microfinance_financial_designation_income" name="Désignations de revenus familiaux" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_income" sequence="40"/>
+    <menuitem id="menu_microfinance_financial_designation_activity_expense" name="Désignations de dépenses d'activité" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_activity_expense" sequence="50"/>
+    <menuitem id="menu_microfinance_financial_designation_family_expense" name="Désignations de dépenses familiales" parent="menu_microfinance_config_financing" action="action_microfinance_financial_designation_family_expense" sequence="60"/>
+    <menuitem id="menu_microfinance_financial_frequency" name="Fréquences de montant" parent="menu_microfinance_config_financing" action="action_microfinance_financial_frequency" sequence="70"/>
     <menuitem id="menu_microfinance_caisse_denomination" name="Coupures de caisse" parent="menu_microfinance_config_caisse" action="action_microfinance_caisse_denomination" sequence="1"/>
     <menuitem id="menu_microfinance_social_category_level" name="Niveaux sociaux" parent="menu_microfinance_config_social_profile" action="action_microfinance_social_category_level" sequence="2"/>
     <menuitem id="menu_microfinance_activity_category" name="Catégories d'activité" parent="menu_microfinance_config_social_profile" action="action_microfinance_loan_application_activity_category" sequence="3"/>

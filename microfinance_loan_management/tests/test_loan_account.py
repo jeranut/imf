@@ -14,6 +14,7 @@ class TestLoanAccountCreationOnPartnerCreate(MicrofinanceCommon):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Compte Crédit', 'microfinance_partner_type': 'client',
             'microfinance_client_type': 'individual',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': '600000000001',
         })
         self.assertEqual(len(partner.microfinance_loan_account_ids), 1)
         self.assertEqual(partner.microfinance_loan_account_ids.company_id, self.env.company)
@@ -33,6 +34,7 @@ class TestLoanAccountCreationOnPartnerCreate(MicrofinanceCommon):
     def test_idempotent_repeated_call_does_not_duplicate(self):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Idempotence Compte Crédit', 'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': '600000000002',
         })
         partner._get_or_create_microfinance_loan_account()
         partner._get_or_create_microfinance_loan_account()

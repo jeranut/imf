@@ -8,7 +8,7 @@ from odoo.exceptions import UserError, ValidationError
 class MicrofinanceFondCredit(models.Model):
     _name = 'microfinance.fond.credit'
     _description = 'Fonds de crédit rotatif bailleur'
-    _inherit = ['mail.thread', 'mail.activity.mixin']
+    _inherit = ['mail.thread', 'mail.activity.mixin', 'microfinance.fond.parent.mixin']
     _order = 'name'
 
     name = fields.Char(string='Nom du fonds', required=True, tracking=True)
@@ -28,7 +28,12 @@ class MicrofinanceFondCredit(models.Model):
         help="Choix figé après la première sauvegarde : « Agence unique » rattache le fonds à "
              "une société précise (company_id requis) ; « Multi-agences » laisse company_id vide "
              "et rend le fonds visible/exploitable depuis toutes les agences (solde et historique "
-             "consolidés, alimentés par des contributions/crédits de plusieurs agences).")
+             "consolidés, alimentés par des contributions/crédits de plusieurs agences). Défaut "
+             "modèle inchangé ('single_company', y compris pour un create() direct sans le "
+             "préciser - import/API) : le formulaire de création préselectionne 'multi_company' "
+             "via default_scope dans le contexte de l'action (microfinance_fond_credit_views.xml), "
+             "sans toucher à ce comportement ORM par défaut - reste librement modifiable avant la "
+             "première sauvegarde, comme avant.")
     company_id = fields.Many2one(
         'res.company', string='Société', default=lambda self: self.env.company, tracking=True,
         help="Requis et figé sur la société courante si le fonds est « Agence unique » ; forcé "
@@ -44,12 +49,16 @@ class MicrofinanceFondCredit(models.Model):
     account_id = fields.Many2one(
         'account.account', string='Compte comptable bailleur',
         domain="[('account_type', 'in', ('liability_current', 'liability_non_current', 'equity'))]",
+        default=lambda self: self._default_account_id(),
         help="Compte de contrepartie GL du fonds (dette envers le bailleur ou fonds propres "
              "assimilés selon le montage retenu). Requis si « Passer au grand livre » est actif. "
              "Domaine basé sur account_type (et non un préfixe de code) : le PCEC Madagascar 2005 "
              "ne suit pas la convention classe 2 = Dettes / classe 3 = Fonds propres (classe 2 = "
              "opérations clientèle mixtes actif/passif, classe 3 = comptes divers mixtes ; les "
-             "vrais fonds propres sont en classe 5).",
+             "vrais fonds propres sont en classe 5). Pré-rempli à la création avec "
+             "res.company.microfinance_fond_account_default_id de la société courante (simple "
+             "aide à la saisie, aucun effet rétroactif sur les fonds existants) - reste librement "
+             "modifiable, y compris juste après la création.",
     )
     verification_disponibilite = fields.Selection([
         ('never', 'Jamais'),
@@ -90,20 +99,74 @@ class MicrofinanceFondCredit(models.Model):
              "consulte, y compris pour un utilisateur qui n'a pas accès à toutes les sociétés "
              "ayant contribué au fonds ou décaissé dessus.",
     )
+    allocation_required = fields.Boolean(
+        string='Usage par allocation', default=lambda self: bool(self.env['res.company']._get_microfinance_parent()),
+        copy=False, readonly=True,
+        help="Vrai pour un fonds partagé géré par allocation : une agence ne peut alors utiliser "
+             "que sa propre allocation (jamais le solde global). Posé à la création si une société "
+             "mère est désignée, et à la première validation d'un partage. Faux = comportement "
+             "d'origine (solde global du fonds), conservé pour les fonds existants. Champ stocké "
+             "(et non déduit de allocation_ids) : une agence ne voit que sa propre allocation, un "
+             "fonds alloué aux autres agences ne doit pas lui apparaître comme « non alloué ».",
+    )
+    allocation_ids = fields.One2many('microfinance.fond.allocation', 'fond_id', string='Allocations par agence')
+    partage_ids = fields.One2many('microfinance.fond.partage', 'fond_id', string='Partages')
+    reste_partageable = fields.Monetary(
+        string='Reste partageable', compute='_compute_reste_partageable', store=True,
+        help="Total des contributions nettes (dépôts − retraits validés) diminué du montant des "
+             "partages validés. Pertinent pour un fonds « Multi-agences » ; pré-remplit le "
+             "montant d'un nouveau partage. Lecture des partages en sudo : les agences ne les "
+             "voient pas (ir.rule), mais le calcul doit rester identique pour tous.",
+    )
     active = fields.Boolean(string='Actif', default=True)
 
     _sql_constraints = [
         ('code_unique', 'unique(code)', 'Le code du fonds de crédit doit être unique (séquence globale multi-société).'),
     ]
 
+    def _default_account_id(self):
+        # sudo() : lecture seule d'un champ société pour préremplir un defaut de formulaire,
+        # jamais d'écriture - un utilisateur non-manager (group_microfinance_user) n'a pas
+        # forcément accès en lecture à res.company depuis ce contexte, ce défaut ne doit
+        # jamais lui bloquer la création d'un fonds (cf. même raisonnement que
+        # microfinance_fond_credit_default_id sur res.company, qui n'a pas non plus de
+        # groups= au niveau champ).
+        return self.env.company.sudo().microfinance_fond_account_default_id
+
+    @api.model
+    def _get_default_account_id(self, company):
+        # Variante utilisable depuis create() avec une société explicite (vals.get('company_id')),
+        # distincte de _default_account_id() (utilisée par le champ Many2one, toujours sur
+        # env.company). Retombe sur env.company si aucune société n'est fournie dans vals -
+        # même repli que les autres défauts de ce modèle (ex. currency_id).
+        company = company or self.env.company
+        return company.sudo().microfinance_fond_account_default_id
+
     @api.model_create_multi
     def create(self, vals_list):
+        # Société mère uniquement (sans effet si aucune mère n'est désignée).
+        self._check_parent_only()
         for vals in vals_list:
             if vals.get('code', 'Nouveau') in (False, '', 'Nouveau'):
                 vals['code'] = self.env['ir.sequence'].next_by_code('microfinance.fond.credit') or 'Nouveau'
+            if vals.get('scope') == 'multi_company':
+                # company_id a un défaut (société courante) : un fonds partagé n'a pas de société propre.
+                vals['company_id'] = False
+            if not vals.get('account_id'):
+                # Couvre import/API (create() direct sans passer par le formulaire, donc sans le
+                # default= du champ ni l'onchange ci-dessous) : même règle de préremplissage,
+                # sur la société de vals plutôt que env.company. Ne force rien si un account_id
+                # est déjà fourni.
+                company = self.env['res.company'].browse(vals.get('company_id')) if vals.get('company_id') else False
+                default_account = self._get_default_account_id(company)
+                if default_account:
+                    vals['account_id'] = default_account.id
         return super().create(vals_list)
 
     def write(self, vals):
+        # Fonds legacy (agence unique) exemptés : seule l'écriture d'un fonds partagé est réservée.
+        if any(fond.scope == 'multi_company' for fond in self):
+            self._check_parent_only()
         if self.ids and ('scope' in vals or 'company_id' in vals):
             for fond in self:
                 if 'scope' in vals and vals['scope'] != fond.scope:
@@ -116,12 +179,16 @@ class MicrofinanceFondCredit(models.Model):
                     ) % fond.name)
         return super().write(vals)
 
+    def unlink(self):
+        self._check_parent_only()
+        return super().unlink()
+
     @api.onchange('scope')
     def _onchange_scope(self):
-        if self.scope == 'single_company':
-            self.company_id = self.env.company
-        else:
+        if self.scope == 'multi_company':
             self.company_id = False
+        elif self.scope == 'single_company' and not self.company_id:
+            self.company_id = self.env.company
 
     @api.onchange('scope', 'company_id')
     def _onchange_scope_account_domain(self):
@@ -133,6 +200,17 @@ class MicrofinanceFondCredit(models.Model):
             domain = account_type_domain + [('company_id', '=', self.company_id.id)]
         else:
             domain = account_type_domain
+
+        # Préremplissage du compte bailleur (étend cet onchange plutôt que d'en dupliquer un
+        # second sur les mêmes champs) : "Multi-agences" n'a pas de société propre (company_id
+        # vide), on retombe alors sur env.company - même règle que create()/_get_default_account_id
+        # (vals.get('company_id') ou env.company). Ne touche jamais un compte déjà choisi qui
+        # appartient bien à cette société : seuls un champ vide ou un compte d'une AUTRE société
+        # (résidu d'un changement de portée/société précédent) sont remplacés.
+        target_company = self.company_id if self.scope == 'single_company' else self.env.company
+        if not self.account_id or (self.account_id.company_id and self.account_id.company_id != target_company):
+            self.account_id = target_company.sudo().microfinance_fond_account_default_id if target_company else False
+
         return {'domain': {'account_id': domain}}
 
     @api.constrains('scope', 'company_id')
@@ -217,6 +295,12 @@ class MicrofinanceFondCredit(models.Model):
             principal_outstanding = sum(loan._get_principal_outstanding() for loan in outstanding_loans)
             fond.solde_disponible = fond.total_contributions - principal_outstanding
 
+    @api.depends('total_contributions', 'partage_ids.state', 'partage_ids.base_amount')
+    def _compute_reste_partageable(self):
+        for fond in self:
+            partages = fond.sudo().partage_ids.filtered(lambda p: p.state == 'validated')
+            fond.reste_partageable = fond.total_contributions - sum(partages.mapped('base_amount'))
+
     def action_view_contributions(self):
         self.ensure_one()
         return {
@@ -250,10 +334,20 @@ class MicrofinanceFondCredit(models.Model):
             ('active', '=', True),
             '|', ('company_id', '=', company_id), ('scope', '=', 'multi_company'),
         ])
-        return {
-            'total': sum(funds.mapped('solde_disponible')),
-            'count': len(funds),
-        }
+        total = 0.0
+        count = 0
+        for fund in funds:
+            if fund.scope == 'multi_company' and fund.allocation_required:
+                # Fonds partagé géré par allocation : seule la part de l'agence compte (sudo :
+                # l'agence ne voit par ir.rule que sa propre allocation, lecture déterministe).
+                allocation = fund.sudo().allocation_ids.filtered(lambda a: a.company_id.id == company_id)
+                if not allocation:
+                    continue
+                total += allocation.solde_disponible
+            else:
+                total += fund.solde_disponible
+            count += 1
+        return {'total': total, 'count': count}
 
     @api.model
     def get_multi_company_usage_chart(self):
@@ -273,7 +367,10 @@ class MicrofinanceFondCredit(models.Model):
         existe. Ce sudo() ne fuite que des montants agrégés par agence, jamais les
         enregistrements de contribution individuels au frontend."""
         multi_funds = self.search([('active', '=', True), ('scope', '=', 'multi_company')])
-        result = {'visible': bool(multi_funds), 'labels': [], 'contributions': [], 'decaissements': []}
+        result = {
+            'visible': bool(multi_funds), 'labels': [], 'contributions': [], 'decaissements': [],
+            'allocations': [],
+        }
         if not multi_funds:
             return result
 
@@ -296,10 +393,19 @@ class MicrofinanceFondCredit(models.Model):
         for loan in loans:
             disbursed_by_company[loan.company_id] += loan.loan_amount
 
-        companies = sorted(set(contrib_by_company) | set(disbursed_by_company), key=lambda c: c.name)
+        # Parts allouées par agence (fonds partagés gérés par allocation), sudo pour la même
+        # raison que ci-dessus : le graphique consolide toutes les agences.
+        allocated_by_company = defaultdict(float)
+        for allocation in multi_funds.filtered('allocation_required').sudo().allocation_ids:
+            allocated_by_company[allocation.company_id] += allocation.amount_allocated
+
+        companies = sorted(
+            set(contrib_by_company) | set(disbursed_by_company) | set(allocated_by_company),
+            key=lambda c: c.name)
         result['labels'] = [company.name for company in companies]
         result['contributions'] = [contrib_by_company.get(company, 0.0) for company in companies]
         result['decaissements'] = [disbursed_by_company.get(company, 0.0) for company in companies]
+        result['allocations'] = [allocated_by_company.get(company, 0.0) for company in companies]
         return result
 
     @api.model
@@ -378,7 +484,13 @@ class MicrofinanceFondCredit(models.Model):
         funds = self.search([
             ('active', '=', True), ('scope', '=', 'single_company'), ('company_id', '=', company_id),
         ])
-        return {
-            'labels': funds.mapped('name'),
-            'values': funds.mapped('solde_disponible'),
-        }
+        labels = funds.mapped('name')
+        values = funds.mapped('solde_disponible')
+        # Parts de fonds partagés allouées à cette agence (solde propre à l'agence).
+        allocations = self.env['microfinance.fond.allocation'].sudo().search([
+            ('company_id', '=', company_id), ('fond_id.active', '=', True),
+        ])
+        for allocation in allocations:
+            labels.append(allocation.fond_id.name)
+            values.append(allocation.solde_disponible)
+        return {'labels': labels, 'values': values}

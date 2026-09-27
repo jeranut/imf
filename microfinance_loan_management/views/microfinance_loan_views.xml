@@ -75,7 +75,6 @@
                          'active' (contrôles conservés) ; le décaissement effectif (écriture de
                          sortie de caisse) a lieu au Guichet Caisse. -->
                     <button name="action_activate" string="Activer" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
-                    <button name="action_open_payment_wizard" string="Enregistrer remboursement" type="object" class="btn-primary" invisible="state not in ('active','defaulted')"/>
                     <button name="action_reschedule" string="Rééchelonner" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'active'"/>
                     <button name="action_mark_default" string="Marquer en défaut" type="object" invisible="state != 'active'"/>
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>
@@ -201,6 +200,15 @@
                             <field name="approval_date" readonly="1"/>
                             <field name="activation_date" readonly="1" invisible="not activation_date"/>
                             <field name="disbursement_date" readonly="1"/>
+                            <!-- Chantier décaissement provisoire (docs_dev/decaissement_provisoire/) :
+                                 éditable uniquement tant que le crédit est activé mais pas encore
+                                 décaissé - une modification régénère l'échéancier et réinitialise
+                                 disbursement_release_ready (write(), _PLANNED_DISBURSEMENT_TRIGGER_FIELDS). -->
+                            <field name="disbursement_date_planned"
+                                   readonly="state != 'active' or disbursement_date != False"
+                                   invisible="not disbursement_date_planned and state != 'active'"/>
+                            <field name="disbursement_date_confirmed" readonly="1" invisible="not disbursement_date_confirmed"/>
+                            <field name="disbursement_release_ready" readonly="1" invisible="not disbursement_release_ready"/>
                             <field name="contract_signature_date" readonly="1"/>
                             <field name="officer_id"/>
                             <field name="manager_id"/>

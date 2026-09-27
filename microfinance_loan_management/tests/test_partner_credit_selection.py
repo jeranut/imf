@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
+import itertools
 import unittest
 
 from odoo.exceptions import ValidationError
 
 from .common import MicrofinanceCommon
+
+_CIN_SEQUENCE = itertools.count(700000000001)
 
 
 class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
@@ -14,6 +17,7 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Sélection Indépendante',
             'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
             'microfinance_selected_product_id': self.product.id,
         })
         application = partner.microfinance_current_loan_application_id
@@ -26,6 +30,7 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Réutilisation',
             'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
         existing = self.env['microfinance.loan.application'].create({
             'partner_id': partner.id, 'loan_product_id': self.product.id, 'company_id': self.env.company.id,
@@ -41,6 +46,7 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Sans Produit',
             'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
         self.assertFalse(partner.microfinance_current_loan_application_id)
         count = self.env['microfinance.loan.application'].search_count([('partner_id', '=', partner.id)])
@@ -53,6 +59,7 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Incohérence Politique',
             'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
         with self.assertRaises(ValidationError):
             partner.with_context(microfinance_context=True).write({
@@ -96,7 +103,10 @@ class TestPartnerCreditSelectionProgressiveEligibility(MicrofinanceCommon):
         })
 
     def _new_client_partner(self, name, **kwargs):
-        vals = {'name': name, 'microfinance_partner_type': 'client'}
+        vals = {
+            'name': name, 'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
+        }
         vals.update(kwargs)
         return self.env['res.partner'].with_context(microfinance_context=True).create(vals)
 
@@ -163,6 +173,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
     def test_default_policy_is_independent(self):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Politique Défaut', 'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
         self.assertEqual(partner.microfinance_product_policy, 'independent')
 
@@ -170,6 +181,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
         self._set_product_policy('progressive')
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Politique Globale', 'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
         self.assertEqual(partner.microfinance_product_policy, 'progressive')
 
@@ -183,6 +195,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Politique Autre Société',
             'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
             'company_id': company_b.id,
         })
         self.assertEqual(partner.microfinance_product_policy, 'progressive')
@@ -192,6 +205,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
         partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Changement Politique',
             'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
             'microfinance_selected_product_id': self.product.id,
         })
         application = partner.microfinance_current_loan_application_id
@@ -212,6 +226,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
         # self.product (produit indépendant, hors programme progressif) n'est plus sélectionnable.
         other_partner = self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Nouvelle Politique', 'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
         with self.assertRaises(ValidationError):
             other_partner.with_context(microfinance_context=True).write({
@@ -260,6 +275,8 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
         return self.env['res.partner'].with_context(microfinance_context=True).create({
             'name': 'Client Test Verrou',
             'microfinance_partner_type': 'client',
+            'microfinance_id_type': 'cin',
+            'microfinance_id_number': str(next(_CIN_SEQUENCE)),
             'microfinance_selected_product_id': self.product.id,
         })
 

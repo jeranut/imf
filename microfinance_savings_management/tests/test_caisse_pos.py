@@ -366,6 +366,36 @@ class TestCaissePureCashierSavingsAccess(SavingsCommon):
             amount, places=2,
         )
 
+    def test_pure_cashier_register_repayment_confirmed_still_works(self):
+        # AUDIT_anomalies_ampitatafika_ambanidia_20260921.md §3 : register_repayment_confirmed()
+        # (chemin des assistants cascade/surplus) crée aussi un microfinance.loan.payment - il
+        # doit rester fonctionnel pour un caissier pur une fois son create/write direct sur ce
+        # modèle retiré, grâce au sudo() scopé ajouté dans microfinance_caisse_mouvement.py.
+        self._neutralize_funds()
+        loan = self._activate_loan(loan_amount=1200.0, term=6)
+        first = loan.installment_ids.sorted('sequence')[0]
+        amount = min(80.0, first.total_amount)
+        session = self._open_session(self.payment_journal)
+        cashier = self._pure_cashier()
+        mouvement = self.env['microfinance.caisse.mouvement'].with_user(cashier).with_context(
+            **self._NO_MAIL_CTX
+        ).register_repayment_confirmed(session.id, loan.id, amount)
+        self.assertTrue(mouvement.payment_id)
+        self.assertEqual(mouvement.payment_id.state, 'posted')
+
+    def test_pure_cashier_cannot_create_payment_directly(self):
+        # AUDIT_anomalies_ampitatafika_ambanidia_20260921.md §3 : le seul chemin de création
+        # d'un microfinance.loan.payment pour un caissier doit être le guichet (sudo scopé
+        # ci-dessus) - plus d'accès direct au modèle (ex. bouton "Comptabiliser" retiré du menu
+        # "Analyse paiements", ir.model.access.csv : group_microfinance_cashier n'a plus que
+        # read sur microfinance.loan.payment).
+        loan = self._activate_loan(loan_amount=1200.0, term=6)
+        cashier = self._pure_cashier()
+        with self.assertRaises(AccessError):
+            self.env['microfinance.loan.payment'].with_user(cashier).create({
+                'loan_id': loan.id, 'amount': 50.0, 'journal_id': self.payment_journal.id,
+            })
+
     def test_pure_cashier_decaissement_credit(self):
         self._neutralize_funds()
         loan = self._approve_loan_not_disbursed(loan_amount=500.0, term=3)

@@ -57,12 +57,18 @@
                         <button name="action_view_loans" type="object" class="oe_stat_button" icon="fa-money">
                             <field name="loan_count" widget="statinfo" string="Crédits"/>
                         </button>
+                        <button name="action_view_loan_account" type="object" class="oe_stat_button" icon="fa-credit-card" invisible="not loan_account_id">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">Compte crédit</span>
+                            </div>
+                        </button>
                     </div>
                     <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
                     <group>
                         <group string="Compte">
                             <field name="partner_id"/>
                             <field name="is_container" invisible="1"/>
+                            <field name="loan_account_id" invisible="1"/>
                             <field name="product_id" invisible="is_container"/>
                             <field name="company_id" groups="base.group_multi_company"/>
                             <field name="currency_id" invisible="is_container"/>

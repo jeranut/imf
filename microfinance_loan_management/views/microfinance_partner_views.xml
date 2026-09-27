@@ -103,9 +103,10 @@
                 <group invisible="microfinance_client_type != 'individual' or not context.get('microfinance_context')">
                     <group string="Identification">
                         <field name="microfinance_registration_number" placeholder="Numéro d'inscription interne"/>
-                        <field name="microfinance_id_type"/>
+                        <field name="microfinance_id_type" required="microfinance_partner_type == 'client'"/>
                         <field name="microfinance_id_number_display" string="N° CIN" placeholder="123 456 789 012"
-                            widget="microfinance_grouped_digits" invisible="microfinance_id_type != 'cin'"/>
+                            widget="microfinance_grouped_digits" invisible="microfinance_id_type != 'cin'"
+                            required="microfinance_partner_type == 'client' and microfinance_id_type == 'cin'"/>
                         <field name="microfinance_id_number" string="N° pièce d'identité" placeholder="Numéro de la pièce d'identité" invisible="microfinance_id_type == 'cin'"/>
                         <field name="microfinance_id_issue_date" invisible="microfinance_id_type != 'cin'"/>
                         <field name="microfinance_id_issue_place" placeholder="Ex: Antananarivo" invisible="microfinance_id_type != 'cin'"/>

@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+import base64
+
 from odoo.exceptions import AccessError, UserError, ValidationError
 
 from .common import MicrofinanceCommon
@@ -321,6 +323,9 @@ class TestFondMultiCompany(TestFondBailleurCommon):
             'loan_amount': 1000.0,
             'term': 3,
             'fond_credit_id': fond.id,
+            # Prérequis d'activation (cf. common._create_loan) : sans rapport avec ce test.
+            'signed_contract': base64.b64encode(b'test signed contract'),
+            'signed_contract_filename': 'contrat_signe_test.pdf',
         })
         loan_b.action_generate_schedule()
         # Contournement volontaire du circuit d'approbation complet (hors sujet de ce test) :
@@ -385,3 +390,134 @@ class TestBailleurPartnerLink(TestFondBailleurCommon):
         # l'auto-création, sans backfill manuel nécessaire dans les tests existants.
         self.assertTrue(self.bailleur.partner_id)
         self.assertEqual(self.bailleur.partner_id.name, 'Bailleur Test')
+
+
+class TestFondAccountDefaultPerCompany(TestFondBailleurCommon):
+    """res.company.microfinance_fond_account_default_id : préremplissage de
+    microfinance.fond.credit.account_id à la création d'un fonds - même principe que
+    TestFondCreditDefaultPerCompany (test_fond_default_company.py) pour
+    microfinance_fond_credit_default_id, appliqué ici au compte comptable bailleur plutôt
+    qu'au fonds proposé par défaut sur un crédit."""
+
+    def _create_fond_no_explicit_account(self, **kwargs):
+        # TestFondBailleurCommon._create_fond() injecte toujours account_id dans vals (y
+        # compris à None) : pour tester le repli create()/default= sur l'absence réelle de la
+        # clé (cf. spec "si 'account_id' absent de vals"), on construit vals directement ici
+        # plutôt que de passer par ce helper.
+        vals = {'name': 'Fonds Test', 'bailleur_id': self.bailleur.id, 'date_debut': '2020-01-01'}
+        vals.update(kwargs)
+        return self.env['microfinance.fond.credit'].create(vals)
+
+    def test_default_applied_at_creation_without_explicit_account(self):
+        self.env.company.microfinance_fond_account_default_id = self.fond_account.id
+        fond = self._create_fond_no_explicit_account()
+        # Aucun account_id dans vals ici : le default= du champ (création via le formulaire,
+        # api.model_create_multi) l'applique déjà avant même le repli de create().
+        self.assertEqual(fond.account_id, self.fond_account)
+
+    def test_no_default_configured_leaves_account_id_empty(self):
+        # Comportement actuel inchangé : société sans défaut configuré (cas par défaut de
+        # TestFondBailleurCommon.setUpClass, jamais modifié ici) -> account_id reste vide.
+        self.assertFalse(self.env.company.microfinance_fond_account_default_id)
+        fond = self._create_fond_no_explicit_account(passer_gl=False)
+        self.assertFalse(fond.account_id)
+
+    def test_default_overridable_at_creation(self):
+        other_account = self.env['account.account'].create({
+            'name': 'Dette bailleur test 2', 'code': 'TFONDGL2',
+            'account_type': 'liability_current', 'company_id': self.env.company.id,
+        })
+        self.env.company.microfinance_fond_account_default_id = self.fond_account.id
+        fond = self._create_fond(account_id=other_account.id)
+        self.assertEqual(fond.account_id, other_account)
+
+    def test_default_overridable_after_creation(self):
+        other_account = self.env['account.account'].create({
+            'name': 'Dette bailleur test 2', 'code': 'TFONDGL2',
+            'account_type': 'liability_current', 'company_id': self.env.company.id,
+        })
+        self.env.company.microfinance_fond_account_default_id = self.fond_account.id
+        fond = self._create_fond_no_explicit_account()
+        self.assertEqual(fond.account_id, self.fond_account)
+
+        fond.account_id = other_account.id
+        self.assertEqual(fond.account_id, other_account)
+
+    def test_changing_company_default_has_no_retroactive_effect_on_existing_funds(self):
+        other_account = self.env['account.account'].create({
+            'name': 'Dette bailleur test 2', 'code': 'TFONDGL2',
+            'account_type': 'liability_current', 'company_id': self.env.company.id,
+        })
+        self.env.company.microfinance_fond_account_default_id = self.fond_account.id
+        fond = self._create_fond_no_explicit_account()
+        self.assertEqual(fond.account_id, self.fond_account)
+
+        # Changer le défaut de la société après coup ne doit jamais toucher un fonds déjà créé.
+        self.env.company.microfinance_fond_account_default_id = other_account.id
+        self.assertEqual(fond.account_id, self.fond_account)
+
+    def test_empty_default_with_passer_gl_still_raises_validation_error(self):
+        # _check_account_required inchangée : un défaut vide + passer_gl actif doit toujours
+        # bloquer, exactement comme avant l'introduction de ce défaut.
+        self.assertFalse(self.env.company.microfinance_fond_account_default_id)
+        with self.assertRaises(ValidationError):
+            self._create_fond_no_explicit_account(passer_gl=True)
+
+    def test_default_income_account_rejected_on_company(self):
+        with self.assertRaises(ValidationError):
+            self.env.company.microfinance_fond_account_default_id = self.income_account.id
+
+    def test_default_account_from_another_company_rejected(self):
+        other_company = self.env['res.company'].create({
+            'name': 'Agence B compte bailleur (test)', 'agency_code': 'Z9',
+        })
+        other_account = self.env['account.account'].create({
+            'name': 'Dette bailleur autre société', 'code': 'ZFONDGL',
+            'account_type': 'liability_current', 'company_id': other_company.id,
+        })
+        with self.assertRaises(ValidationError):
+            self.env.company.microfinance_fond_account_default_id = other_account.id
+
+    def test_onchange_prefills_account_id_when_empty(self):
+        self.env.company.microfinance_fond_account_default_id = self.fond_account.id
+        # account_id explicitement False (plutôt qu'absent) : bypass le default= du champ pour
+        # isoler la logique de l'onchange lui-même, pas celle du default à la création.
+        fond_form = self.env['microfinance.fond.credit'].new({
+            'name': 'Fonds Test Onchange', 'bailleur_id': self.bailleur.id,
+            'date_debut': '2020-01-01', 'account_id': False,
+        })
+        fond_form._onchange_scope_account_domain()
+        self.assertEqual(fond_form.account_id, self.fond_account)
+
+    def test_onchange_replaces_account_from_another_company_on_company_change(self):
+        # Scénario réaliste du spec : un compte d'une AUTRE société traîne encore sur le champ
+        # (résidu d'un changement de société) -> l'onchange doit le remplacer par le défaut de
+        # la nouvelle société, pas le laisser tel quel.
+        other_company = self.env['res.company'].create({
+            'name': 'Agence B onchange (test)', 'agency_code': 'Z8',
+        })
+        other_company_account = self.env['account.account'].create({
+            'name': 'Dette bailleur autre société', 'code': 'Z8FONDGL',
+            'account_type': 'liability_current', 'company_id': other_company.id,
+        })
+        self.env.company.microfinance_fond_account_default_id = self.fond_account.id
+        fond_form = self.env['microfinance.fond.credit'].new({
+            'name': 'Fonds Test Onchange', 'bailleur_id': self.bailleur.id,
+            'date_debut': '2020-01-01', 'account_id': other_company_account.id,
+            'company_id': self.env.company.id,
+        })
+        fond_form._onchange_scope_account_domain()
+        self.assertEqual(fond_form.account_id, self.fond_account)
+
+    def test_onchange_never_overwrites_manual_choice_of_same_company(self):
+        other_account = self.env['account.account'].create({
+            'name': 'Dette bailleur test 2', 'code': 'TFONDGL2',
+            'account_type': 'liability_current', 'company_id': self.env.company.id,
+        })
+        self.env.company.microfinance_fond_account_default_id = self.fond_account.id
+        fond_form = self.env['microfinance.fond.credit'].new({
+            'name': 'Fonds Test Onchange', 'bailleur_id': self.bailleur.id,
+            'date_debut': '2020-01-01', 'account_id': other_account.id,
+        })
+        fond_form._onchange_scope_account_domain()
+        self.assertEqual(fond_form.account_id, other_account)

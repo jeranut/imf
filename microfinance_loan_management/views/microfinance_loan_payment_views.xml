@@ -14,7 +14,13 @@
         <field name="model">microfinance.loan.payment</field>
         <field name="arch" type="xml">
             <form>
-                <header><button name="action_post" string="Comptabiliser" type="object" class="btn-primary" invisible="state != 'draft'"/><button name="action_cancel" string="Annuler" type="object" invisible="state != 'draft'"/><button name="action_open_cancel_wizard" string="Annuler (contre-passation)" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state != 'posted'"/><field name="state" widget="statusbar"/></header>
+                <!-- action_post/action_cancel restreints à finance/manager (AUDIT_anomalies_
+                     ampitatafika_ambanidia_20260921.md §3) : ce sont les seuls groupes ayant
+                     encore write sur microfinance.loan.payment (ir.model.access.csv) depuis le
+                     retrait de ce droit à group_microfinance_cashier - un caissier ne doit
+                     créer/comptabiliser un remboursement que par le Guichet Caisse. Même
+                     périmètre de groupes que action_open_cancel_wizard, déjà restreint. -->
+                <header><button name="action_post" string="Comptabiliser" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state != 'draft'"/><button name="action_cancel" string="Annuler" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state != 'draft'"/><button name="action_open_cancel_wizard" string="Annuler (contre-passation)" type="object" groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance" invisible="state != 'posted'"/><field name="state" widget="statusbar"/></header>
                 <sheet>
                     <div class="oe_title"><h1><field name="name" readonly="1"/></h1></div>
                     <group><group><field name="loan_id"/><field name="company_id" invisible="1"/><field name="partner_id"/><field name="payment_date"/><field name="amount"/><field name="journal_id"/></group><group><field name="allocated_interest"/><field name="allocated_principal"/><field name="allocated_penalty"/><field name="move_id"/><field name="reversal_move_id"/></group></group>

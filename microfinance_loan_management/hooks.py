@@ -233,7 +233,8 @@ def _backfill_bailleur_partner_ids(env):
     """Rattache un res.partner (créé à la volée) à tout microfinance.bailleur.fonds existant
     sans partner_id — nécessaire dès qu'au moins un enregistrement a été créé avant l'ajout de ce
     champ required, sinon la fiche reste bloquée en écriture (champ requis vide)."""
-    Bailleur = env['microfinance.bailleur.fonds'].with_context(active_test=False)
+    Bailleur = env['microfinance.bailleur.fonds'].with_context(
+        active_test=False, microfinance_skip_parent_check=True)
     orphans = Bailleur.search([('partner_id', '=', False)])
     for bailleur in orphans:
         partner = env['res.partner'].create({
