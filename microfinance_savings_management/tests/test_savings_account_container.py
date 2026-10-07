@@ -20,6 +20,19 @@ class TestSavingsAccountContainer(SavingsCommon):
         self.assertFalse(container.product_id)
         self.assertTrue(container.is_container)
 
+    def test_container_created_active_not_draft(self):
+        # Correctif : un conteneur ne doit jamais rester en brouillon, même sans produit -
+        # l'état est posé directement à la création, action_activate() restant interdit sur un
+        # conteneur (cf. test_container_cannot_be_activated ci-dessous).
+        container = self._create_container()
+        self.assertEqual(container.state, 'active')
+
+    def test_container_explicit_state_respected(self):
+        # Un appelant qui fournit explicitement un état (ex. migration/reprise de données) n'est
+        # pas écrasé par le forçage automatique.
+        container = self._create_container(state='closed')
+        self.assertEqual(container.state, 'closed')
+
     def test_real_account_without_product_raises(self):
         with self.assertRaises(ValidationError):
             self.env['microfinance.savings.account'].create({
@@ -40,6 +53,13 @@ class TestSavingsAccountContainer(SavingsCommon):
         container = self._create_container()
         with self.assertRaises(UserError):
             container._create_transaction('deposit', 100.0)
+
+    def test_container_not_flagged_dormant_by_cron(self):
+        # Défense en profondeur (cf. cron_detect_dormant_accounts) : un conteneur actif depuis
+        # longtemps, sans transaction ni date d'ouverture, ne doit jamais être marqué dormant.
+        container = self._create_container()
+        self.env['microfinance.savings.account'].cron_detect_dormant_accounts()
+        self.assertEqual(container.state, 'active')
 
     def test_regular_account_flow_unaffected(self):
         # Non-régression : un compte réel (is_container=False, défaut) continue de fonctionner

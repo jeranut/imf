@@ -4,12 +4,27 @@
         <field name="name">microfinance.savings.transaction.tree</field>
         <field name="model">microfinance.savings.transaction</field>
         <field name="arch" type="xml">
-            <tree decoration-danger="transaction_type in ('withdrawal','fee_debit','auto_debit')" decoration-success="transaction_type in ('deposit','interest_credit')">
+            <!-- create="0" : seule création légitime = guichet (register_operation, sudo) ou
+                 clôture de compte (action_close, sudo) - aucune création manuelle en liste/form
+                 n'est un flux valide pour ce modèle, cf. verrouillage création hors guichet. -->
+            <tree create="0" decoration-danger="transaction_type in ('withdrawal','fee_debit','auto_debit')" decoration-success="transaction_type in ('deposit','interest_credit')">
                 <field name="date"/>
                 <field name="account_id"/>
                 <field name="partner_id"/>
                 <field name="transaction_type"/>
-                <field name="amount"/>
+                <!-- currency_id chargé (colonne masquée) : requis pour que les sous-totaux sum=
+                     ci-dessous affichent "Ar"/MGA en pied de liste plutôt que "—". -->
+                <field name="currency_id" column_invisible="1"/>
+                <!-- Colonne "Montant" unique remplacée par Dépôt/Retrait (deposit_amount/
+                     withdrawal_amount, déjà définis et calculés sur le modèle - CREDIT_TYPES/
+                     DEBIT_TYPES, microfinance_savings_transaction.py), même principe que les
+                     colonnes Débit/Crédit des mouvements de caisse. interest_credit tombe dans
+                     Dépôt, fee_debit/auto_debit/transfer tombent dans Retrait (déjà la
+                     répartition du modèle, pas un nouveau choix fait ici) - aucun type n'est
+                     donc laissé à 0 dans les deux colonnes avec les valeurs actuelles de
+                     transaction_type. -->
+                <field name="deposit_amount" string="Dépôt" sum="Total dépôts"/>
+                <field name="withdrawal_amount" string="Retrait" sum="Total retraits"/>
                 <field name="payment_method"/>
                 <field name="cheque_state" widget="badge" optional="show"/>
                 <field name="move_id" optional="show"/>
@@ -21,7 +36,7 @@
         <field name="name">microfinance.savings.transaction.form</field>
         <field name="model">microfinance.savings.transaction</field>
         <field name="arch" type="xml">
-            <form string="Transaction épargne">
+            <form string="Transaction épargne" create="0">
                 <header>
                     <button name="action_post" string="Comptabiliser" type="object" class="btn-primary" invisible="state != 'draft'"/>
                     <button name="action_clear_cheque" string="Compenser le chèque" type="object" class="btn-primary"

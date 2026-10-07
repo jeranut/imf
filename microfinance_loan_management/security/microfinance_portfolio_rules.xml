@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Isolation microfinance.portfolio (R1 + Phase 2 correction §2, AUDIT_portefeuille_agent.md) :
+         - règle globale (groups vide, s'applique à tout le monde) : multi-société, même patron
+           que security/microfinance_company_rules.xml pour les autres modèles du module.
+         - règle agent (group_microfinance_user) : un agent ne voit que son propre portefeuille.
+         - règle gestionnaire/manager/finance/auditeur : tous les portefeuilles de leur périmètre
+           (déjà borné par la règle société ci-dessus). Combinée en OR avec la règle agent pour les
+           groupes qui impliquent group_microfinance_user (manager/gestionnaire/finance héritent
+           tous de group_microfinance_user via implied_ids, cf. security/groups.xml) : un manager
+           obtient donc bien la vision agence complète, pas seulement son propre portefeuille. -->
+    <record id="microfinance_portfolio_company_rule" model="ir.rule">
+        <field name="name">Portfolios by company</field>
+        <field name="model_id" ref="model_microfinance_portfolio"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_portfolio_self_rule" model="ir.rule">
+        <field name="name">Portfolio: own only (agent)</field>
+        <field name="model_id" ref="model_microfinance_portfolio"/>
+        <field name="domain_force">[('agent_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user'))]"/>
+    </record>
+
+    <record id="microfinance_portfolio_agency_rule" model="ir.rule">
+        <field name="name">Portfolio: whole agency (manager/gestionnaire/finance/auditor)</field>
+        <field name="model_id" ref="model_microfinance_portfolio"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_manager')), (4, ref('group_microfinance_gestionnaire')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_auditor'))]"/>
+    </record>
+
+    <record id="microfinance_portfolio_allocation_company_rule" model="ir.rule">
+        <field name="name">Portfolio allocations by company</field>
+        <field name="model_id" ref="model_microfinance_portfolio_allocation"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_portfolio_allocation_line_company_rule" model="ir.rule">
+        <field name="name">Portfolio allocation lines by company</field>
+        <field name="model_id" ref="model_microfinance_portfolio_allocation_line"/>
+        <field name="domain_force">[('allocation_id.company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <!-- Historique des allocations (M4) : même périmètre que le portefeuille lui-même
+         (microfinance_portfolio_self_rule / microfinance_portfolio_agency_rule ci-dessus) - un
+         agent ne voit que les lignes de SON portefeuille, un gestionnaire/manager/finance/auditeur
+         voit tout son périmètre agence (déjà borné par la règle société ci-dessus). -->
+    <record id="microfinance_portfolio_allocation_line_self_rule" model="ir.rule">
+        <field name="name">Portfolio allocation lines: own portfolio only (agent)</field>
+        <field name="model_id" ref="model_microfinance_portfolio_allocation_line"/>
+        <field name="domain_force">[('portfolio_id.agent_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user'))]"/>
+    </record>
+
+    <record id="microfinance_portfolio_allocation_line_agency_rule" model="ir.rule">
+        <field name="name">Portfolio allocation lines: whole agency (manager/gestionnaire/finance/auditor)</field>
+        <field name="model_id" ref="model_microfinance_portfolio_allocation_line"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_manager')), (4, ref('group_microfinance_gestionnaire')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_auditor'))]"/>
+    </record>
+</odoo>

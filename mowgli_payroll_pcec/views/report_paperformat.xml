@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Format papier paysage pour le bulletin de paie dupliqué (2 copies/page). -->
+    <record id="mowgli_paperformat_payslip_duplicate" model="report.paperformat">
+        <field name="name">Bulletin de paie paysage</field>
+        <field name="default" eval="False"/>
+        <field name="format">A4</field>
+        <field name="orientation">Landscape</field>
+        <field name="margin_top">8</field>
+        <field name="margin_bottom">8</field>
+        <field name="margin_left">8</field>
+        <field name="margin_right">8</field>
+        <field name="header_spacing">0</field>
+        <field name="header_line" eval="False"/>
+        <field name="dpi">90</field>
+    </record>
+
+    <!-- Surcharge (sans modifier hr_payroll_community) : l'action de rapport existante
+         pointe maintenant vers le nouveau template dupliqué et le nouveau paperformat. -->
+    <record id="hr_payroll_community.hr_payslip_new_report_action" model="ir.actions.report">
+        <field name="report_name">mowgli_payroll_pcec.report_payslip_duplicate</field>
+        <field name="report_file">mowgli_payroll_pcec.report_payslip_duplicate</field>
+        <field name="paperformat_id" ref="mowgli_paperformat_payslip_duplicate"/>
+    </record>
+</odoo>

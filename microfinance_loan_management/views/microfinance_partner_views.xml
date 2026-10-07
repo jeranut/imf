@@ -277,12 +277,47 @@
         </field>
     </record>
 
+    <!-- Vue recherche autonome (pas d'inherit_id sur base.view_res_partner_filter) réservée au
+         menu "Clients" : le searchpanel État civil/Commune ne doit affecter ni Contacts, ni les
+         autres usages de res.partner dans l'instance. Reprend le contenu utile de la vue
+         standard (id 127 en base : name/parent_id/email/phone/category_id/user_id, filtres
+         type_person/type_company/inactive, groupby salesperson/group_company/group_country). -->
+    <record id="view_microfinance_client_search" model="ir.ui.view">
+        <field name="name">res.partner.microfinance.client.search</field>
+        <field name="model">res.partner</field>
+        <field name="arch" type="xml">
+            <search string="Rechercher Client">
+                <field name="name" filter_domain="['|', '|', '|', '|', ('complete_name', 'ilike', self), ('ref', 'ilike', self), ('email', 'ilike', self), ('vat', 'ilike', self), ('company_registry', 'ilike', self)]"/>
+                <field name="parent_id" domain="[('is_company', '=', True)]" operator="child_of"/>
+                <field name="email" filter_domain="[('email', 'ilike', self)]"/>
+                <field name="phone" filter_domain="['|', ('phone', 'ilike', self), ('mobile', 'ilike', self)]"/>
+                <field name="category_id" string="Tag" operator="child_of"/>
+                <field name="user_id"/>
+                <separator/>
+                <filter string="Individuals" name="type_person" domain="[('is_company', '=', False)]"/>
+                <filter string="Companies" name="type_company" domain="[('is_company', '=', True)]"/>
+                <separator/>
+                <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
+                <group expand="0" name="group_by" string="Group By">
+                    <filter name="salesperson" string="Salesperson" domain="[]" context="{'group_by' : 'user_id'}"/>
+                    <filter name="group_company" string="Company" context="{'group_by': 'parent_id'}"/>
+                    <filter name="group_country" string="Country" context="{'group_by': 'country_id'}"/>
+                </group>
+                <searchpanel>
+                    <field name="microfinance_marital_status" select="multi" string="État civil" icon="fa-heart" enable_counters="1"/>
+                    <field name="microfinance_commune_id" select="multi" string="Commune" icon="fa-map-marker" enable_counters="1"/>
+                </searchpanel>
+            </search>
+        </field>
+    </record>
+
     <record id="action_microfinance_client" model="ir.actions.act_window">
         <field name="name">Clients</field>
         <field name="res_model">res.partner</field>
         <field name="view_mode">tree,form,kanban</field>
         <field name="domain">[('microfinance_partner_type', '=', 'client')]</field>
         <field name="context">{'microfinance_context': True, 'default_microfinance_client_type': 'individual', 'default_microfinance_partner_type': 'client'}</field>
+        <field name="search_view_id" ref="view_microfinance_client_search"/>
     </record>
 
     <!-- Madagascar par défaut sur res.partner (instance majoritairement basée à Madagascar) -->

@@ -25,10 +25,32 @@ export class MicrofinanceLoanDashboard extends Component {
 
     static PAGE_SIZE = 20;
 
+    // Les 6 boutons "Mes ..." de la barre d'actions "Mon portefeuille" : anciennement des
+    // redirections (ir.actions.act_window via openAgentShortcut/_openList, cf. git history),
+    // maintenant des onglets rendus dans le dashboard (onPortfolioTabClick ci-dessous), servis
+    // par la méthode unique microfinance.loan.get_portfolio_tab (whitelist + domaine résolus
+    // côté serveur). `clickable` : seules les lignes client/crédit/visite ouvrent leur fiche,
+    // remboursements/impayés/échéances restent en lecture seule (cf. consigne métier).
+    static TABS = [
+        { id: "my_clients", label: "Mes clients", model: "res.partner", clickable: true },
+        { id: "my_loans", label: "Mes crédits", model: "microfinance.loan", clickable: true },
+        { id: "my_payments", label: "Mes remboursements", model: "microfinance.loan.payment", clickable: false },
+        { id: "my_overdue", label: "Mes impayés", model: "microfinance.loan", clickable: false },
+        { id: "my_installments", label: "Mes échéances", model: "microfinance.loan.installment", clickable: false },
+        { id: "my_visits", label: "Mes visites", model: "microfinance.collection.visit", clickable: true },
+        // 7e onglet : pas un simple search_read (cf. _PORTFOLIO_TAB_CONFIG côté serveur), rendu
+        // par un panneau dédié (cf. XML) plutôt que le tableau générique - clickable n'a pas de
+        // sens ici, chaque ligne sait déjà ouvrir sa propre fiche via res_model/res_id (loan ou
+        // allocation) renvoyés par le serveur.
+        { id: "my_funds", label: "Fonds de crédit", model: null, clickable: false },
+    ];
+
     setup() {
         this.orm = useService("orm");
         this.actionService = useService("action");
+        this.notification = useService("notification");
         this.topics = MicrofinanceLoanDashboard.TOPICS;
+        this.portfolioTabs = MicrofinanceLoanDashboard.TABS;
         // Liste utilisee par la nav (t-foreach) : exclut les topics hidden (cf. "portefeuille"
         // ci-dessus), sans retirer leur entree de this.topics dont setActiveTopic()/onMounted()
         // ont besoin pour l'ouverture directe via contexte dashboard_topic.
@@ -51,6 +73,12 @@ export class MicrofinanceLoanDashboard extends Component {
                 loading: false,
                 agents: [],
                 selectedOfficerId: null,
+                // true seulement quand ce portefeuille est consulté via le menu "Portefeuille"
+                // (liste) par quelqu'un d'autre que l'agent lui-même (portfolio_is_own=False
+                // renvoyé par get_dashboard_data) : masque "Nouveau client" (seule action de
+                // mutation de cette barre - les 6 autres boutons sont déjà des onglets lecture
+                // seule, cf. onPortfolioTabClick).
+                readOnly: false,
                 kpis: {},
                 monthly: {},
                 par: null,
@@ -60,6 +88,20 @@ export class MicrofinanceLoanDashboard extends Component {
                 table: { rows: [], total: 0, offset: 0 },
                 tableLoading: false,
                 search: "",
+                // Onglets "Mes clients/crédits/remboursements/impayés/échéances/visites" :
+                // chargement paresseux au 1er clic, mis en cache par onglet (cache vidé au
+                // changement d'agent par onSelectAgent, les données étant scopées par officer_id
+                // côté serveur) pour ne pas recharger en reswitchant entre onglets déjà vus.
+                tabs: { active: null, loading: false, cache: {} },
+                // Onglet "Fonds de crédit" (7e, cf. TABS) : état séparé de `tabs` ci-dessus car
+                // il porte des filtres (fonds/type/période) qui composent la clé de cache, en
+                // plus de l'offset de pagination - les 6 autres onglets n'en ont pas.
+                fundsTab: {
+                    loading: false,
+                    offset: 0,
+                    filters: { fundId: false, flow: "all", dateFrom: false, dateTo: false },
+                    cache: {},
+                },
                 // Chantier décaissement provisoire : crédits activés pas encore libérés pour
                 // décaissement au guichet (get_agent_upcoming_disbursements), section
                 // "Décaissements à venir" - distincte de la table principale ci-dessus qui ne
@@ -82,11 +124,25 @@ export class MicrofinanceLoanDashboard extends Component {
         this._agentSearchTimer = null;
 
         onMounted(async () => {
+            // portfolio_id (menu "Portefeuille" -> microfinance.portfolio.action_open_dashboard,
+            // bouton d'une ligne de liste) : transmis tel quel à get_dashboard_data, qui le
+            // résout et le vérifie côté serveur par ORM (record rules de microfinance.portfolio)
+            // avant de renvoyer portfolio_officer_id/portfolio_is_own - jamais d'agent_id envoyé
+            // par ce composant, uniquement cet id de portefeuille.
+            this._portfolioId = this.props.action?.context?.portfolio_id || null;
             await this.loadDashboard();
-            // Ouverture directe sur un onglet donné (action "Mon portefeuille" : contexte
-            // {'dashboard_topic': 'portefeuille'}). Sans contexte -> onglet "apercu" par défaut.
+            // Ouverture directe sur un onglet donné (action "Mon portefeuille"/"Portefeuille" :
+            // contexte {'dashboard_topic': 'portefeuille'}). Sans contexte -> "apercu" par défaut.
             const initialTopic = this.props.action?.context?.dashboard_topic;
             if (initialTopic && this.topics.some((t) => t.id === initialTopic)) {
+                if (this.state.data?.portfolio_officer_id) {
+                    // Pré-sélectionne l'agent résolu par le serveur AVANT setActiveTopic : son
+                    // chargement (loadAgentPortfolio) ne l'écrase pas s'il est déjà renseigné
+                    // (cf. ce fichier plus bas), et appelle get_available_agents comme d'habitude
+                    // pour peupler le sélecteur d'en-tête avec le bon agent déjà actif.
+                    this.state.agent.selectedOfficerId = this.state.data.portfolio_officer_id;
+                }
+                this.state.agent.readOnly = !(this.state.data?.portfolio_is_own ?? true);
                 this.setActiveTopic(initialTopic);
             }
         });
@@ -109,12 +165,19 @@ export class MicrofinanceLoanDashboard extends Component {
             // orm.call transmet allowed_company_ids, donc self.env.company côté serveur suit
             // le sélecteur multi-société. Le rechargement de page déclenché nativement par le
             // sélecteur (browser.location.reload) suffit à rejouer onMounted -> loadDashboard.
-            this.state.data = await this.orm.call("microfinance.loan", "get_dashboard_data", []);
+            this.state.data = await this.orm.call(
+                "microfinance.loan", "get_dashboard_data", [this._portfolioId || null]);
             this.shouldRenderCharts = true;
             this.state.loading = false;
         } catch (error) {
             this.state.loading = false;
             this.state.error = true;
+            // Remplace le message générique par celui de l'exception serveur (UserError/
+            // AccessError...) : diagnosticable sans log pour le prochain défaut de ce genre
+            // (ex. TypeError de signature, AccessError portefeuille hors périmètre).
+            this.notification.add(error.data?.message || error.message || "Impossible de charger le tableau de bord.", {
+                type: "danger",
+            });
             console.error("Microfinance dashboard data loading failed", error);
         }
     }
@@ -201,6 +264,14 @@ export class MicrofinanceLoanDashboard extends Component {
                 this.shouldRenderCharts = true;
             }
         } catch (error) {
+            // Ne jamais laisser l'onglet "Mon portefeuille" vide en silence (seul l'en-tête
+            // restait visible, cf. incident ccl1/Andoharanofotsy) : notifier comme loadDashboard()
+            // ci-dessus, ET marquer loaded pour que le template retombe sur les valeurs par
+            // défaut sûres (kpis: {}, table: {rows: []}, ...) plutôt que de ne rien afficher.
+            agent.loaded = true;
+            this.notification.add(error.data?.message || error.message || "Impossible de charger le portefeuille de l'agent.", {
+                type: "danger",
+            });
             console.error("Microfinance dashboard: agent portfolio loading failed", error);
         } finally {
             agent.loading = false;
@@ -230,6 +301,12 @@ export class MicrofinanceLoanDashboard extends Component {
         const value = parseInt(ev.target.value, 10);
         this.state.agent.selectedOfficerId = Number.isNaN(value) ? null : value;
         this.state.agent.search = "";
+        this.state.agent.tabs = { active: null, loading: false, cache: {} };
+        this.state.agent.fundsTab = {
+            loading: false, offset: 0,
+            filters: { fundId: false, flow: "all", dateFrom: false, dateTo: false },
+            cache: {},
+        };
         this.loadAgentPortfolio();
     }
 
@@ -275,43 +352,236 @@ export class MicrofinanceLoanDashboard extends Component {
         return found ? found.officer_name : "";
     }
 
-    _openList(model, name, domain) {
-        this.actionService.doAction({
-            type: "ir.actions.act_window",
-            res_model: model,
-            name,
-            domain,
-            views: [[false, "list"], [false, "form"]],
-            target: "current",
-        });
-    }
-
-    /** Raccourci de la barre "Mon portefeuille" : ouvre la vue liste existante filtrée sur
-     *  l'agent actuellement affiché dans le sélecteur (pas sur l'utilisateur courant). */
+    /** "Nouveau client" reste une redirection (création hors dashboard) : seul bouton de la
+     *  barre "Mon portefeuille" à ne pas être devenu un onglet (cf. onPortfolioTabClick
+     *  ci-dessous pour les 6 autres, anciennement des ir.actions.act_window ici même). */
     openAgentShortcut(kind) {
-        const officerId = this.state.agent.selectedOfficerId;
         if (kind === "new_client") {
             this.actionService.doAction("microfinance_loan_management.action_microfinance_client", {
                 viewType: "form",
             });
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Onglets "Mes clients/crédits/remboursements/impayés/échéances/visites"
+    // ----------------------------------------------------------------
+
+    /** Clic sur un onglet de la barre "Mon portefeuille" : re-cliquer l'onglet actif le ferme
+     *  (choix le plus simple, cf. consigne), sinon l'active et charge ses données si pas déjà
+     *  en cache pour cet agent (cache vidé par onSelectAgent au changement d'agent). */
+    onPortfolioTabClick(tabId) {
+        const tabs = this.state.agent.tabs;
+        if (tabs.active === tabId) {
+            tabs.active = null;
             return;
         }
-        if (kind === "new_application") {
-            this.actionService.doAction("microfinance_loan_management.action_microfinance_loan_application");
+        tabs.active = tabId;
+        if (tabId === "my_funds") {
+            if (!Object.keys(this.state.agent.fundsTab.cache).length) {
+                this.loadFundsTab(0);
+            }
             return;
         }
-        const shortcuts = {
-            my_clients: ["res.partner", "Mes clients", [["microfinance_loan_ids.officer_id", "=", officerId]]],
-            my_loans: ["microfinance.loan", "Mes crédits", [["officer_id", "=", officerId]]],
-            my_payments: ["microfinance.loan.payment", "Mes remboursements", [["officer_id", "=", officerId]]],
-            my_overdue: ["microfinance.loan", "Mes impayés", [["officer_id", "=", officerId], ["overdue_amount", ">", 0]]],
-            my_installments: ["microfinance.loan.installment", "Mes échéances", [["officer_id", "=", officerId]]],
-            my_visits: ["microfinance.collection.visit", "Mes visites", [["agent_id", "=", officerId]]],
-        };
-        const spec = shortcuts[kind];
-        if (spec) {
-            this._openList(spec[0], spec[1], spec[2]);
+        if (!tabs.cache[tabId]) {
+            this.loadPortfolioTab(tabId, 0);
         }
+    }
+
+    async loadPortfolioTab(tabId, offset) {
+        const tabs = this.state.agent.tabs;
+        tabs.loading = true;
+        try {
+            const result = await this.orm.call("microfinance.loan", "get_portfolio_tab", [
+                tabId,
+                this.state.agent.selectedOfficerId,
+                offset || 0,
+                MicrofinanceLoanDashboard.PAGE_SIZE,
+            ]);
+            tabs.cache[tabId] = {
+                columns: result.columns, rows: result.rows, total: result.total, offset: result.offset,
+            };
+        } finally {
+            tabs.loading = false;
+        }
+    }
+
+    // ----------------------------------------------------------------
+    // Onglet "Fonds de crédit" (7e onglet)
+    // ----------------------------------------------------------------
+
+    /** Clé de cache : combinaison filtres + offset (consigne "cache par combinaison de
+     *  filtres") - rejouer les mêmes filtres après être reparti sur un autre onglet ne
+     *  recharge pas le serveur. */
+    _fundsTabCacheKey(offset) {
+        const f = this.state.agent.fundsTab.filters;
+        return JSON.stringify({ ...f, offset: offset || 0 });
+    }
+
+    get fundsTabData() {
+        const f = this.state.agent.fundsTab;
+        return f.cache[this._fundsTabCacheKey(f.offset)] || null;
+    }
+
+    async loadFundsTab(offset) {
+        const f = this.state.agent.fundsTab;
+        const key = this._fundsTabCacheKey(offset || 0);
+        f.offset = offset || 0;
+        if (f.cache[key]) {
+            return;
+        }
+        f.loading = true;
+        try {
+            const result = await this.orm.call("microfinance.loan", "get_portfolio_tab", [
+                "fonds",
+                this.state.agent.selectedOfficerId,
+                offset || 0,
+                MicrofinanceLoanDashboard.PAGE_SIZE,
+                f.filters.fundId || false,
+                f.filters.flow,
+                f.filters.dateFrom || false,
+                f.filters.dateTo || false,
+            ]);
+            f.cache[key] = result;
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message || "Impossible de charger les fonds de crédit.", {
+                type: "danger",
+            });
+            console.error("Microfinance dashboard: funds tab loading failed", error);
+        } finally {
+            f.loading = false;
+        }
+    }
+
+    onFundsSelectFund(fundId) {
+        this.state.agent.fundsTab.filters.fundId = fundId || false;
+        this.loadFundsTab(0);
+    }
+
+    onFundsSelectFlow(flow) {
+        this.state.agent.fundsTab.filters.flow = flow;
+        this.loadFundsTab(0);
+    }
+
+    onFundsDateChange(which, ev) {
+        this.state.agent.fundsTab.filters[which] = ev.target.value || false;
+        this.loadFundsTab(0);
+    }
+
+    onFundsResetFilters() {
+        this.state.agent.fundsTab.filters = { fundId: false, flow: "all", dateFrom: false, dateTo: false };
+        this.loadFundsTab(0);
+    }
+
+    get fundsTabPages() {
+        const data = this.fundsTabData;
+        const total = data ? data.total_rows : 0;
+        const size = MicrofinanceLoanDashboard.PAGE_SIZE;
+        const pageCount = Math.max(1, Math.ceil(total / size));
+        const current = Math.floor(((data && data.offset) || 0) / size) + 1;
+        return { pageCount, current };
+    }
+
+    goToFundsPage(page) {
+        if (typeof page !== "number") {
+            return;
+        }
+        this.loadFundsTab((page - 1) * MicrofinanceLoanDashboard.PAGE_SIZE);
+    }
+
+    /** Lecture seule partout : seules les lignes crédit/allocation (res_model/res_id renvoyés
+     *  par le serveur) ouvrent une fiche. */
+    openFundsRow(row) {
+        if (!row.res_model || !row.res_id) {
+            return;
+        }
+        this.actionService.doAction({
+            type: "ir.actions.act_window",
+            res_model: row.res_model,
+            res_id: row.res_id,
+            views: [[false, "form"]],
+            target: "current",
+        });
+    }
+
+    get fundsModeLabel() {
+        const data = this.fundsTabData;
+        const fundId = this.state.agent.fundsTab.filters.fundId;
+        if (!data) {
+            return "";
+        }
+        if (!fundId) {
+            return `Vue agrégée · ${data.funds.length} fonds`;
+        }
+        const fund = data.funds.find((fd) => fd.id === fundId);
+        return fund ? `Fonds ${fund.name}` : "";
+    }
+
+    get activePortfolioTab() {
+        return this.portfolioTabs.find((t) => t.id === this.state.agent.tabs.active) || null;
+    }
+
+    get activePortfolioTabData() {
+        const active = this.state.agent.tabs.active;
+        return active ? this.state.agent.tabs.cache[active] : null;
+    }
+
+    get portfolioTabPages() {
+        const data = this.activePortfolioTabData;
+        const total = data ? data.total : 0;
+        const size = MicrofinanceLoanDashboard.PAGE_SIZE;
+        const pageCount = Math.max(1, Math.ceil(total / size));
+        const current = Math.floor(((data && data.offset) || 0) / size) + 1;
+        return { pageCount, current };
+    }
+
+    goToPortfolioTabPage(page) {
+        const active = this.state.agent.tabs.active;
+        if (!active || typeof page !== "number") {
+            return;
+        }
+        this.loadPortfolioTab(active, (page - 1) * MicrofinanceLoanDashboard.PAGE_SIZE);
+    }
+
+    /** Libelle du bouton d'un onglet de la barre "Mon portefeuille" - par defaut le label
+     *  statique (TABS), mais surchargeable (cf. patch() d'un module tiers) pour y ajouter par
+     *  exemple un compteur une fois l'onglet charge. Indirection generique et triviale : ne
+     *  change rien pour les 7 onglets existants. */
+    formatPortfolioTabLabel(tab) {
+        return tab.label;
+    }
+
+    /** Ligne cliquable uniquement pour les onglets marqués `clickable` (clients/crédits/visites,
+     *  cf. TABS) : remboursements/impayés/échéances restent en lecture seule. */
+    openPortfolioTabRow(row) {
+        const tab = this.activePortfolioTab;
+        if (!tab || !tab.clickable) {
+            return;
+        }
+        this.actionService.doAction({
+            type: "ir.actions.act_window",
+            res_model: tab.model,
+            res_id: row.id,
+            views: [[false, "form"]],
+            target: "current",
+        });
+    }
+
+    /** Formate une cellule de tableau d'onglet selon le type déclaré par la colonne
+     *  (microfinance.loan.get_portfolio_tab) : many2one -> display_name, money/date -> mêmes
+     *  helpers que le reste du dashboard (formatMoney/formatDate), sinon valeur brute. */
+    formatTabCell(column, row) {
+        const value = row[column.name];
+        if (column.type === "many2one") {
+            return value ? value[1] : "";
+        }
+        if (column.type === "money") {
+            return this.formatMoney(value);
+        }
+        if (column.type === "date") {
+            return this.formatDate(value);
+        }
+        return value === false || value === undefined || value === null ? "" : value;
     }
 
     openLoanRecord(loanId) {

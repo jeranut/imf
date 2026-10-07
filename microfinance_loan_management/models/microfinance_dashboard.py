@@ -15,7 +15,10 @@ class MicrofinanceDashboard(models.Model):
 
     @api.depends_context('company')
     def _compute_dashboard(self):
-        Loan = self.env['microfinance.loan']
+        # sudo() : même raison que get_dashboard_data() (microfinance_loan.py) - ce widget
+        # d'agence doit rester identique pour tous les rôles après l'ajout de la règle
+        # d'isolation par agent (security/microfinance_officer_isolation_rules.xml).
+        Loan = self.env['microfinance.loan'].sudo()
         # disbursement_date renseigné : depuis le découplage activation / décaissement
         # (docs_dev/guichet_caisse/AUDIT_decaissement.md), un crédit 'active' peut ne pas être
         # encore décaissé — il n'a alors ni montant décaissé ni encours réel.

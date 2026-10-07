@@ -322,6 +322,21 @@ class MicrofinanceFondCredit(models.Model):
             'domain': [('fond_credit_id', '=', self.id)],
         }
 
+    def action_view_portfolio_allocation_history(self):
+        """Historique par fonds (M4) : lignes de répartition agence -> portefeuilles validées pour
+        ce fonds, par agence et par portefeuille - lecture seule (voir la vue
+        view_microfinance_portfolio_allocation_line_history_tree)."""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Historique des allocations'),
+            'res_model': 'microfinance.portfolio.allocation.line',
+            'view_mode': 'tree',
+            'views': [(self.env.ref(
+                'microfinance_loan_management.view_microfinance_portfolio_allocation_line_history_tree').id, 'tree')],
+            'domain': [('fond_id', '=', self.id), ('state', '=', 'validated')],
+        }
+
     @api.model
     def get_dashboard_kpi(self, company_id):
         """Solde total et nombre de fonds actifs visibles pour la société company_id, pour la

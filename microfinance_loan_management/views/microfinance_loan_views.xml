@@ -8,11 +8,22 @@
                 <field name="name"/>
                 <field name="partner_id"/>
                 <field name="product_id"/>
-                <field name="loan_amount"/>
-                <field name="balance_total"/>
-                <field name="overdue_amount"/>
+                <!-- currency_id chargé (colonne masquée) : requis pour que les sous-totaux
+                     sum= ci-dessous affichent "Ar"/MGA en pied de liste plutôt que "—", cf.
+                     même patron que microfinance_savings_account_views.xml
+                     (transaction_ids)/income_line_*_ids. -->
+                <field name="currency_id" column_invisible="1"/>
+                <field name="loan_amount" sum="Total"/>
+                <field name="balance_total" sum="Total"/>
+                <field name="overdue_amount" sum="Total"/>
                 <field name="internal_score" widget="progressbar"/>
-                <field name="state" widget="badge"/>
+                <field name="state" widget="badge"
+                    decoration-muted="state in ('draft', 'enquete', 'closed')"
+                    decoration-warning="state in ('avis_ca', 'avis_cdag')"
+                    decoration-info="state == 'approved'"
+                    decoration-success="state == 'active'"
+                    decoration-danger="state == 'defaulted'"
+                    decoration-primary="state in ('written_off', 'cancelled')"/>
             </tree>
         </field>
     </record>
@@ -36,6 +47,36 @@
             </kanban>
         </field>
     </record>
+    <!-- Vues dédiées au menu "Crédits" (action_microfinance_loan) uniquement : masquent le
+         bouton "Nouveau" de ce menu, en liste/kanban ET en formulaire (voir la 3e vue,
+         *_form_credits_menu, déclarée plus bas après view_microfinance_loan_form) — seul
+         point de création autorisé = smart button "Crédit" sur res.partner, cf. décision
+         Micka 2026-09-27. mode="primary" + héritage : reprennent tout le contenu des vues
+         génériques ci-dessus sans jamais s'appliquer à leurs autres consommateurs (smart
+         button, dashboard "Nouveau prêt", etc., qui ne fixent pas de view_id et retombent
+         donc sur les vues génériques inchangées). -->
+    <record id="view_microfinance_loan_tree_credits_menu" model="ir.ui.view">
+        <field name="name">microfinance.loan.tree.credits.menu.readonly.create</field>
+        <field name="model">microfinance.loan</field>
+        <field name="inherit_id" ref="view_microfinance_loan_tree"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="attributes">
+                <attribute name="create">0</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_microfinance_loan_kanban_credits_menu" model="ir.ui.view">
+        <field name="name">microfinance.loan.kanban.credits.menu.readonly.create</field>
+        <field name="model">microfinance.loan</field>
+        <field name="inherit_id" ref="view_microfinance_loan_kanban"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//kanban" position="attributes">
+                <attribute name="create">0</attribute>
+            </xpath>
+        </field>
+    </record>
     <record id="view_microfinance_loan_search" model="ir.ui.view">
         <field name="name">microfinance.loan.search</field>
         <field name="model">microfinance.loan</field>
@@ -52,6 +93,15 @@
                     <filter name="group_product" string="Produit" context="{'group_by':'product_id'}"/>
                     <filter name="group_agent" string="Agent" context="{'group_by':'officer_id'}"/>
                 </group>
+                <searchpanel>
+                    <field name="state" select="multi" icon="fa-flag" enable_counters="1"/>
+                    <field name="product_id" select="multi" string="Produit" icon="fa-cubes" enable_counters="1"/>
+                    <field name="officer_id" select="multi" string="Agent crédit" icon="fa-user" enable_counters="1"/>
+                    <field name="manager_id" select="multi" string="Manager" icon="fa-user-tie" enable_counters="1"/>
+                    <field name="repayment_frequency_id" select="multi" string="Périodicité" icon="fa-calendar" enable_counters="1"/>
+                    <field name="scoring_decision" select="multi" string="Décision scoring" icon="fa-check-circle" enable_counters="1"/>
+                    <field name="risk_level" select="multi" string="Niveau de risque" icon="fa-exclamation-triangle" enable_counters="1"/>
+                </searchpanel>
             </search>
         </field>
     </record>
@@ -93,14 +143,26 @@
                          n'importe quelle profondeur dans l'arch, comme dans button_box) et
                          conservent name/type/invisible identiques à l'ancien bouton
                          correspondant - même comportement, juste regroupé visuellement. -->
-                    <div class="btn-group" role="group">
+                    <!-- Menu "Imprimer" masqué tant que la date de décaissement n'est ni
+                         confirmée (disbursement_date_confirmed, verrouillée à l'activation via
+                         le wizard) ni déjà réellement décaissée (disbursement_date, cas legacy
+                         où confirmed n'a jamais été posé - cf. dossier réel #747 sur MOWGLI) :
+                         le calendrier/carnet doivent être imprimables AVANT le passage en caisse
+                         (le contrat doit être signé avant le décaissement, donc ces documents
+                         aussi), contrairement au reçu de décaissement ci-dessous qui reste
+                         conditionné en plus sur le décaissement RÉEL. Même condition que
+                         "Imprimer le contrat"/"Téléverser le contrat signé" plus bas. -->
+                    <div class="btn-group" role="group" invisible="not disbursement_date_confirmed and not disbursement_date">
                         <button name="print_menu_toggle" type="button" class="btn btn-cefor-print dropdown-toggle" data-bs-toggle="dropdown">
                             <i class="fa fa-print"/> Imprimer
                         </button>
                         <div class="dropdown-menu" role="menu">
+                            <!-- Reçu de DÉCAISSEMENT : n'a de sens qu'une fois l'argent
+                                 réellement sorti - reste conditionné sur disbursement_date (réel),
+                                 pas sur disbursement_date_confirmed comme le reste du menu. -->
                             <button name="%(action_report_microfinance_loan_disbursement_receipt)d" type="action"
                                     class="dropdown-item" string="Imprimer le reçu"
-                                    invisible="state in ('draft','enquete','avis_ca','avis_cdag','approved','cancelled')"/>
+                                    invisible="state in ('draft','enquete','avis_ca','avis_cdag','approved','cancelled') or not disbursement_date"/>
                             <button name="action_print_repayment_schedule" type="object"
                                     class="dropdown-item" string="Imprimer le calendrier"
                                     invisible="installment_count == 0"/>
@@ -108,27 +170,46 @@
                                     class="dropdown-item" string="Imprimer le carnet"/>
                         </div>
                     </div>
-                    <!-- Contrat de crédit : visible uniquement à l'état "Approuvé", pour
-                         Agent crédit / Manager / Gestionnaire (group_microfinance_user est le
-                         socle impliqué par manager et gestionnaire). Appelle une méthode
-                         (type="object") qui poste le PDF dans le chatter — pas de
-                         téléchargement, pas d'action de rapport directe. Même classe verte
-                         btn-cefor-print + icône que "Imprimer le calendrier". -->
-                    <button name="action_print_contrat_to_chatter" type="object" class="btn-cefor-print" groups="microfinance_loan_management.group_microfinance_user" invisible="state != 'approved'">
+                    <!-- Contrat de crédit : visible dès que la date de décaissement est
+                         confirmée (disbursement_date_confirmed, verrouillée à l'activation via
+                         le wizard) ou déjà réellement décaissée (disbursement_date, cas legacy
+                         où confirmed n'a jamais été posé - cf. dossier réel #747 sur MOWGLI) -
+                         même condition que le menu "Imprimer" ci-dessus. PAS avant : le contrat
+                         doit être signé avant le passage en caisse, mais seulement une fois la
+                         date de décaissement verrouillée par l'activation (sinon les dates qu'il
+                         contient seraient encore provisoires) - décision actée après test réel
+                         sur AD/000004 (contrat visible à tort dès "Approuvé", avant toute
+                         confirmation). Ancienne condition (state != 'approved', puis élargie à
+                         state in (...)) abandonnée : c'est disbursement_date_confirmed qui pilote
+                         désormais, pas l'état. _check_activation_eligibility() n'exige plus
+                         signed_contract depuis le correctif qui a déplacé ce contrôle vers
+                         action_process_disbursement() (docs_dev/invisibilite_boutons_
+                         decaissement/) : aucun risque de blocage de l'activation à conditionner
+                         ce bouton ainsi, contrairement à l'ancien risque de blocage identifié
+                         avec disbursement_date (le vrai décaissement, qui lui dépend justement du
+                         contrat déjà signé). Pour Agent crédit / Manager / Gestionnaire
+                         (group_microfinance_user est le socle impliqué par manager et
+                         gestionnaire). Appelle une méthode (type="object") qui poste le PDF dans
+                         le chatter — pas de téléchargement, pas d'action de rapport directe.
+                         Même classe verte btn-cefor-print + icône que "Imprimer le calendrier". -->
+                    <button name="action_print_contrat_to_chatter" type="object" class="btn-cefor-print" groups="microfinance_loan_management.group_microfinance_user" invisible="not disbursement_date_confirmed and not disbursement_date">
                         <i class="fa fa-print"/> Imprimer le contrat
                     </button>
                     <!-- Dépôt du contrat signé : ouvre microfinance.loan.contract.signature.wizard
                          (docs_dev/date_signature_contrat/) plutôt qu'un upload direct - le
                          fichier ET sa date de signature sont saisis ensemble puis verrouillés
-                         définitivement dès confirmation (_check_contract_signature_locked()),
-                         quel que soit l'état du dossier ensuite. Remplace l'ancien widget
-                         signed_contract_upload (habillage visuel du binary standard, devenu
-                         inutile - retiré avec ce lot). Invisible dès que
-                         contract_signature_date est renseigné : plus aucun moyen de rouvrir ce
-                         wizard une fois le contrat confirmé (le widget natif du panneau SUIVI
-                         passe lui aussi en readonly permanent, cf. groupe "Suivi" plus bas). -->
+                         définitivement dès confirmation (_check_contract_signature_locked()).
+                         Remplace l'ancien widget signed_contract_upload (habillage visuel du
+                         binary standard, devenu inutile - retiré avec ce lot). Même condition que
+                         "Imprimer le contrat" ci-dessus (disbursement_date_confirmed ou
+                         disbursement_date) : le contrat signé déposé ici doit correspondre à un
+                         contrat généré sur la date de décaissement confirmée, pas une estimation
+                         encore modifiable. Invisible aussi dès que contract_signature_date est
+                         renseigné : plus aucun moyen de rouvrir ce wizard une fois le contrat
+                         confirmé (le widget natif du panneau SUIVI passe lui aussi en readonly
+                         permanent, cf. groupe "Suivi" plus bas). -->
                     <button name="action_open_contract_signature_wizard" type="object" class="btn-cefor-print"
-                            invisible="state not in ('approved', 'active', 'closed', 'defaulted', 'written_off') or contract_signature_date">
+                            invisible="(not disbursement_date_confirmed and not disbursement_date) or contract_signature_date">
                         <i class="fa fa-upload"/> Téléverser le contrat signé
                     </button>
                     <!-- Génération manuelle de l'échéancier : remède au trou laissé par le
@@ -366,15 +447,47 @@
             </form>
         </field>
     </record>
+    <!-- Vue form dédiée au menu "Crédits" : masque aussi le bouton "Nouveau" affiché en
+         breadcrumb lors de la navigation en formulaire dans cette action (constat du
+         2026-09-27 : le verrou tree/kanban seul ne suffit pas, ce bouton dépend du form
+         affiché par L'ACTION EN COURS, pas de la liste). Le smart button res.partner ouvre
+         son propre formulaire vierge via une action ad hoc distincte qui ne référence pas
+         cette vue (ni aucun view_id) : il retombe sur view_microfinance_loan_form,
+         inchangée, et reste donc créable. -->
+    <record id="view_microfinance_loan_form_credits_menu" model="ir.ui.view">
+        <field name="name">microfinance.loan.form.credits.menu.readonly.create</field>
+        <field name="model">microfinance.loan</field>
+        <field name="inherit_id" ref="view_microfinance_loan_form"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="attributes">
+                <attribute name="create">0</attribute>
+            </xpath>
+        </field>
+    </record>
     <record id="action_microfinance_loan" model="ir.actions.act_window">
         <field name="name">Crédits</field>
         <field name="res_model">microfinance.loan</field>
-        <field name="view_mode">kanban,tree,form</field>
-        <field name="context">{'search_default_active': 1}</field>
-        <!-- Efface explicitement les view_ids des vues readonly.create retirées (Lot 2,
-             réversion du point d'entrée unique) : omettre le champ ne suffit pas à vider un
-             one2many déjà peuplé sur une instance existante lors d'un -u, Odoo ne touche que
-             les champs présents dans la définition. -->
-        <field name="view_ids" eval="[(5, 0, 0)]"/>
+        <field name="view_mode">tree,kanban,form</field>
+        <field name="context">{}</field>
+        <!-- Le filtre "Actifs" (view_microfinance_loan_search, filter name="active") reste
+             disponible manuellement dans la barre de recherche, mais n'est plus présélectionné
+             à l'ouverture : le searchpanel État permet déjà de filtrer sans lui, et un contexte
+             search_default_active pré-appliqué masquait les autres états par défaut. Champ
+             explicitement mis à {} (et non retiré) pour qu'un -u écrase bien l'ancienne valeur
+             sur une instance déjà installée : Odoo ne touche que les champs présents dans la
+             définition, cf. commentaire view_ids ci-dessous. -->
+        <!-- Vues dédiées (create="0") pour masquer le bouton "Nouveau" de ce menu, à la fois
+             en liste/kanban et dans la navigation en formulaire (breadcrumb), cf. les 3 vues
+             *_credits_menu ci-dessus. (5, 0, 0) explicite nécessaire pour que les entrées
+             précédentes ne se dupliquent pas / ne persistent pas telles quelles sur un -u
+             d'une instance déjà installée (Odoo ne touche que les champs présents dans la
+             définition). -->
+        <field name="view_ids" eval="[
+            (5, 0, 0),
+            (0, 0, {'view_mode': 'tree', 'view_id': ref('view_microfinance_loan_tree_credits_menu')}),
+            (0, 0, {'view_mode': 'kanban', 'view_id': ref('view_microfinance_loan_kanban_credits_menu')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('view_microfinance_loan_form_credits_menu')}),
+        ]"/>
     </record>
 </odoo>

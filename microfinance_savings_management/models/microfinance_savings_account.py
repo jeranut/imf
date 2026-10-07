@@ -143,6 +143,14 @@ class MicrofinanceSavingsAccount(models.Model):
                     product = self.env['microfinance.savings.product'].browse(vals.get('product_id'))
                     type_code = self._get_account_type_code(product)
                     vals['name'] = self._get_savings_account_name(company, type_code)
+            if vals.get('is_container') and not vals.get('state'):
+                # Un conteneur n'est jamais "en attente d'activation" : il n'y a rien à activer
+                # (pas de produit, pas de montant minimum d'ouverture - action_activate() le
+                # refuse d'ailleurs explicitement, cf. ci-dessous). Posé ici plutôt que sur le
+                # seul appelant connu (res_partner.py._get_or_create_microfinance_savings_
+                # container) pour garantir l'invariant quel que soit le point de création
+                # (tests, scripts, futurs appelants).
+                vals['state'] = 'active'
         return super().create(vals_list)
 
     def _get_container_target_name(self, company, partner):
@@ -368,7 +376,14 @@ class MicrofinanceSavingsAccount(models.Model):
                     'actif (%s).'
                 ) % account.microfinance_loan_id.name)
             if abs(account.balance) > 0.01:
-                account._create_transaction(
+                # sudo() scopé à cette seule création (même motif que _run_posting_sudo côté
+                # guichet, cf. microfinance_caisse_mouvement.py) : la clôture est accessible à
+                # tout utilisateur ayant accès à la fiche compte (bouton sans groups=), donc à
+                # group_savings_agent - qui n'a plus create sur microfinance.savings.transaction
+                # (ir.model.access.csv, verrouillage de la création directe hors guichet). Sans
+                # ce sudo, la clôture d'un compte à solde non nul échouerait pour tout
+                # agent/caissier.
+                account.sudo()._create_transaction(
                     'withdrawal', abs(account.balance), note=_('Retrait total avant clôture'),
                     bypass_min_balance=True, bypass_withdrawal_limit=True,
                 )
@@ -475,7 +490,11 @@ class MicrofinanceSavingsAccount(models.Model):
 
     @api.model
     def cron_detect_dormant_accounts(self):
-        active_accounts = self.search([('state', '=', 'active')])
+        # is_container exclu explicitement : un conteneur est désormais actif en permanence
+        # (cf. create() ci-dessus) mais n'a ni transaction ni date d'ouverture, donc is_dormant
+        # reste False en pratique - exclusion posée quand même en défense en profondeur, pour ne
+        # pas dépendre silencieusement de cette absence de date.
+        active_accounts = self.search([('state', '=', 'active'), ('is_container', '=', False)])
         dormant = active_accounts.filtered(lambda a: a.is_dormant)
         if dormant:
             dormant.write({'state': 'dormant'})

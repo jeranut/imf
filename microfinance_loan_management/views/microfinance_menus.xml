@@ -8,7 +8,7 @@
     <!-- Nom commercial de l'application : « Ampaly » (le module technique reste
          microfinance_loan_management — inchangé, ce n'est pas ce que voit
          l'utilisateur). Icône dédiée : static/description/icon.png. -->
-    <menuitem id="menu_microfinance_root" name="Ampaly" sequence="20"
+    <menuitem id="menu_microfinance_root" name="Ampaly" sequence="-60"
         web_icon="microfinance_loan_management,static/description/icon.png"
         groups="microfinance_loan_management.group_microfinance_user,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_collection_agent,microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_comptable"/>
     <menuitem id="menu_clients_root" name="Clients" parent="menu_microfinance_root" sequence="2"
@@ -45,9 +45,10 @@
         action="action_microfinance_caisse_comptage" sequence="3"
         groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor"/>
     <menuitem id="menu_microfinance_dashboard" name="Tableau de bord" parent="menu_microfinance_root" action="action_microfinance_dashboard_client" sequence="1"/>
-    <!-- "Mon portefeuille" : ouvre le composant OWL du tableau de bord directement sur l'onglet
-         portefeuille par agent. Placé en tête du menu Crédits (sequence négative pour passer
-         avant "Compte crédit" qui est à 0). -->
+    <!-- Définition initiale (nom/action réels posés plus bas dans microfinance_portfolio_views.xml,
+         chargé après ce fichier, seul endroit où action_microfinance_portfolio existe déjà : un
+         <menuitem action="..."> ne peut pas référencer en avant une action pas encore chargée).
+         Placé en tête du menu Crédits (sequence négative pour passer avant "Compte crédit" à 0). -->
     <menuitem id="menu_microfinance_mon_portefeuille" name="Mon portefeuille" parent="menu_credits_root" action="action_microfinance_agent_portfolio" sequence="-1"/>
     <menuitem id="menu_microfinance_loan_accounts" name="Compte crédit" parent="menu_credits_root" action="action_microfinance_loan_account" sequence="0"/>
     <menuitem id="menu_microfinance_loan_applications" name="Enquêtes" parent="menu_credits_root" action="action_microfinance_loan_application" sequence="1"/>

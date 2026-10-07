@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_regularization_list" model="ir.ui.view">
+        <field name="name">microfinance.loan.regularization.list</field>
+        <field name="model">microfinance.loan.regularization</field>
+        <field name="arch" type="xml">
+            <tree string="Prêts employés à régulariser" create="false" edit="false" delete="false">
+                <field name="source"/>
+                <field name="company_id"/>
+                <field name="partner_id"/>
+                <field name="loan_id"/>
+                <field name="application_id"/>
+                <field name="candidate_employee_id"/>
+                <button name="action_microfinance_dismiss_not_employee"
+                        string="Ce n'est pas un employé" type="object"
+                        invisible="source != 'loan_lien_manquant'"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_loan_regularization_search" model="ir.ui.view">
+        <field name="name">microfinance.loan.regularization.search</field>
+        <field name="model">microfinance.loan.regularization</field>
+        <field name="arch" type="xml">
+            <search string="Prêts employés à régulariser">
+                <field name="partner_id"/>
+                <field name="candidate_employee_id"/>
+                <field name="company_id"/>
+                <filter string="Lien manquant" name="lien_manquant" domain="[('source', '=', 'loan_lien_manquant')]"/>
+                <filter string="Retenue non activée" name="flag_absent" domain="[('source', '=', 'loan_flag_absent')]"/>
+                <filter string="Demande en attente" name="application_pending" domain="[('source', '=', 'application_pending')]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter string="Société" name="group_company" context="{'group_by': 'company_id'}"/>
+                    <filter string="Anomalie" name="group_source" context="{'group_by': 'source'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_loan_regularization" model="ir.actions.act_window">
+        <field name="name">Prêts employés à régulariser</field>
+        <field name="res_model">microfinance.loan.regularization</field>
+        <field name="view_mode">tree</field>
+        <field name="search_view_id" ref="view_microfinance_loan_regularization_search"/>
+        <field name="help" type="html">
+            <p>Prêts employés décaissés (lien employé-client manquant ou retenue sur
+               salaire non activée) et demandes de crédit dont la correspondance avec un
+               employé actif n'est pas encore confirmée. Liste vide = rien à régulariser.
+               N'affiche jamais un simple homonyme sans prêt ni demande en cours.</p>
+        </field>
+    </record>
+
+    <menuitem id="menu_microfinance_loan_regularization"
+              name="Prêts employés à régulariser"
+              parent="hr_payroll_community.menu_hr_payroll_community_root"
+              action="action_microfinance_loan_regularization"
+              groups="hr_payroll_community.group_hr_payroll_community_manager,microfinance_loan_management.group_microfinance_gestionnaire"
+              sequence="100"/>
+</odoo>

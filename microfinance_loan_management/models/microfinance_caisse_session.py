@@ -98,15 +98,29 @@ class MicrofinanceCaisseSession(models.Model):
         par agence (pas le journal de caisse de la session), qui ne coïncide avec aucun compte
         caisse aujourd'hui mais n'a aucune garantie structurelle de le rester (cf.
         AUDIT_solde_caisse_frais_dossier) - _compute_theoretical_balance ne peut donc pas se
-        fier au filtre account_id pour ce type, et doit les compter par mouvement.amount."""
+        fier au filtre account_id pour ce type, et doit les compter par mouvement.amount.
+
+        Les mouvements 'depot_epargne'/'retrait_epargne' sont retournés séparément de la même
+        façon (savings_moves) : leur écriture est postée sur product_id.deposit_journal_id/
+        withdrawal_journal_id (compte du PRODUIT d'épargne), jamais sur le compte de la session
+        caisse guichet - confirmé sur plusieurs agences (cf. AUDIT_solde_caisse_epargne_
+        20260927.md) : aucun dépôt/retrait épargne n'a jamais incrémenté le solde théorique par
+        le filtre account_id. Même traitement que frais_dossier : comptées à part par
+        mouvement.amount, jamais via account.move.line, exclues du bucket générique `moves`
+        pour ne jamais risquer un double comptage si le journal produit venait à coïncider par
+        hasard avec le journal caisse sur une agence."""
         self.ensure_one()
         moves = self.env['account.move']
         fee_moves = self.env['account.move']
+        savings_moves = self.env['account.move']
         if 'mouvement_ids' not in self._fields:
-            return moves, fee_moves
+            return moves, fee_moves, savings_moves
         for mouvement in self.mouvement_ids:
             if mouvement.type in ('depot_epargne', 'retrait_epargne'):
                 move = mouvement.savings_transaction_id.move_id
+                if move:
+                    savings_moves |= move
+                continue
             elif mouvement.type == 'remboursement_credit':
                 move = mouvement.payment_id.move_id
             elif mouvement.type == 'decaissement_credit':
@@ -120,7 +134,7 @@ class MicrofinanceCaisseSession(models.Model):
                 move = self.env['account.move']
             if move:
                 moves |= move
-        return moves, fee_moves
+        return moves, fee_moves, savings_moves
 
     @api.depends('opening_balance', 'journal_id.default_account_id', 'state')
     def _compute_theoretical_balance(self):
@@ -129,20 +143,27 @@ class MicrofinanceCaisseSession(models.Model):
             if session.state == 'draft' or not account:
                 session.theoretical_balance = session.opening_balance
                 continue
-            moves, fee_moves = session._get_session_moves()
+            moves, fee_moves, savings_moves = session._get_session_moves()
             # Un décaissement réglé par chèque/virement (journal 'bank') poste sur le compte de
             # ce journal, pas sur le compte caisse (account) : filtrer sur account_id exclut
             # naturellement ces mouvements du solde ESPÈCES théorique, sans avoir à retracer le
             # moyen de paiement choisi au guichet (cf. register_operation, Sous-lot D). Les
-            # écritures de frais_dossier (fee_moves) sont explicitement exclues de ce filtre,
-            # même si leur compte venait à coïncider avec account : elles sont comptées à part
-            # ci-dessous (net_fees), jamais via account.move.line, pour éviter tout double
-            # comptage en cas de coïncidence de compte.
-            lines = moves.line_ids.filtered(lambda l: l.account_id == account and l.move_id not in fee_moves)
+            # écritures de frais_dossier (fee_moves) et de dépôt/retrait épargne (savings_moves)
+            # sont explicitement exclues de ce filtre, même si leur compte venait à coïncider
+            # avec account : elles sont comptées à part ci-dessous (net_fees / net_savings),
+            # jamais via account.move.line, pour éviter tout double comptage en cas de
+            # coïncidence de compte.
+            lines = moves.line_ids.filtered(
+                lambda l: l.account_id == account and l.move_id not in fee_moves and l.move_id not in savings_moves)
             net_cash = sum(lines.mapped('debit')) - sum(lines.mapped('credit'))
             fee_mouvements = session.mouvement_ids.filtered(lambda m: m.type == 'frais_dossier')
             net_fees = sum(fee_mouvements.mapped('amount'))
-            session.theoretical_balance = session.opening_balance + net_cash + net_fees
+            # Signe : un dépôt épargne fait rentrer de l'argent en caisse (comme un
+            # remboursement crédit) -> positif ; un retrait épargne en fait sortir -> négatif.
+            deposit_mouvements = session.mouvement_ids.filtered(lambda m: m.type == 'depot_epargne')
+            withdrawal_mouvements = session.mouvement_ids.filtered(lambda m: m.type == 'retrait_epargne')
+            net_savings = sum(deposit_mouvements.mapped('amount')) - sum(withdrawal_mouvements.mapped('amount'))
+            session.theoretical_balance = session.opening_balance + net_cash + net_fees + net_savings
 
     def _check_cashier_has_no_other_open_session(self, cashier_id, exclude_session_id=False):
         """Un même caissier ne peut pas avoir deux sessions 'open' en parallèle (même sur des

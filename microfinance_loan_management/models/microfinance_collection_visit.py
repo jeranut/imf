@@ -10,7 +10,7 @@ class MicrofinanceCollectionVisit(models.Model):
 
     loan_id = fields.Many2one('microfinance.loan', string='Crédit', required=True, ondelete='cascade')
     partner_id = fields.Many2one(related='loan_id.partner_id', store=True, readonly=True)
-    agent_id = fields.Many2one('res.users', string='Agent terrain', default=lambda self: self.env.user, required=True)
+    agent_id = fields.Many2one('res.users', string='Agent terrain', default=lambda self: self.env.user, required=True, index=True)
     visit_date = fields.Datetime(string='Date de visite', default=fields.Datetime.now, required=True)
     next_visit_date = fields.Datetime(string='Date de prochaine visite')
     status = fields.Selection([('planned', 'Planifiée'), ('done', 'Réalisée'), ('missed', 'Manquée'), ('cancelled', 'Annulée')], string='Statut', default='planned', required=True)

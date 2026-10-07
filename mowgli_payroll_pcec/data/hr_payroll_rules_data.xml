@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Appelés à chaque install/update du module (pas seulement à
+         l'installation), idempotents. Ordre important : les comptes PCEC
+         doivent être alignés AVANT que les règles ne leur soient liées,
+         sinon le lien (règle -> compte) créé par
+         _mowgli_setup_payroll_rules bloquerait tout renommage ultérieur
+         (un compte référencé par une règle salariale n'est plus "sûr"). -->
+    <function model="account.account" name="_mowgli_setup_pcec_accounts"/>
+    <function model="hr.salary.rule" name="_mowgli_setup_payroll_rules"/>
+</odoo>

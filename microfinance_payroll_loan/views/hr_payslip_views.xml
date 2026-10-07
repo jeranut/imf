@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_payslip_view_form_microfinance_loan_warning" model="ir.ui.view">
+        <field name="name">hr.payslip.view.form.microfinance.loan.warning</field>
+        <field name="model">hr.payslip</field>
+        <field name="inherit_id" ref="hr_payroll_community.hr_payslip_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet/field[@name='move_id']" position="after">
+                <div class="alert alert-warning" role="alert"
+                     invisible="not microfinance_loan_warning"
+                     style="white-space: pre-line;">
+                    <field name="microfinance_loan_warning" readonly="1" nolabel="1"/>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>

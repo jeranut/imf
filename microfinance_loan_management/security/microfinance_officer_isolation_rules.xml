@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Isolation par agent (R1, résidu A4 de AUDIT_portefeuille_agent.md) : un agent ne doit lire/
+         écrire que SES propres microfinance.loan/.loan.payment/.loan.installment/.collection.visit,
+         pas tous ceux de son agence - jusqu'ici seule la règle société (microfinance_company_rules.xml,
+         groups=[] donc appliquée à tout le monde pareil, conservée telle quelle) existait sur ces 4
+         modèles, sans filtre par officer_id/agent_id.
+
+         Mécanique (identique au patron déjà posé sur microfinance.portfolio, cf.
+         microfinance_portfolio_rules.xml) : une règle scopée group_microfinance_user restreint à
+         l'agent lui-même ; combinée en OR, pour les groupes qui impliquent group_microfinance_user
+         (cf. implied_ids, security/groups.xml) et dont le rôle exige de voir plus qu'un seul
+         portefeuille, une règle "agence complète" (bornée par la règle société globale, toujours
+         ANDée). Groupes volontairement PAS couverts par une règle d'échappement (donc restreints à
+         leur propre officer_id/agent_id par la règle agent, resserrement mineur et sans régression
+         constatée - aucune vue de microfinance.loan/.payment/.installment ne référence
+         group_application_surveyor/ca/cdag ni group_microfinance_collection_agent) : ces groupes
+         n'agissent que sur microfinance.loan.application (hors périmètre) ou, pour collection_agent,
+         sur collection_visit via leur propre agent_id (déjà couvert par la règle agent elle-même).
+
+         group_microfinance_credit_committee est ajouté à l'échappement sur microfinance.loan
+         UNIQUEMENT : views/microfinance_loan_views.xml (boutons action_ca_review/action_cdag_review)
+         prouve qu'un membre du comité doit pouvoir agir sur n'importe quel dossier en review, pas
+         seulement les siens - sans cette règle, la restriction agent casserait ce workflow existant.
+         group_microfinance_auditor et group_microfinance_comptable ne sont PAS dans implied_ids de
+         group_microfinance_user (groupes autonomes) : la règle agent ne les concerne pas, ils restent
+         gouvernés par la seule règle société (comportement inchangé). -->
+
+    <record id="microfinance_loan_officer_self_rule" model="ir.rule">
+        <field name="name">Loan: own portfolio only (agent)</field>
+        <field name="model_id" ref="model_microfinance_loan"/>
+        <field name="domain_force">[('officer_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user'))]"/>
+    </record>
+    <record id="microfinance_loan_officer_escape_rule" model="ir.rule">
+        <field name="name">Loan: whole agency (manager/gestionnaire/finance/cashier/credit committee)</field>
+        <field name="model_id" ref="model_microfinance_loan"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_manager')), (4, ref('group_microfinance_gestionnaire')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_cashier')), (4, ref('group_microfinance_credit_committee'))]"/>
+    </record>
+
+    <record id="microfinance_payment_officer_self_rule" model="ir.rule">
+        <field name="name">Payment: own portfolio only (agent)</field>
+        <field name="model_id" ref="model_microfinance_loan_payment"/>
+        <field name="domain_force">[('officer_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user'))]"/>
+    </record>
+    <record id="microfinance_payment_officer_escape_rule" model="ir.rule">
+        <field name="name">Payment: whole agency (manager/gestionnaire/finance/cashier)</field>
+        <field name="model_id" ref="model_microfinance_loan_payment"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_manager')), (4, ref('group_microfinance_gestionnaire')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_cashier'))]"/>
+    </record>
+
+    <record id="microfinance_installment_officer_self_rule" model="ir.rule">
+        <field name="name">Installment: own portfolio only (agent)</field>
+        <field name="model_id" ref="model_microfinance_loan_installment"/>
+        <field name="domain_force">[('officer_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user'))]"/>
+    </record>
+    <record id="microfinance_installment_officer_escape_rule" model="ir.rule">
+        <field name="name">Installment: whole agency (manager/gestionnaire/finance/cashier)</field>
+        <field name="model_id" ref="model_microfinance_loan_installment"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_manager')), (4, ref('group_microfinance_gestionnaire')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_cashier'))]"/>
+    </record>
+
+    <record id="microfinance_collection_visit_officer_self_rule" model="ir.rule">
+        <field name="name">Visit: own visits only (agent)</field>
+        <field name="model_id" ref="model_microfinance_collection_visit"/>
+        <field name="domain_force">[('agent_id', '=', user.id)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_user'))]"/>
+    </record>
+    <record id="microfinance_collection_visit_officer_escape_rule" model="ir.rule">
+        <field name="name">Visit: whole agency (manager/gestionnaire/finance/cashier)</field>
+        <field name="model_id" ref="model_microfinance_collection_visit"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('group_microfinance_manager')), (4, ref('group_microfinance_gestionnaire')), (4, ref('group_microfinance_finance')), (4, ref('group_microfinance_cashier'))]"/>
+    </record>
+</odoo>

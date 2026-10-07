@@ -10,6 +10,7 @@ from odoo.addons.microfinance_savings_management.container_migration import (
     OLD_TYPE_I_SEQUENCE_CODE,
     PARAM_DRY_RUN,
     SHARED_ACCOUNT_NUMBER_SEQUENCE_CODE,
+    activate_draft_containers,
     align_savings_number_sequences,
     is_dry_run,
     list_savings_duplicates,
@@ -233,3 +234,64 @@ class TestSavingsSequenceAlignment(MicrofinanceNoFundMixin, SavingsCommon):
         container = self.env['microfinance.savings.account'].search([
             ('partner_id', '=', partner.id), ('is_container', '=', True)])
         self.assertEqual(len(container), 1)  # aucune ValidationError
+
+
+class TestSavingsContainerActivationMigration(MicrofinanceNoFundMixin, SavingsCommon):
+    """activate_draft_containers (correctif du 2026-10-05, docs_dev/epargne_auto/
+    AUDIT_doublons_creation_client.md §16) : régularise les conteneurs créés avant que
+    create() ne pose state='active' directement - simulés ici en forçant un conteneur existant
+    (déjà créé actif par le correctif) en arrière vers 'draft', comme l'était un conteneur
+    historique sur une base réelle."""
+
+    def setUp(self):
+        super().setUp()
+        self.log_dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.log_dir, ignore_errors=True)
+
+    def _draft_container(self, cin):
+        partner = self._create_context_client(cin)
+        container = self.env['microfinance.savings.account'].search([
+            ('partner_id', '=', partner.id), ('is_container', '=', True)])
+        container.write({'state': 'draft'})
+        return partner, container
+
+    def test_dry_run_changes_nothing_but_lists_and_traces(self):
+        _partner, container = self._draft_container('825000000001')
+        rows = activate_draft_containers(self.env, dry_run=True, log_dir=self.log_dir)
+        matching = [r for r in rows if r['id'] == container.id]
+        self.assertEqual(container.state, 'draft')
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]['statut'], 'A_ACTIVER')
+        files = [f for f in os.listdir(self.log_dir)
+                 if f.startswith('activation_conteneurs_epargne') and f.endswith('_dryrun.csv')]
+        self.assertEqual(len(files), 1)
+        with open(os.path.join(self.log_dir, files[0]), encoding='utf-8') as handle:
+            traced = [r for r in csv.DictReader(handle, delimiter=';') if r['id'] == str(container.id)]
+        self.assertEqual(len(traced), 1)
+        self.assertEqual(traced[0]['etat_avant'], 'draft')
+
+    def test_real_run_activates_container_then_second_run_is_noop(self):
+        _partner, container = self._draft_container('825000000002')
+        rows = activate_draft_containers(self.env, dry_run=False, log_dir=self.log_dir)
+        matching = [r for r in rows if r['id'] == container.id]
+        self.assertEqual(matching[0]['statut'], 'ACTIVE')
+        self.assertEqual(container.state, 'active')
+        rows_second = activate_draft_containers(self.env, dry_run=False, log_dir=self.log_dir)
+        self.assertFalse([r for r in rows_second if r['id'] == container.id])  # idempotent
+
+    def test_never_writes_opening_date(self):
+        # Poser opening_date rendrait le conteneur éligible à la dormance (cf.
+        # _compute_is_dormant) - la migration ne doit toucher que `state`.
+        _partner, container = self._draft_container('825000000003')
+        activate_draft_containers(self.env, dry_run=False, log_dir=self.log_dir)
+        self.assertFalse(container.opening_date)
+
+    def test_real_accounts_in_draft_are_never_touched(self):
+        # Seuls les CONTENEURS en draft sont concernés - un compte réel légitimement en
+        # brouillon (en attente d'activation manuelle) ne doit jamais être activé par cette
+        # migration.
+        partner, _container = self._draft_container('825000000004')
+        real_account = self._create_account(partner_id=partner.id)
+        self.assertEqual(real_account.state, 'draft')
+        activate_draft_containers(self.env, dry_run=False, log_dir=self.log_dir)
+        self.assertEqual(real_account.state, 'draft')

@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Contenu d'une copie de bulletin, repris deux fois sur la page par
+         report_payslip_duplicate ci-dessous. -->
+    <template id="mowgli_payslip_copy">
+        <div class="mowgli_payslip_copy" style="font-size: 9px; page-break-inside: avoid;">
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 4px;">
+                <tr>
+                    <td style="width: 70px; vertical-align: middle;">
+                        <img t-if="o.company_id.logo" t-att-src="image_data_uri(o.company_id.logo)"
+                             style="max-height: 50px; max-width: 65px;" alt="Logo"/>
+                    </td>
+                    <td style="vertical-align: middle;">
+                        <strong t-field="o.company_id.name" style="font-size: 11px;"/>
+                        <br/>
+                        <span t-field="o.company_id.country_id.name"/>
+                    </td>
+                </tr>
+            </table>
+            <hr style="border-top: 1px solid #000; margin: 2px 0 6px 0;"/>
+
+            <h4 style="margin: 0 0 6px 0; font-size: 11px;">
+                Bulletin de paie - <span t-field="o.name"/>
+            </h4>
+
+            <table class="table table-sm table-bordered" style="width: 100%; font-size: 9px; margin-bottom: 6px;">
+                <tr>
+                    <th style="width: 15%;">EMPLOYEUR</th>
+                    <th style="width: 35%;"></th>
+                    <th style="width: 15%;">SALARIÉ</th>
+                    <th style="width: 35%;"></th>
+                </tr>
+                <tr>
+                    <td>Raison sociale</td>
+                    <td><span t-field="o.company_id.name"/></td>
+                    <td>Nom</td>
+                    <td><span t-field="o.employee_id.name"/></td>
+                </tr>
+                <tr>
+                    <td>Adresse</td>
+                    <td>
+                        <span t-field="o.company_id.street"/>
+                        <t t-if="o.company_id.street and o.company_id.city">, </t>
+                        <span t-field="o.company_id.city"/>
+                    </td>
+                    <td>Fonction</td>
+                    <td><span t-field="o.employee_id.job_id"/></td>
+                </tr>
+                <tr>
+                    <td>NIF</td>
+                    <td><span t-field="o.company_id.vat"/></td>
+                    <td>E-mail</td>
+                    <td><span t-field="o.employee_id.work_email"/></td>
+                </tr>
+                <tr>
+                    <td>STAT</td>
+                    <td><span t-field="o.company_id.company_registry"/></td>
+                    <td>N° d'identification</td>
+                    <td><span t-field="o.employee_id.identification_id"/></td>
+                </tr>
+                <tr>
+                    <td>Date de début</td>
+                    <td><span t-field="o.date_from"/></td>
+                    <td>Référence</td>
+                    <td><span t-field="o.number"/></td>
+                </tr>
+                <tr>
+                    <td>Date de fin</td>
+                    <td><span t-field="o.date_to"/></td>
+                    <td>Compte bancaire</td>
+                    <td><span t-field="o.employee_id.bank_account_id"/></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td>Enfants à charge</td>
+                    <td><span t-field="o.employee_id.children"/></td>
+                </tr>
+            </table>
+
+            <table class="table table-sm" style="width: 100%; font-size: 9px; margin-bottom: 6px;">
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Nom</th>
+                        <th>Quantité/taux</th>
+                        <th>Montant</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr t-foreach="o.line_ids.filtered(lambda line: line.appears_on_payslip)"
+                        t-as="line">
+                        <td>
+                            <span t-field="line.code"/>
+                        </td>
+                        <td>
+                            <span t-field="line.name"/>
+                        </td>
+                        <td>
+                            <span t-field="line.quantity"/>
+                        </td>
+                        <td>
+                            <span t-esc="line.amount"
+                                  t-options='{"widget": "monetary", "display_currency": o.company_id.currency_id}'/>
+                        </td>
+                        <td>
+                            <span t-esc="line.total"
+                                  t-options='{"widget": "monetary", "display_currency": o.company_id.currency_id}'/>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <t t-set="net_line" t-value="o.line_ids.filtered(lambda line: line.code == 'NET')[:1]"/>
+            <div t-if="net_line" style="margin-bottom: 10px;">
+                <p style="text-align: right; font-weight: bold; margin: 0;">
+                    NET À PAYER :
+                    <span t-esc="net_line.total"
+                          t-options='{"widget": "monetary", "display_currency": o.company_id.currency_id}'/>
+                </p>
+                <p style="text-align: right; margin: 0;">
+                    Arrêté en lettres :
+                    <span t-esc="o.company_id.currency_id.amount_to_text(net_line.total).capitalize()"/>.
+                </p>
+            </div>
+
+            <table style="width: 100%; margin-top: 10px;">
+                <tr>
+                    <td style="width: 50%; text-align: center;">
+                        <span>Signature de l'employeur</span>
+                        <div style="height: 70px;"></div>
+                    </td>
+                    <td style="width: 50%; text-align: center;">
+                        <span>Signature du salarié</span>
+                        <div style="height: 70px;"></div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </template>
+
+    <!-- Rapport dupliqué : deux copies identiques côte à côte, un bulletin par page.
+         Note : web.basic_layout appelle lui-même web.html_container ; on reproduit donc
+         son contenu (div.article) directement dans la boucle plutôt que de l'appeler,
+         pour éviter d'imbriquer deux fois html_container (HTML invalide / PDF cassé). -->
+    <template id="report_payslip_duplicate">
+        <t t-call="web.html_container">
+            <t t-foreach="docs" t-as="o">
+                <div class="article" t-att-data-oe-model="o._name" t-att-data-oe-id="o.id">
+                    <div class="page" style="page-break-after: always;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="width: 50%; vertical-align: top; padding-right: 6px; border-right: 1px dashed #000;">
+                                    <t t-call="mowgli_payroll_pcec.mowgli_payslip_copy">
+                                        <t t-set="o" t-value="o"/>
+                                    </t>
+                                </td>
+                                <td style="width: 50%; vertical-align: top; padding-left: 6px;">
+                                    <t t-call="mowgli_payroll_pcec.mowgli_payslip_copy">
+                                        <t t-set="o" t-value="o"/>
+                                    </t>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </t>
+        </t>
+    </template>
+</odoo>

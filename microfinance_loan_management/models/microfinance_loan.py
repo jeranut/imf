@@ -754,7 +754,7 @@ class MicrofinanceLoan(models.Model):
         return max_days
 
     @api.model
-    def get_dashboard_data(self):
+    def get_dashboard_data(self, portfolio_id=None):
         """Données agrégées du tableau de bord Microfinance (composant OWL
         « microfinance_loan_dashboard »).
 
@@ -769,18 +769,42 @@ class MicrofinanceLoan(models.Model):
 
         Périmètre inchangé : une seule agence active à la fois (self.env.company).
         fond_multi_chart et fond_matrix restent volontairement transverses à toutes les
-        sociétés autorisées de l'utilisateur (voir leurs docstrings respectives)."""
+        sociétés autorisées de l'utilisateur (voir leurs docstrings respectives).
+
+        portfolio_id (menu "Portefeuille" -> microfinance.portfolio.action_open_dashboard) :
+        identifie quel portefeuille afficher sur l'onglet "Mon portefeuille" quand il est ouvert
+        depuis la liste plutôt que depuis le menu direct. Résolu ET vérifié ici par une simple
+        lecture ORM (PAS sudo) de microfinance.portfolio : les record rules de ce modèle
+        (security/microfinance_portfolio_rules.xml - agent = lui seul, gestionnaire/finance/
+        manager = leur périmètre) décident seules si l'appelant y a droit ; accéder à un champ
+        d'un portefeuille hors périmètre lève AccessError nativement, sans logique dupliquée ici.
+        Le client ne transmet jamais d'agent_id : seul cet id de portefeuille, non trusted tant
+        qu'il n'a pas été relu avec les droits réels de l'utilisateur courant."""
         env = self.env
         company = env.company
+        portfolio_officer_id = None
+        portfolio_is_own = True
+        if portfolio_id:
+            portfolio = env['microfinance.portfolio'].browse(portfolio_id)
+            portfolio_officer_id = portfolio.agent_id.id  # AccessError ici si hors périmètre.
+            portfolio_is_own = portfolio_officer_id == env.uid
         today = fields.Date.context_today(self)
         month_start = today.replace(day=1)
         months = [month_start - relativedelta(months=index) for index in range(11, -1, -1)]
         month_keys = [month.strftime('%Y-%m') for month in months]
         month_labels = [month.strftime('%b %Y') for month in months]
 
-        Loan = env['microfinance.loan']
-        Installment = env['microfinance.loan.installment']
-        Payment = env['microfinance.loan.payment']
+        # sudo() (résidu A4, security/microfinance_officer_isolation_rules.xml) : "Vue d'ensemble"
+        # est un tableau de bord d'AGENCE, volontairement identique pour tous les rôles (agent
+        # inclus) avant comme après l'ajout de la règle d'isolation par agent sur microfinance.
+        # loan/.installment/.payment - sans ce sudo, un agent verrait ici un total rétréci à son
+        # seul portefeuille (régression), alors que company_domain/company_id ci-dessous reste
+        # l'unique filtre voulu pour cette méthode. "Mon portefeuille" (get_agent_portfolio_*,
+        # get_portfolio_tab) n'est PAS concerné : ces méthodes filtrent déjà explicitement par
+        # officer_id via _resolve_agent_request, sans sudo, par choix (décision n°11).
+        Loan = env['microfinance.loan'].sudo()
+        Installment = env['microfinance.loan.installment'].sudo()
+        Payment = env['microfinance.loan.payment'].sudo()
 
         company_domain = [('company_id', '=', company.id)]
         # 'active' ne prouve plus qu'un crédit a été décaissé (découplage activation /
@@ -922,6 +946,8 @@ class MicrofinanceLoan(models.Model):
         )[:10]
 
         return {
+            'portfolio_officer_id': portfolio_officer_id,
+            'portfolio_is_own': portfolio_is_own,
             'currency': company.currency_id.symbol or '',
             'company': {
                 'id': company.id,
@@ -1110,20 +1136,27 @@ class MicrofinanceLoan(models.Model):
         seul officer_id. Coût mesuré : 8 ré-exécutions de ce read_group complet par chargement de
         "Mon portefeuille" (une par endpoint appelant _resolve_agent_request), chacune scannant
         l'intégralité des crédits actifs/défaut de la société - pas seulement ceux de l'agent
-        demandé. La définition métier de "agent autorisé" dépend ici réellement des crédits
-        existants (get_available_agents ne liste que les officer_id ayant au moins un dossier
-        dans le périmètre - un simple test de groupe de sécurité ne suffirait pas à reproduire
-        cette sémantique), donc on restreint directement le domaine à l'officer_id demandé
-        (recherche bornée par limit=1, simple test d'existence) plutôt que d'agréger tous les
-        agents pour vérifier l'appartenance d'un seul."""
+        demandé.
+
+        Test d'appartenance : microfinance.portfolio (agent_id, company_id dans le périmètre),
+        PAS "a au moins un dossier" (ancienne version, incident ccl1/Andoharanofotsy) - un agent
+        tout juste affecté, avec un portefeuille alloué mais encore aucun crédit décaissé, est un
+        agent parfaitement légitime du périmètre ; le tester par l'existence d'un crédit le
+        rejetait à tort (AccessError "n'appartient pas à votre périmètre"), avalée silencieusement
+        côté JS (écran "Mon portefeuille" vide, seul l'en-tête affiché). microfinance.portfolio
+        reste la source d'appartenance agent/agence déjà utilisée par get_dashboard_data()
+        (portfolio_id) ci-dessus - recherche bornée par limit=1, même coût qu'avant."""
         company_ids, forced_officer = self._get_agent_portfolio_scope()
         if forced_officer:
             if officer_id_filter and officer_id_filter != forced_officer:
                 raise AccessError(_("Vous ne pouvez consulter que votre propre portefeuille."))
             return company_ids, forced_officer
         if officer_id_filter:
-            domain = self._agent_portfolio_domain(company_ids, officer_id_filter)
-            if not self.search(domain, limit=1):
+            portfolio = self.env['microfinance.portfolio'].search([
+                ('agent_id', '=', officer_id_filter),
+                ('company_id', 'in', company_ids),
+            ], limit=1)
+            if not portfolio:
                 raise AccessError(_("Cet agent n'appartient pas à votre périmètre."))
         return company_ids, officer_id_filter
 
@@ -1208,6 +1241,14 @@ class MicrofinanceLoan(models.Model):
         paid = self.env['microfinance.loan.payment'].read_group(pay_domain, ['amount:sum'], [], lazy=False)
         total_due = (due and due[0].get('total_amount')) or 0.0
         total_paid = (paid and paid[0].get('amount')) or 0.0
+        # R2 (AUDIT_portefeuille_agent.md, Phase 2 correction §5) : 3 KPI fonds de portefeuille,
+        # additifs - n'affecte aucun des KPI/graphiques existants ci-dessus. Agrégés sur tout le
+        # périmètre (toute l'agence) si officer est None (vue manager/auditeur), comme le reste
+        # de cette méthode (loans ci-dessus n'est pas non plus filtré par agent dans ce cas).
+        portfolio_domain = [('company_id', 'in', company_ids)]
+        if officer:
+            portfolio_domain.append(('agent_id', '=', officer))
+        portfolios = self.env['microfinance.portfolio'].sudo().search(portfolio_domain)
         return {
             'nb_clients': len(loans.mapped('partner_id')),
             'encours': sum(loans.mapped('balance_total')),
@@ -1215,6 +1256,9 @@ class MicrofinanceLoan(models.Model):
             'nb_dossiers_en_retard': len(loans.filtered(lambda l: l.overdue_amount > 0)),
             'montant_impaye': sum(loans.mapped('overdue_amount')),
             'taux_remboursement': (total_paid / total_due * 100.0) if total_due else 0.0,
+            'fonds_alloue': sum(portfolios.mapped('amount_allocated')),
+            'fonds_utilise': sum(portfolios.mapped('montant_utilise')),
+            'fonds_disponible': sum(portfolios.mapped('solde_disponible')),
         }
 
     @api.model
@@ -1393,6 +1437,277 @@ class MicrofinanceLoan(models.Model):
             'state': loan.state,
         } for loan in loans]
         return {'rows': rows, 'total': total, 'offset': offset or 0, 'limit': limit or 20}
+
+    # Config des 6 onglets de la barre d'actions "Mon portefeuille" (anciennement des boutons
+    # ouvrant chacun une ir.actions.act_window via le JS - cf. git history de
+    # static/src/js/microfinance_loan_dashboard.js). Domaines/champs/ordre repris tels quels
+    # depuis ces anciennes actions : seule la source (whitelist serveur plutôt que domaine
+    # construit côté client) change. officer_field porte le nom du champ (éventuellement en
+    # relation, cf. 'my_clients') à filtrer sur l'agent résolu par _resolve_agent_request.
+    _PORTFOLIO_TAB_CONFIG = {
+        'my_clients': {
+            'model': 'res.partner',
+            'officer_field': 'microfinance_loan_ids.officer_id',
+            'extra_domain': [],
+            'fields': ['name', 'phone', 'microfinance_loan_count'],
+            'order': 'name asc',
+            'columns': [
+                {'name': 'name', 'label': 'Client', 'type': 'char'},
+                {'name': 'phone', 'label': 'Téléphone', 'type': 'char'},
+                {'name': 'microfinance_loan_count', 'label': 'Crédits', 'type': 'integer'},
+            ],
+        },
+        'my_loans': {
+            'model': 'microfinance.loan',
+            'officer_field': 'officer_id',
+            'extra_domain': [],
+            'fields': ['name', 'partner_id', 'loan_amount', 'balance_total', 'overdue_amount', 'state'],
+            'order': 'name asc',
+            'columns': [
+                {'name': 'name', 'label': 'Dossier', 'type': 'char'},
+                {'name': 'partner_id', 'label': 'Client', 'type': 'many2one'},
+                {'name': 'loan_amount', 'label': 'Montant', 'type': 'money'},
+                {'name': 'balance_total', 'label': 'Encours', 'type': 'money'},
+                {'name': 'overdue_amount', 'label': 'En retard', 'type': 'money'},
+                {'name': 'state', 'label': 'État', 'type': 'char'},
+            ],
+        },
+        'my_payments': {
+            'model': 'microfinance.loan.payment',
+            'officer_field': 'officer_id',
+            'extra_domain': [],
+            'fields': ['name', 'loan_id', 'partner_id', 'payment_date', 'amount', 'state'],
+            'order': 'payment_date desc, id desc',
+            'columns': [
+                {'name': 'name', 'label': 'Référence', 'type': 'char'},
+                {'name': 'loan_id', 'label': 'Dossier', 'type': 'many2one'},
+                {'name': 'partner_id', 'label': 'Client', 'type': 'many2one'},
+                {'name': 'payment_date', 'label': 'Date', 'type': 'date'},
+                {'name': 'amount', 'label': 'Montant', 'type': 'money'},
+                {'name': 'state', 'label': 'État', 'type': 'char'},
+            ],
+        },
+        'my_overdue': {
+            'model': 'microfinance.loan',
+            'officer_field': 'officer_id',
+            'extra_domain': [('overdue_amount', '>', 0)],
+            'fields': ['name', 'partner_id', 'balance_total', 'overdue_amount', 'max_days_overdue', 'state'],
+            'order': 'overdue_amount desc',
+            'columns': [
+                {'name': 'name', 'label': 'Dossier', 'type': 'char'},
+                {'name': 'partner_id', 'label': 'Client', 'type': 'many2one'},
+                {'name': 'balance_total', 'label': 'Encours', 'type': 'money'},
+                {'name': 'overdue_amount', 'label': 'En retard', 'type': 'money'},
+                {'name': 'max_days_overdue', 'label': 'Jours retard', 'type': 'integer'},
+                {'name': 'state', 'label': 'État', 'type': 'char'},
+            ],
+        },
+        'my_installments': {
+            'model': 'microfinance.loan.installment',
+            'officer_field': 'officer_id',
+            'extra_domain': [],
+            'fields': ['loan_id', 'partner_id', 'due_date', 'total_amount', 'residual_amount', 'state'],
+            'order': 'due_date asc',
+            'columns': [
+                {'name': 'loan_id', 'label': 'Dossier', 'type': 'many2one'},
+                {'name': 'partner_id', 'label': 'Client', 'type': 'many2one'},
+                {'name': 'due_date', 'label': 'Échéance', 'type': 'date'},
+                {'name': 'total_amount', 'label': 'Montant dû', 'type': 'money'},
+                {'name': 'residual_amount', 'label': 'Résiduel', 'type': 'money'},
+                {'name': 'state', 'label': 'État', 'type': 'char'},
+            ],
+        },
+        'my_visits': {
+            'model': 'microfinance.collection.visit',
+            'officer_field': 'agent_id',
+            'extra_domain': [],
+            'fields': ['loan_id', 'partner_id', 'visit_date', 'status'],
+            'order': 'visit_date desc',
+            'columns': [
+                {'name': 'loan_id', 'label': 'Dossier', 'type': 'many2one'},
+                {'name': 'partner_id', 'label': 'Client', 'type': 'many2one'},
+                {'name': 'visit_date', 'label': 'Date', 'type': 'date'},
+                {'name': 'status', 'label': 'Statut', 'type': 'char'},
+            ],
+        },
+    }
+
+    @api.model
+    def get_portfolio_tab(self, tab, officer_id_filter=None, offset=0, limit=20,
+                           fund_id=None, flow='all', date_from=None, date_to=None):
+        """Donnée d'un des onglets de la barre d'actions "Mon portefeuille" (remplace les
+        ir.actions.act_window ouvertes précédemment côté client par static/src/js/
+        microfinance_loan_dashboard.js:openAgentShortcut). `tab` est validé contre la whitelist
+        _PORTFOLIO_TAB_CONFIG - toute autre valeur lève UserError. Le domaine (société + agent)
+        est entièrement résolu ici via _resolve_agent_request, jamais transmis par le client.
+
+        'fonds' (7e onglet, journal du fonds de crédit du portefeuille) ne rentre pas dans le
+        gabarit générique ci-dessous (search_read direct) : il agrège deux sources (allocations
+        + décaissements) avec un solde cumulé calculé en Python, d'où la sortie anticipée vers
+        _get_portfolio_funds_tab (fund_id/flow/date_from/date_to n'ont aucun sens pour les 6
+        autres onglets, qui les ignorent)."""
+        if tab == 'fonds':
+            return self._get_portfolio_funds_tab(
+                officer_id_filter, fund_id, flow, date_from, date_to, offset, limit)
+        config = self._PORTFOLIO_TAB_CONFIG.get(tab)
+        if not config:
+            raise UserError(_('Onglet de portefeuille inconnu : %s') % tab)
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        domain = [('company_id', 'in', company_ids)] + list(config['extra_domain'])
+        if officer:
+            domain.append((config['officer_field'], '=', officer))
+        Model = self.env[config['model']]
+        total = Model.search_count(domain)
+        rows = Model.search_read(
+            domain, config['fields'], offset=offset or 0, limit=limit or 20, order=config['order'],
+        )
+        return {'columns': config['columns'], 'rows': rows, 'total': total, 'offset': offset or 0}
+
+    def _get_portfolio_funds_tab(self, officer_id_filter, fund_id, flow, date_from, date_to, offset, limit):
+        """Journal en lecture seule du/des fonds de crédit rotatif du portefeuille (7e onglet
+        "Fonds de crédit", MVP - remboursement du capital hors périmètre, cf. consigne). Deux
+        sources, jamais de modèle/stockage ajouté :
+          - CRÉDIT : microfinance.portfolio.allocation.line validées (répartition agence ->
+            portefeuille) ; une ligne annulée après validation reste affichée (son crédit
+            d'origine), ET génère en plus une ligne DÉBIT "Annulation allocation" (montant
+            négatif) - il n'existe pas de contre-écriture stockée (action_cancel ne fait que
+            basculer l'état de la ligne, cf. microfinance_portfolio_allocation.py), donc la date
+            de cette contre-écriture retombe sur validated_date (= write_date de l'en-tête, mis à
+            jour par action_cancel lui-même) à défaut d'un champ dédié.
+          - DÉBIT : crédits décaissés (mêmes états que total_decaisse du fonds, cf.
+            microfinance_fond_credit.py._compute_fond_totals) du portefeuille, au principal
+            décaissé (loan_amount, jamais recalculé après remboursement). Un crédit sans
+            fond_credit_id (historique, antérieur à ce rattachement) apparaît sous "Sans fonds
+            (historique)" plutôt que d'être exclu, pour ne pas fausser les totaux de la page.
+
+        Solde cumulé par fonds calculé sur TOUT l'historique, trié (date, id), avant tout filtre
+        (flow/période/pagination) - une ligne affiche donc toujours son vrai solde, y compris en
+        vue agrégée où chaque ligne porte le solde de SON fonds.
+
+        aggregate.{received,used,available} relit directement microfinance.portfolio (mêmes
+        champs que get_agent_portfolio_kpis : amount_allocated/montant_utilise/solde_disponible)
+        plutôt que de re-sommer les cartes par fonds : montant_utilise est le principal restant
+        dû (pas le cumul des décaissements du journal, décision produit actée), donc aggregate.used
+        peut diverger de la somme des débits du journal dès qu'un remboursement de capital a eu
+        lieu sur le portefeuille - limite connue du MVP (capital hors périmètre), pas un bug."""
+        if flow not in ('all', 'debit', 'credit'):
+            raise UserError(_('Filtre de flux de fonds invalide : %s') % flow)
+        date_from = fields.Date.to_date(date_from) if date_from else None
+        date_to = fields.Date.to_date(date_to) if date_to else None
+        if date_from and date_to and date_from > date_to:
+            raise UserError(_('La date de début doit être antérieure ou égale à la date de fin.'))
+        limit = min(limit or 20, 50)
+
+        company_ids, officer = self._resolve_agent_request(officer_id_filter)
+        Portfolio = self.env['microfinance.portfolio'].sudo()
+        portfolio_domain = [('company_id', 'in', company_ids)]
+        if officer:
+            portfolio_domain.append(('agent_id', '=', officer))
+        portfolios = Portfolio.search(portfolio_domain)
+
+        AllocLine = self.env['microfinance.portfolio.allocation.line'].sudo()
+        alloc_lines = AllocLine.search([
+            ('portfolio_id', 'in', portfolios.ids),
+            ('state', 'in', ('validated', 'cancelled')),
+        ])
+        allocated_fund_ids = set(alloc_lines.fond_id.ids)
+        if fund_id and fund_id not in allocated_fund_ids:
+            raise UserError(_("Ce fonds n'est alloué à aucun portefeuille de ce périmètre."))
+
+        Loan = self.env['microfinance.loan'].sudo()
+        disbursed_states = ('active', 'closed', 'defaulted', 'written_off')
+        loan_scope = [('company_id', 'in', company_ids), ('officer_id', '!=', False)]
+        if officer:
+            loan_scope.append(('officer_id', '=', officer))
+        disbursed_loans = Loan.search(loan_scope + [
+            ('disbursement_date', '!=', False), ('state', 'in', disbursed_states),
+        ])
+        outstanding_loans = Loan.search(loan_scope + [('state', 'in', ('approved', 'active'))])
+
+        rows_raw = []
+        seq = 0
+        for line in alloc_lines.sorted('id'):
+            seq += 1
+            rows_raw.append({
+                'date': line.date, 'fund_id': line.fond_id.id, 'fund_name': line.fond_id.name,
+                'operation': 'credit', 'reference': line.allocation_id.name, 'amount': line.amount,
+                'res_model': 'microfinance.portfolio.allocation', 'res_id': line.allocation_id.id,
+                'label': _('Allocation'), 'seq': seq,
+            })
+            if line.state == 'cancelled':
+                seq += 1
+                cancel_date = line.validated_date.date() if line.validated_date else line.date
+                rows_raw.append({
+                    'date': cancel_date, 'fund_id': line.fond_id.id, 'fund_name': line.fond_id.name,
+                    'operation': 'debit', 'reference': line.allocation_id.name, 'amount': -line.amount,
+                    'res_model': 'microfinance.portfolio.allocation', 'res_id': line.allocation_id.id,
+                    'label': _('Annulation allocation'), 'seq': seq,
+                })
+        for loan in disbursed_loans.sorted('id'):
+            seq += 1
+            rows_raw.append({
+                'date': loan.disbursement_date, 'fund_id': loan.fond_credit_id.id or False,
+                'fund_name': loan.fond_credit_id.name or _('Sans fonds (historique)'),
+                'operation': 'debit',
+                'reference': '%s - %s' % (loan.name, loan.partner_id.display_name),
+                'amount': -loan.loan_amount,
+                'res_model': 'microfinance.loan', 'res_id': loan.id,
+                'label': _('Décaissement'), 'seq': seq,
+            })
+
+        balances = defaultdict(float)
+        for row in sorted(rows_raw, key=lambda r: (r['date'], r['seq'])):
+            balances[row['fund_id']] += row['amount']
+            row['balance'] = balances[row['fund_id']]
+
+        Fund = self.env['microfinance.fond.credit'].sudo()
+        funds = []
+        for fund in Fund.browse(sorted(allocated_fund_ids)):
+            received = sum(l.amount for l in alloc_lines if l.fond_id.id == fund.id and l.state == 'validated')
+            used = sum(l._get_principal_outstanding() for l in outstanding_loans if l.fond_credit_id.id == fund.id)
+            funds.append({'id': fund.id, 'name': fund.name, 'received': received,
+                          'used': used, 'available': received - used})
+        aggregate = {
+            'received': sum(portfolios.mapped('amount_allocated')),
+            'used': sum(portfolios.mapped('montant_utilise')),
+            'available': sum(portfolios.mapped('solde_disponible')),
+        }
+
+        def _in_scope(row):
+            return fund_id is None or fund_id is False or row['fund_id'] == fund_id
+
+        opening_balance = None
+        if date_from:
+            opening_balance = sum(r['amount'] for r in rows_raw if _in_scope(r) and r['date'] < date_from)
+
+        period_rows = [
+            r for r in rows_raw if _in_scope(r)
+            and (date_from is None or r['date'] >= date_from)
+            and (date_to is None or r['date'] <= date_to)
+        ]
+        total_debit = -sum(r['amount'] for r in period_rows if r['operation'] == 'debit')
+        total_credit = sum(r['amount'] for r in period_rows if r['operation'] == 'credit')
+        closing_balance = (opening_balance or 0.0) + total_credit - total_debit if flow == 'all' else None
+
+        display_rows = [r for r in period_rows if flow == 'all' or r['operation'] == flow]
+        display_rows.sort(key=lambda r: (r['date'], r['seq']), reverse=True)
+        total_rows = len(display_rows)
+        page = display_rows[offset or 0: (offset or 0) + limit]
+
+        rows = [{
+            'date': r['date'], 'fund': r['fund_name'], 'fund_id': r['fund_id'] or False,
+            'operation': r['label'], 'reference': r['reference'],
+            'debit': -r['amount'] if r['operation'] == 'debit' else 0.0,
+            'credit': r['amount'] if r['operation'] == 'credit' else 0.0,
+            'balance': r['balance'], 'res_model': r['res_model'], 'res_id': r['res_id'],
+        } for r in page]
+
+        return {
+            'funds': funds, 'aggregate': aggregate, 'rows': rows,
+            'opening_balance': opening_balance,
+            'totals': {'debit': total_debit, 'credit': total_credit, 'closing': closing_balance},
+            'total_rows': total_rows, 'offset': offset or 0,
+        }
 
     @api.model
     def get_par_history_by_agent(self, officer_id_filter=None, months=12):
@@ -2762,6 +3077,44 @@ class MicrofinanceLoan(models.Model):
                     'Solde insuffisant sur le fonds « %(fond)s » (disponible : %(disponible)s, demandé : %(demande)s).'
                 ) % {'fond': fond.name, 'disponible': solde_avant_ce_credit, 'demande': loan.loan_amount})
 
+    def _check_portfolio_disponibilite(self):
+        """R2 (AUDIT_portefeuille_agent.md, Phase 2 correction §4) : plafond de décaissement au
+        niveau du portefeuille de l'agent, sous le plafond d'agence déjà vérifié par
+        _check_fond_disponibilite() ci-dessus - même point d'ancrage (_check_activation_eligibility),
+        même condition de déclenchement (fond.allocation_required : le mécanisme d'allocation est
+        utilisé) pour ne jamais bloquer une agence qui n'utilise pas les fonds partagés.
+
+        Non-bloquant si aucun portefeuille n'existe encore pour (officer_id, company_id) : une
+        agence qui n'a pas encore créé/réparti de portefeuilles (rollout progressif, cf.
+        migrations/17.0.1.23.0/post-migrate.py) garde le comportement d'avant cette version -
+        seul un portefeuille EXISTANT avec un plafond réellement insuffisant bloque. N'altère pas
+        la logique comptable existante du décaissement (aucune écriture ici)."""
+        for loan in self:
+            fond = loan.fond_credit_id
+            if not fond or fond.verification_disponibilite != 'at_disbursement' or not fond.allocation_required:
+                continue
+            if not loan.officer_id:
+                continue
+            portfolio = self.env['microfinance.portfolio'].sudo().search([
+                ('agent_id', '=', loan.officer_id.id), ('company_id', '=', loan.company_id.id),
+            ], limit=1)
+            if not portfolio:
+                continue
+            # Même raisonnement que solde_avant_ce_credit ci-dessus : solde_disponible a déjà
+            # déduit la réservation de CE crédit (déjà 'approved'), on la rajoute pour comparer
+            # au plafond réellement disponible avant ce crédit.
+            solde_avant_ce_credit = portfolio.solde_disponible + loan._get_principal_outstanding()
+            if solde_avant_ce_credit < loan.loan_amount:
+                raise UserError(_(
+                    "Solde insuffisant sur le portefeuille de l'agent « %(agent)s » (disponible : "
+                    "%(disponible)s, demandé : %(demande)s). Le gestionnaire d'agence doit "
+                    "d'abord lui répartir du fonds."
+                ) % {
+                    'agent': loan.officer_id.display_name,
+                    'disponible': solde_avant_ce_credit,
+                    'demande': loan.loan_amount,
+                })
+
     def _check_disbursement_limit(self):
         """Plafond de décaissement en espèces (product_id.disbursement_limit_amount) : blocage
         simple par décaissement individuel, pas de cumul sur une période — même principe que
@@ -2805,27 +3158,70 @@ class MicrofinanceLoan(models.Model):
                     '« %(journal)s » (disponible : %(balance).2f, demandé : %(amount).2f).'
                 ) % {'journal': journal.name, 'balance': account.current_balance, 'amount': loan.net_disbursed_amount})
 
+    def _check_fee_paid_before_activation(self):
+        """Frais de dossier payés AU GUICHET avant activation : source de vérité fee_paid, posé
+        uniquement par action_charge_fee() après comptabilisation réelle (account.move posté) -
+        jamais une case cochée à la main. fee_amount_due est figé à l'approbation
+        (_FEE_FROZEN_STATES) : un produit à frais nuls/non exigés avant décaissement
+        (fee_charged_before_disbursement=False, frais nettés au décaissement) ne déclenche
+        jamais ce contrôle."""
+        for loan in self:
+            if (loan.product_id.fee_charged_before_disbursement
+                    and loan.fee_amount_due > 0 and not loan.fee_paid):
+                raise UserError(_(
+                    'Les frais de dossier de %(amount).2f Ar ne sont pas encore payés au '
+                    'guichet pour le crédit %(name)s.'
+                ) % {'amount': loan.fee_amount_due, 'name': loan.name})
+
+    @api.constrains('state', 'fee_paid', 'fee_amount_due')
+    def _check_fee_paid_before_activation_constrains(self):
+        """Même contrôle que _check_fee_paid_before_activation() ci-dessus, mais en contrainte
+        ORM : ferme tout chemin vers state='active' qui ne passe pas par action_activate()/
+        _activate_with_auto_confirm() (write() direct, create() avec état actif, import, sudo,
+        cron) - cf. l'incident agence Mahitsy qui a motivé ce correctif (docstring de
+        _check_activation_eligibility ci-dessous)."""
+        for loan in self:
+            if loan.state == 'active':
+                loan._check_fee_paid_before_activation()
+
     def _check_activation_eligibility(self):
-        """Contrôles d'éligibilité à l'activation (contrat signé, frais payés, plafond de
-        décaissement, solde de caisse, disponibilité du fonds) - factorisés hors de
-        action_activate() pour rester appelables aussi par _activate_with_auto_confirm()
-        ci-dessous (chemin direct sans wizard, réservé à action_disburse() déprécié et aux
-        tests non migrés). Comportement strictement identique à l'ancien corps de
-        action_activate() avant l'introduction du wizard de confirmation de la date provisoire
-        de décaissement (chantier décaissement provisoire, docs_dev/decaissement_provisoire/)."""
+        """Contrôles d'éligibilité à l'activation (plafond de décaissement, solde de caisse,
+        disponibilité du fonds) - factorisés hors de action_activate() pour rester appelables
+        aussi par _activate_with_auto_confirm() ci-dessous (chemin direct sans wizard, réservé à
+        action_disburse() déprécié et aux tests non migrés).
+
+        Deux contrôles ont été RETIRÉS d'ici (docs_dev/invisibilite_boutons_decaissement/), tous
+        deux déplacés vers action_process_disbursement() ci-dessous - seul point qui pose
+        réellement disbursement_date, donc le seul moment où une exigence "avant décaissement"
+        a un sens sans bloquer artificiellement l'activation elle-même :
+        - "contrat signé" : exigeait signed_contract déjà présent avant même l'ouverture du
+          wizard de confirmation de la date de décaissement, ce qui rendait impossible de gater
+          "Imprimer le contrat"/"Téléverser le contrat signé" sur disbursement_date (la date
+          RÉELLE - un crédit ne peut être décaissé qu'une fois déjà 'active', donc déjà passé
+          par ce contrôle : aucune date "finale" n'était jamais atteignable avant l'activation).
+        - "frais de dossier" (fee_charged_before_disbursement) : son propre message d'erreur
+          disait déjà "avant le décaissement", pas "avant l'activation" - le nom du champ
+          produit (fee_charged_before_disbursement) le confirme : ce contrôle a toujours
+          concerné le décaissement, pas l'activation, et était simplement au mauvais endroit.
+
+        Un crédit peut donc désormais être activé sans contrat signé, mais pas décaissé. Les
+        frais de dossier, eux, redeviennent bloquants dès l'activation (incident agence
+        Mahitsy, MS/000001 activé sans aucun mouvement de caisse frais_dossier) : retirer ce
+        contrôle d'ici laissait un crédit passer 'active' - visible au portefeuille, générant
+        échéancier et contrat - sans qu'aucun encaissement n'ait jamais eu lieu, un risque que
+        le seul contrôle à l'écriture de décaissement ne couvre pas tant que le crédit n'est pas
+        décaissé. Rejoué ci-dessous (_check_fee_paid_before_activation), mais aussi en
+        @api.constrains pour fermer tout chemin write()/create() qui ne passerait pas par cette
+        méthode (import, sudo, cron)."""
         self.ensure_one()
         if self.state != 'approved':
             raise UserError(_('Le crédit doit être approuvé avant activation.'))
-        if not self.signed_contract:
-            raise UserError(_(
-                "Le contrat signé doit être téléversé avant l'activation du crédit."
-            ))
-        if self.product_id.fee_charged_before_disbursement and not self.fee_paid and self.fee_amount_due > 0:
-            raise UserError(_('Les frais de dossier doivent être encaissés avant le décaissement.'))
+        self._check_fee_paid_before_activation()
         self._check_no_active_loan_elsewhere()
         self._check_disbursement_limit()
         self._check_cash_journal_balance()
         self._check_fond_disponibilite()
+        self._check_portfolio_disponibilite()
 
     def _compute_disbursement_date_planned_default(self):
         """Date provisoire de décaissement par défaut (chantier décaissement provisoire,
@@ -2934,11 +3330,21 @@ class MicrofinanceLoan(models.Model):
         (_prepare_disbursement_move, inchangée), pose disbursement_date, puis re-cale
         l'échéancier sur la date de décaissement réelle. Appelée depuis le Guichet Caisse
         (register_operation type decaissement_credit, via _run_posting_sudo) — jamais depuis un
-        bouton de fiche. Ne rejoue AUCUN contrôle d'éligibilité : ils ont tous été passés à
-        action_activate (décision Micka, cf. AUDIT_decaissement.md)."""
+        bouton de fiche. Ne rejoue PAS les contrôles d'éligibilité à l'activation (plafond,
+        solde de caisse, fonds - toujours passés à action_activate, décision Micka, cf.
+        AUDIT_decaissement.md), à l'exception du contrat signé et des frais de dossier : ces
+        deux contrôles ont été déplacés ici depuis _check_activation_eligibility() (docs_dev/
+        invisibilite_boutons_decaissement/) - un crédit peut désormais être activé sans contrat
+        signé ni frais encaissés, mais pas décaissé."""
         for loan in self:
             if loan.state != 'active':
                 raise UserError(_('Le crédit doit être activé avant le décaissement effectif.'))
+            if not loan.signed_contract:
+                raise UserError(_(
+                    "Le contrat signé doit être téléversé avant le décaissement effectif."
+                ))
+            if loan.product_id.fee_charged_before_disbursement and not loan.fee_paid and loan.fee_amount_due > 0:
+                raise UserError(_('Les frais de dossier doivent être encaissés avant le décaissement.'))
             if not loan.disbursement_release_ready:
                 # Garde-fou chantier décaissement provisoire (docs_dev/decaissement_provisoire/) :
                 # bloque tout décaissement anticipé au guichet, y compris via recherche manuelle,

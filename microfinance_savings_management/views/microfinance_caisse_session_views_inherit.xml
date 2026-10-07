@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- mouvement_ids/mouvement_count/action_view_mouvements sont définis sur ce module
+         (microfinance_caisse_mouvement.py), pas sur microfinance_loan_management : cette vue
+         héritée doit donc vivre ici plutôt que dans le module de base (qui charge ses propres
+         vues avant que ce champ n'existe). -->
+    <record id="view_microfinance_caisse_session_form_inherit_savings" model="ir.ui.view">
+        <field name="name">microfinance.caisse.session.form.inherit.savings</field>
+        <field name="model">microfinance.caisse.session</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_caisse_session_form"/>
+        <field name="arch" type="xml">
+            <!-- Smart button "Mouvements" : historique consultable pour toute session (ouverte
+                 ou clôturée), pas seulement la session du jour affichée au guichet. -->
+            <xpath expr="//div[hasclass('oe_title')]" position="before">
+                <div class="oe_button_box" name="button_box">
+                    <button name="action_view_mouvements" type="object" class="oe_stat_button" icon="fa-money">
+                        <field name="mouvement_count" widget="statinfo" string="Mouvements"/>
+                    </button>
+                </div>
+            </xpath>
+            <!-- Historique des mouvements en bas de fiche, lecture seule : la création/édition
+                 reste centralisée au guichet (register_operation), jamais depuis le backend.
+                 Débit/Crédit (pas "Montant") : même convention de signe que
+                 _compute_theoretical_balance/net_cash (microfinance_caisse_session.py), cf.
+                 debit_amount/credit_amount sur microfinance.caisse.mouvement. -->
+            <xpath expr="//field[@name='reopen_reason']/ancestor::group[1]" position="before">
+                <field name="mouvement_ids" readonly="1">
+                    <tree>
+                        <field name="create_date" string="Date/heure"/>
+                        <field name="type"/>
+                        <field name="partner_id" string="Client"/>
+                        <field name="currency_id" column_invisible="1"/>
+                        <field name="debit_amount" string="Débit" sum="Total débit"/>
+                        <field name="credit_amount" string="Crédit" sum="Total crédit"/>
+                    </tree>
+                </field>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Vue liste dédiée pour le smart-button "Mouvements" (action_view_mouvements) : mêmes
+         colonnes Débit/Crédit que la sous-liste intégrée ci-dessus, pour que les deux points
+         d'accès affichent la même chose. Sans cette vue, action_view_mouvements retomberait sur
+         la vue tree par défaut générée par Odoo (colonnes arbitraires, pas de sous-total). -->
+    <record id="view_microfinance_caisse_mouvement_tree" model="ir.ui.view">
+        <field name="name">microfinance.caisse.mouvement.tree</field>
+        <field name="model">microfinance.caisse.mouvement</field>
+        <field name="arch" type="xml">
+            <tree create="0" edit="0" delete="0">
+                <field name="create_date" string="Date/heure"/>
+                <field name="type"/>
+                <field name="partner_id" string="Client"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="debit_amount" string="Débit" sum="Total débit"/>
+                <field name="credit_amount" string="Crédit" sum="Total crédit"/>
+            </tree>
+        </field>
+    </record>
+</odoo>

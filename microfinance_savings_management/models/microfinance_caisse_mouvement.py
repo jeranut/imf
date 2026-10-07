@@ -33,6 +33,26 @@ class MicrofinanceCaisseMouvement(models.Model):
     partner_id = fields.Many2one('res.partner', string='Client', required=True)
     amount = fields.Monetary(string='Montant', required=True)
 
+    # Répartition Débit/Crédit affichée sur les vues backend (fiche session + smart-button
+    # "Mouvements"), même convention de signe que _compute_theoretical_balance/net_cash côté
+    # microfinance.caisse.session (microfinance_loan_management/models/microfinance_caisse_
+    # session.py) : depot_epargne/remboursement_credit/frais_dossier font rentrer de l'argent en
+    # caisse (Crédit), retrait_epargne/decaissement_credit en font sortir (Débit). `amount` est
+    # toujours une magnitude positive (register_operation ci-dessous ne le signe jamais) : pas de
+    # calcul parallèle, seulement une ventilation d'affichage de la même valeur.
+    debit_amount = fields.Monetary(string='Débit', compute='_compute_debit_credit', currency_field='currency_id')
+    credit_amount = fields.Monetary(string='Crédit', compute='_compute_debit_credit', currency_field='currency_id')
+
+    @api.depends('amount', 'type')
+    def _compute_debit_credit(self):
+        for mouvement in self:
+            if mouvement.type in ('retrait_epargne', 'decaissement_credit'):
+                mouvement.debit_amount = mouvement.amount
+                mouvement.credit_amount = 0.0
+            else:
+                mouvement.debit_amount = 0.0
+                mouvement.credit_amount = mouvement.amount
+
     # Renseignés selon `type` uniquement (l'un ou l'autre, jamais les deux) — pas de contrainte
     # de cohérence ici : les méthodes du Lot 3, seules créatrices de ces enregistrements, savent
     # déjà quel champ remplir pour quel type et ne mélangent pas les deux.
@@ -341,3 +361,24 @@ class MicrofinanceCaisseSession(models.Model):
     _inherit = 'microfinance.caisse.session'
 
     mouvement_ids = fields.One2many('microfinance.caisse.mouvement', 'session_id', string='Mouvements')
+    mouvement_count = fields.Integer(string='Nombre de mouvements', compute='_compute_mouvement_count')
+
+    @api.depends('mouvement_ids')
+    def _compute_mouvement_count(self):
+        for session in self:
+            session.mouvement_count = len(session.mouvement_ids)
+
+    def action_view_mouvements(self):
+        """Historique complet des mouvements de la session, y compris clôturée - contrairement
+        au panneau OWL du guichet qui ne montre que la session ouverte du jour. Utile pour un
+        manager/auditeur en contrôle a posteriori."""
+        self.ensure_one()
+        tree_view = self.env.ref('microfinance_savings_management.view_microfinance_caisse_mouvement_tree')
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Mouvements'),
+            'res_model': 'microfinance.caisse.mouvement',
+            'view_mode': 'tree,form',
+            'views': [(tree_view.id, 'tree'), (False, 'form')],
+            'domain': [('session_id', '=', self.id)],
+        }

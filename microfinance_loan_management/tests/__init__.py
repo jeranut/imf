@@ -39,6 +39,7 @@ from . import test_caisse_cloture
 from . import test_caisse_security
 from . import test_caisse_fiche_journee_report
 from . import test_cashier_access
+from . import test_credit_menu_creation_lock
 from . import test_repayment_schedule_report
 from . import test_social_category_grid
 from . import test_field_visit
@@ -79,3 +80,6 @@ from . import test_res_company_ecart_caisse_accounts
 from . import test_client_blocage_inter_agences
 from . import test_fond_partage
 from . import test_disbursement_planned_date
+from . import test_portfolio
+from . import test_portfolio_funds_tab
+from . import test_officer_isolation

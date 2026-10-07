@@ -32,4 +32,11 @@
         <field name="padding">5</field>
         <field name="company_id" eval="False"/>
     </record>
+    <record id="seq_microfinance_portfolio_allocation" model="ir.sequence">
+        <field name="name">Répartition fonds d'agence par portefeuille</field>
+        <field name="code">microfinance.portfolio.allocation</field>
+        <field name="prefix">RPF/%(year)s/</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="False"/>
+    </record>
 </odoo>

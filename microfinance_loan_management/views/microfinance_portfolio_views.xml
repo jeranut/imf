@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_portfolio_tree" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.tree</field>
+        <field name="model">microfinance.portfolio</field>
+        <field name="arch" type="xml">
+            <tree delete="0">
+                <field name="agent_id" string="Agent crédit"/>
+                <field name="company_id" string="Agence" groups="base.group_multi_company"/>
+                <!-- currency_id chargé (colonne masquée) : requis pour que les totaux sum=
+                     ci-dessous affichent le symbole devise en pied de liste plutôt qu'un "—"
+                     (même patron que microfinance_loan_views.xml/microfinance_savings_account_
+                     views.xml) ; le total se calcule côté client sur les lignes déjà chargées
+                     (odoo/addons/web/static/src/views/list/list_renderer.js:694-757), store=True
+                     n'est donc pas requis sur amount_allocated/montant_utilise/solde_disponible
+                     pour que ça fonctionne, et volontairement pas ajouté ici (montant_utilise/
+                     solde_disponible n'ont aucun chemin de dépendance ORM réel - cf. leur
+                     docstring dans microfinance_portfolio.py - un store=True les figerait à leur
+                     valeur de création au lieu de rester à jour, cassant au passage le plafond de
+                     décaissement qui relit solde_disponible). Le même mécanisme refuse déjà
+                     nativement d'additionner des lignes de devises différentes (multi-société). -->
+                <field name="currency_id" column_invisible="1"/>
+                <field name="amount_allocated" string="Fonds alloué" sum="Total"/>
+                <field name="montant_utilise" string="Fonds utilisé" sum="Total"/>
+                <field name="solde_disponible" string="Fonds disponible" sum="Total"/>
+                <field name="active" column_invisible="1"/>
+                <button name="action_open_dashboard" type="object" string="Tableau de bord"
+                        icon="fa-bar-chart" class="btn-link"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_portfolio_form" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.form</field>
+        <field name="model">microfinance.portfolio</field>
+        <field name="arch" type="xml">
+            <form string="Portefeuille agent" delete="0">
+                <header>
+                    <button name="action_open_dashboard" type="object" string="Ouvrir le tableau de bord" class="btn-primary"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_open_allocation_history" type="object" class="oe_stat_button" icon="fa-history"
+                                string="Historique des allocations"/>
+                    </div>
+                    <div class="oe_title"><h1><field name="agent_id"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="amount_allocated" string="Fonds alloué" readonly="1"/>
+                            <field name="montant_utilise" string="Fonds utilisé" readonly="1"/>
+                            <field name="solde_disponible" string="Fonds disponible" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_portfolio_search" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.search</field>
+        <field name="model">microfinance.portfolio</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="agent_id"/>
+                <field name="company_id"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_company" string="Agence" context="{'group_by': 'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_portfolio" model="ir.actions.act_window">
+        <field name="name">Portefeuilles</field>
+        <field name="res_model">microfinance.portfolio</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Aucun portefeuille</p>
+            <p>Un portefeuille par agent et par agence (R1) ; créé automatiquement pour les
+               couples agent/agence déjà présents sur les crédits lors de la mise à jour du
+               module, ou manuellement ici pour un nouvel agent.</p>
+        </field>
+    </record>
+
+    <record id="view_microfinance_portfolio_allocation_tree" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.allocation.tree</field>
+        <field name="model">microfinance.portfolio.allocation</field>
+        <field name="arch" type="xml">
+            <tree decoration-success="state == 'validated'" decoration-muted="state == 'cancelled'">
+                <field name="name" string="Référence"/>
+                <field name="date" string="Date"/>
+                <field name="fond_id" string="Fonds de crédit"/>
+                <field name="base_amount" string="Montant à répartir"/>
+                <field name="state" string="État" widget="badge"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_portfolio_allocation_form" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.allocation.form</field>
+        <field name="model">microfinance.portfolio.allocation</field>
+        <field name="arch" type="xml">
+            <form string="Répartition du fonds d'agence">
+                <header>
+                    <button name="action_repartir_egalement" type="object" string="Répartir également"
+                            groups="microfinance_loan_management.group_microfinance_gestionnaire"
+                            invisible="state != 'draft' or base_amount &lt;= 0 or not line_ids or allocation_mode == 'allocation'"/>
+                    <button name="action_validate" type="object" string="Valider" class="btn-primary"
+                            groups="microfinance_loan_management.group_microfinance_gestionnaire"
+                            invisible="state != 'draft'"
+                            confirm="Valider cette répartition ? Les fonds deviendront disponibles dans chaque portefeuille."/>
+                    <button name="action_cancel" type="object" string="Annuler"
+                            groups="microfinance_loan_management.group_microfinance_gestionnaire"
+                            invisible="state == 'cancelled'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,validated"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="fond_id" string="Fonds de crédit" readonly="state != 'draft'"/>
+                            <field name="date" string="Date" readonly="state != 'draft'"/>
+                            <field name="company_id" string="Agence" groups="base.group_multi_company"/>
+                            <field name="allocation_mode" string="Mode" widget="radio" options="{'horizontal': true}"
+                                   readonly="state != 'draft'"/>
+                            <field name="input_type" string="Saisie" widget="radio" options="{'horizontal': true}"
+                                   readonly="state != 'draft'" invisible="allocation_mode != 'allocation'"/>
+                        </group>
+                        <group>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="reste_a_repartir" string="Reste à répartir du fonds de l'agence"/>
+                            <field name="base_amount" string="Montant à répartir" force_save="1"
+                                   readonly="state != 'draft' or allocation_mode == 'allocation'"/>
+                        </group>
+                    </group>
+                    <field name="line_ids" readonly="state != 'draft'">
+                        <tree editable="bottom" create="0" delete="0">
+                            <field name="portfolio_id" string="Portefeuille" force_save="1" readonly="1"/>
+                            <field name="percent" string="Part (%)"
+                                   readonly="parent.allocation_mode == 'allocation' and parent.input_type == 'montant'"/>
+                            <field name="amount" string="Montant"
+                                   readonly="parent.allocation_mode == 'allocation' and parent.input_type == 'pourcentage'"/>
+                            <field name="percent_ref" column_invisible="1"/>
+                            <field name="amount_ref" column_invisible="1"/>
+                        </tree>
+                    </field>
+                    <group class="oe_subtotal_footer">
+                        <field name="total_percent" string="Total (%)"/>
+                        <field name="total_amount" string="Total réparti"/>
+                        <field name="reste_a_partager" string="Reste à répartir"/>
+                    </group>
+                </sheet>
+                <div class="oe_chatter">
+                    <field name="message_follower_ids"/>
+                    <field name="activity_ids"/>
+                    <field name="message_ids"/>
+                </div>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_portfolio_allocation_search" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.allocation.search</field>
+        <field name="model">microfinance.portfolio.allocation</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name" string="Référence"/>
+                <field name="fond_id" string="Fonds de crédit"/>
+                <filter name="filter_draft" string="Brouillons" domain="[('state', '=', 'draft')]"/>
+                <filter name="filter_validated" string="Validés" domain="[('state', '=', 'validated')]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_fond" string="Fonds" context="{'group_by': 'fond_id'}"/>
+                    <filter name="group_state" string="État" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Historique des allocations (M4) : source de vérité = lignes de répartition validées
+         (microfinance.portfolio.allocation.line), jamais recalculé ni réécrit ici - vue lecture
+         seule (create/edit/delete à "0", y compris par import, cf. _check_repartition_draft sur le
+         modèle qui bloque toute écriture une fois la répartition non brouillon). Réutilisée par les
+         boutons intelligents "Historique des allocations" (fiche portefeuille et fiche fonds de
+         crédit) et par le menu global ci-dessous. -->
+    <record id="view_microfinance_portfolio_allocation_line_history_tree" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.allocation.line.history.tree</field>
+        <field name="model">microfinance.portfolio.allocation.line</field>
+        <field name="arch" type="xml">
+            <tree string="Historique des allocations" create="0" edit="0" delete="0" import="0" default_order="date desc, id desc">
+                <field name="date" string="Date"/>
+                <field name="allocation_id" string="Référence"/>
+                <field name="fond_id" string="Fonds de crédit"/>
+                <field name="company_id" string="Agence" groups="base.group_multi_company"/>
+                <field name="portfolio_id" string="Portefeuille"/>
+                <field name="agent_id" column_invisible="1"/>
+                <field name="allocation_mode" string="Mode"/>
+                <field name="amount" string="Montant" sum="Total"/>
+                <field name="percent" string="Part (%)"/>
+                <field name="validated_by" string="Validé par"/>
+                <field name="validated_date" string="Validé le"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="state" column_invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_portfolio_allocation_line_history_search" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.allocation.line.history.search</field>
+        <field name="model">microfinance.portfolio.allocation.line</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="fond_id" string="Fonds de crédit"/>
+                <field name="agent_id" string="Agent"/>
+                <field name="company_id" string="Agence"/>
+                <field name="allocation_id" string="Référence"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_fond" string="Fonds" context="{'group_by': 'fond_id'}"/>
+                    <filter name="group_agent" string="Agent" context="{'group_by': 'agent_id'}"/>
+                    <filter name="group_company" string="Agence" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_month" string="Mois" context="{'group_by': 'date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_portfolio_allocation_line_history" model="ir.actions.act_window">
+        <field name="name">Historique des allocations</field>
+        <field name="res_model">microfinance.portfolio.allocation.line</field>
+        <field name="view_mode">tree</field>
+        <field name="view_id" ref="view_microfinance_portfolio_allocation_line_history_tree"/>
+        <field name="search_view_id" ref="view_microfinance_portfolio_allocation_line_history_search"/>
+        <field name="domain">[('state', '=', 'validated')]</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Aucune allocation validée</p>
+        </field>
+    </record>
+
+    <record id="action_microfinance_portfolio_allocation" model="ir.actions.act_window">
+        <field name="name">Répartition du fonds d'agence</field>
+        <field name="res_model">microfinance.portfolio.allocation</field>
+        <field name="view_mode">tree,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Aucune répartition</p>
+            <p>Réservé au gestionnaire d'agence : répartissez le fonds reçu de la société mère
+               entre les portefeuilles de vos agents de crédit (R2).</p>
+        </field>
+    </record>
+
+    <!-- Chargé après microfinance_menus.xml (cf. commentaire dans __manifest__.py pour
+         microfinance_geo_views.xml/microfinance_portfolio_snapshot_views.xml, même contrainte
+         ici) : les deux <menuitem> ci-dessous référencent des xmlids définis dans ce fichier
+         (action_microfinance_portfolio_allocation) ou redéfinissent un menuitem existant. -->
+    <menuitem id="menu_microfinance_portfolio_allocation" name="Répartition du fonds d'agence"
+              parent="menu_microfinance_config_financing" action="action_microfinance_portfolio_allocation"
+              sequence="35"/>
+
+    <menuitem id="menu_microfinance_portfolio_allocation_line_history" name="Historique des allocations"
+              parent="menu_microfinance_config_financing" action="action_microfinance_portfolio_allocation_line_history"
+              sequence="36"/>
+
+    <!-- Reprend menu_microfinance_mon_portefeuille (défini plus haut dans microfinance_menus.xml,
+         chargé avant ce fichier) pour en changer le nom et l'action, une fois
+         action_microfinance_portfolio disponible : "Mon portefeuille" ouvrait directement le
+         dashboard agent (action_microfinance_agent_portfolio, id 914, conservée telle quelle, non
+         touchée) ; "Portefeuille" ouvre désormais la liste microfinance.portfolio - un agent n'y
+         voit que sa propre ligne (record rules, security/microfinance_portfolio_rules.xml), un
+         gestionnaire/finance/manager toutes celles de son périmètre. Même parent, même séquence,
+         aucun groups= (inchangés). Ouvrir une ligne bascule sur le dashboard via le bouton
+         "Ouvrir le tableau de bord" du formulaire portefeuille, contexte {'portfolio_id': <id>} -
+         get_dashboard_data revérifie l'accès par ORM, ne fait jamais confiance à un agent_id
+         transmis par le client. -->
+    <menuitem id="menu_microfinance_mon_portefeuille" name="Portefeuille" parent="menu_credits_root"
+              action="action_microfinance_portfolio" sequence="-1"/>
+</odoo>

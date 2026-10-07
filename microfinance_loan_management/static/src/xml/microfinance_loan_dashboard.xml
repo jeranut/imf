@@ -32,7 +32,7 @@
             </t>
             <t t-else="">
             <div class="o_microfinance_dashboard__body">
-                <nav class="o_microfinance_dashboard__nav">
+                <nav t-if="state.activeTopic !== 'portefeuille'" class="o_microfinance_dashboard__nav">
                     <button t-foreach="visibleTopics" t-as="topic" t-key="topic.id" type="button"
                             t-attf-class="o_microfinance_dashboard__nav_item {{ state.activeTopic === topic.id ? 'o_microfinance_dashboard__nav_item--active' : '' }}"
                             t-att-title="topic.label"
@@ -139,14 +139,10 @@
                 </div>
 
                 <div class="o_microfinance_agent_shortcuts">
-                    <button type="button" class="btn btn-primary btn-sm" t-on-click="() => this.openAgentShortcut('new_client')">Nouveau client</button>
-                    <button type="button" class="btn btn-primary btn-sm" t-on-click="() => this.openAgentShortcut('new_application')">Nouvelle demande de crédit</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_clients')">Mes clients</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_loans')">Mes crédits</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_payments')">Mes remboursements</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_overdue')">Mes impayés</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_installments')">Mes échéances</button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" t-on-click="() => this.openAgentShortcut('my_visits')">Mes visites</button>
+                    <button t-if="!state.agent.readOnly" type="button" class="btn btn-primary btn-sm" t-on-click="() => this.openAgentShortcut('new_client')">Nouveau client</button>
+                    <button t-foreach="portfolioTabs" t-as="tab" t-key="tab.id" type="button"
+                            t-attf-class="btn btn-sm {{ state.agent.tabs.active === tab.id ? 'btn-primary' : 'btn-outline-secondary' }}"
+                            t-on-click="() => this.onPortfolioTabClick(tab.id)" t-esc="formatPortfolioTabLabel(tab)"/>
                 </div>
 
                 <div class="o_microfinance_kpi_grid">
@@ -222,7 +218,187 @@
                             </div>
                         </div>
                     </article>
+                    <article t-if="'fonds_alloue' in state.agent.kpis" class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-briefcase" role="img" aria-label="Fonds alloué"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(state.agent.kpis.fonds_alloue)"/>
+                                <span>Fonds alloué (portefeuille)</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article t-if="'fonds_utilise' in state.agent.kpis" class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-minus-circle" role="img" aria-label="Fonds utilisé"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(state.agent.kpis.fonds_utilise)"/>
+                                <span>Fonds utilisé (portefeuille)</span>
+                            </div>
+                        </div>
+                    </article>
+                    <article t-if="'fonds_disponible' in state.agent.kpis" class="o_microfinance_kpi">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-plus-circle" role="img" aria-label="Fonds disponible"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(state.agent.kpis.fonds_disponible)"/>
+                                <span>Fonds disponible (portefeuille)</span>
+                            </div>
+                        </div>
+                    </article>
                 </div>
+
+                <section t-if="state.agent.tabs.active &amp;&amp; state.agent.tabs.active !== 'my_funds'" class="o_microfinance_panel o_microfinance_panel--table o_microfinance_portfolio_tab_panel">
+                    <div class="o_microfinance_panel__title">
+                        <h2 t-esc="activePortfolioTab.label"/>
+                    </div>
+                    <t t-if="state.agent.tabs.loading">
+                        <div class="o_microfinance_dashboard__loading">Chargement...</div>
+                    </t>
+                    <t t-elif="activePortfolioTabData">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle o_microfinance_table">
+                            <thead>
+                                <tr>
+                                    <th t-foreach="activePortfolioTabData.columns" t-as="col" t-key="col.name" t-esc="col.label"/>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-foreach="activePortfolioTabData.rows" t-as="row" t-key="row.id"
+                                    t-attf-class="{{ activePortfolioTab.clickable ? 'o_microfinance_agent_table__row' : '' }}"
+                                    t-on-click="() => this.openPortfolioTabRow(row)">
+                                    <td t-foreach="activePortfolioTabData.columns" t-as="col" t-key="col.name" t-esc="formatTabCell(col, row)"/>
+                                </tr>
+                                <tr t-if="!activePortfolioTabData.rows.length">
+                                    <td t-att-colspan="activePortfolioTabData.columns.length" class="text-center text-muted py-4">Aucune donnée.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="o_microfinance_agent_pagination" t-if="portfolioTabPages.pageCount > 1">
+                        <span class="text-muted"><t t-esc="activePortfolioTabData.total"/> résultats</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                t-att-disabled="portfolioTabPages.current &lt;= 1"
+                                t-on-click="() => this.goToPortfolioTabPage(portfolioTabPages.current - 1)">Précédent</button>
+                        <span class="o_microfinance_agent_pagination__current"><t t-esc="portfolioTabPages.current"/> / <t t-esc="portfolioTabPages.pageCount"/></span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                t-att-disabled="portfolioTabPages.current &gt;= portfolioTabPages.pageCount"
+                                t-on-click="() => this.goToPortfolioTabPage(portfolioTabPages.current + 1)">Suivant</button>
+                    </div>
+                    </t>
+                </section>
+
+                <section t-if="state.agent.tabs.active === 'my_funds'" class="o_microfinance_panel o_microfinance_panel--table o_microfinance_funds_panel">
+                    <div class="o_microfinance_panel__title">
+                        <h2>Fonds de crédit</h2>
+                        <span class="o_microfinance_funds_badge" t-if="fundsTabData" t-esc="fundsModeLabel"/>
+                    </div>
+                    <t t-if="state.agent.fundsTab.loading and !fundsTabData">
+                        <div class="o_microfinance_dashboard__loading">Chargement...</div>
+                    </t>
+                    <t t-elif="fundsTabData">
+                        <div class="o_microfinance_funds_cards">
+                            <article t-attf-class="o_microfinance_funds_card {{ !state.agent.fundsTab.filters.fundId ? 'o_microfinance_funds_card--active' : '' }}"
+                                     t-on-click="() => this.onFundsSelectFund(false)">
+                                <strong>Tous les fonds</strong>
+                                <div>Reçu : <t t-esc="formatMoney(fundsTabData.aggregate.received)"/></div>
+                                <div>Utilisé : <t t-esc="formatMoney(fundsTabData.aggregate.used)"/></div>
+                                <div>Disponible : <t t-esc="formatMoney(fundsTabData.aggregate.available)"/></div>
+                            </article>
+                            <article t-foreach="fundsTabData.funds" t-as="fund" t-key="fund.id"
+                                     t-attf-class="o_microfinance_funds_card {{ state.agent.fundsTab.filters.fundId === fund.id ? 'o_microfinance_funds_card--active' : '' }}"
+                                     t-on-click="() => this.onFundsSelectFund(fund.id)">
+                                <strong t-esc="fund.name"/>
+                                <div>Reçu : <t t-esc="formatMoney(fund.received)"/></div>
+                                <div>Utilisé : <t t-esc="formatMoney(fund.used)"/></div>
+                                <div>Disponible : <t t-esc="formatMoney(fund.available)"/></div>
+                            </article>
+                        </div>
+
+                        <div class="o_microfinance_funds_filters">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" t-attf-class="btn {{ state.agent.fundsTab.filters.flow === 'all' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                        t-on-click="() => this.onFundsSelectFlow('all')">Tout</button>
+                                <button type="button" t-attf-class="btn {{ state.agent.fundsTab.filters.flow === 'debit' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                        t-on-click="() => this.onFundsSelectFlow('debit')">Débits</button>
+                                <button type="button" t-attf-class="btn {{ state.agent.fundsTab.filters.flow === 'credit' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                        t-on-click="() => this.onFundsSelectFlow('credit')">Crédits</button>
+                            </div>
+                            <div class="o_microfinance_funds_filters__dates">
+                                <label>Du
+                                    <input type="date" class="form-control form-control-sm"
+                                           t-att-value="state.agent.fundsTab.filters.dateFrom || ''"
+                                           t-on-change="(ev) => this.onFundsDateChange('dateFrom', ev)"/>
+                                </label>
+                                <label>Au
+                                    <input type="date" class="form-control form-control-sm"
+                                           t-att-value="state.agent.fundsTab.filters.dateTo || ''"
+                                           t-on-change="(ev) => this.onFundsDateChange('dateTo', ev)"/>
+                                </label>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="onFundsResetFilters">Réinitialiser</button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle o_microfinance_table">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th t-if="!state.agent.fundsTab.filters.fundId">Fonds</th>
+                                        <th>Opération</th>
+                                        <th>Référence</th>
+                                        <th class="text-end">Débit</th>
+                                        <th class="text-end">Crédit</th>
+                                        <th class="text-end">Solde</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr t-if="fundsTabData.opening_balance !== null" class="o_microfinance_funds_opening">
+                                        <td/>
+                                        <td t-if="!state.agent.fundsTab.filters.fundId"/>
+                                        <td colspan="2">Solde d'ouverture</td>
+                                        <td/>
+                                        <td/>
+                                        <td class="text-end"><t t-esc="formatMoney(fundsTabData.opening_balance)"/></td>
+                                    </tr>
+                                    <tr t-foreach="fundsTabData.rows" t-as="row"
+                                        t-key="row.res_model + '_' + row.res_id + '_' + row.operation + '_' + row_index"
+                                        class="o_microfinance_agent_table__row"
+                                        t-on-click="() => this.openFundsRow(row)">
+                                        <td t-esc="formatDate(row.date)"/>
+                                        <td t-if="!state.agent.fundsTab.filters.fundId" t-esc="row.fund"/>
+                                        <td t-esc="row.operation"/>
+                                        <td t-esc="row.reference"/>
+                                        <td class="text-end text-danger" t-esc="row.debit ? formatMoney(row.debit) : ''"/>
+                                        <td class="text-end text-success" t-esc="row.credit ? formatMoney(row.credit) : ''"/>
+                                        <td class="text-end" t-esc="formatMoney(row.balance)"/>
+                                    </tr>
+                                    <tr t-if="!fundsTabData.rows.length and fundsTabData.opening_balance === null">
+                                        <td t-att-colspan="state.agent.fundsTab.filters.fundId ? 6 : 7" class="text-center text-muted py-4">Aucun mouvement sur cette période.</td>
+                                    </tr>
+                                </tbody>
+                                <tfoot t-if="fundsTabData.rows.length || fundsTabData.opening_balance !== null">
+                                    <tr>
+                                        <td t-att-colspan="state.agent.fundsTab.filters.fundId ? 3 : 4">Totaux de la période</td>
+                                        <td class="text-end text-danger" t-esc="formatMoney(fundsTabData.totals.debit)"/>
+                                        <td class="text-end text-success" t-esc="formatMoney(fundsTabData.totals.credit)"/>
+                                        <td class="text-end" t-esc="fundsTabData.totals.closing !== null ? formatMoney(fundsTabData.totals.closing) : '—'"/>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+
+                        <div class="o_microfinance_agent_pagination" t-if="fundsTabPages.pageCount > 1">
+                            <span class="text-muted"><t t-esc="fundsTabData.total_rows"/> résultats</span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    t-att-disabled="fundsTabPages.current &lt;= 1"
+                                    t-on-click="() => this.goToFundsPage(fundsTabPages.current - 1)">Précédent</button>
+                            <span class="o_microfinance_agent_pagination__current"><t t-esc="fundsTabPages.current"/> / <t t-esc="fundsTabPages.pageCount"/></span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                    t-att-disabled="fundsTabPages.current &gt;= fundsTabPages.pageCount"
+                                    t-on-click="() => this.goToFundsPage(fundsTabPages.current + 1)">Suivant</button>
+                        </div>
+                    </t>
+                </section>
 
                 <div class="o_microfinance_dashboard__grid">
                     <section class="o_microfinance_panel">

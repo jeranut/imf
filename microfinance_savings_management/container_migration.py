@@ -28,11 +28,21 @@ Deux opérations indépendantes, toutes deux en lecture/écriture contrôlée :
    puis neutralise (renomme, désactive - jamais supprime) l'ancienne séquence ``.I`` devenue
    inutile. Respecte le même paramètre de dry-run que (1).
 
+4. ``activate_draft_containers`` : correctif du 2026-10-05 (docs_dev/epargne_auto/
+   AUDIT_doublons_creation_client.md §16) - un conteneur épargne ne doit jamais rester en
+   brouillon (``create()`` pose désormais ``state='active'`` directement, cf.
+   microfinance_savings_account.py). Régularise (ou, en dry-run, liste seulement) les conteneurs
+   déjà en base et encore en ``draft`` avant ce correctif, en les passant à ``active`` - jamais
+   via ``action_activate()`` (qui refuse explicitement un conteneur), directement par ``write()``.
+   Aucun autre champ touché (pas de ``opening_date``, pour ne pas rendre le conteneur éligible à
+   la dormance - cf. cron_detect_dormant_accounts, désormais filtré sur is_container en défense
+   en profondeur). Respecte le même paramètre de dry-run que (1) et (3).
+
 Points communs : aucun montant, journal, écriture ni solde n'est modifié - seul le champ `name`
-du conteneur est écrit par (1) ; (2) n'écrit jamais aucun compte. Avant tout renommage, (1)
-vérifie les références en texte libre (écritures comptables, chatter d'autres documents,
-séquences, transactions) : si l'ancien nom y figure, le conteneur n'est PAS renommé, le cas est
-consigné dans le CSV.
+du conteneur est écrit par (1), seul `state` par (4) ; (2) n'écrit jamais aucun compte. Avant
+tout renommage, (1) vérifie les références en texte libre (écritures comptables, chatter
+d'autres documents, séquences, transactions) : si l'ancien nom y figure, le conteneur n'est PAS
+renommé, le cas est consigné dans le CSV.
 
 Relance après bascule du paramètre à False (le script de migration ne se rejoue pas tout seul) ::
 
@@ -74,6 +84,7 @@ ALIGN_CSV_HEADER = [
     'societe', 'ancien_prochain_type_I', 'ancien_prochain_compte_permanent',
     'nouveau_prochain_compte_permanent', 'statut',
 ]
+ACTIVATE_CSV_HEADER = ['id', 'nom', 'client', 'societe', 'etat_avant', 'statut']
 # Séquence dont le rôle est désormais tenu par microfinance.partner.account (microfinance_loan_
 # management) - cf. microfinance_savings_account.py._get_savings_sequence_code. Dupliquée ici en
 # constante plutôt qu'importée pour ne pas faire dépendre ce fichier utilitaire du modèle ORM au
@@ -354,4 +365,44 @@ def align_savings_number_sequences(env, dry_run=None, log_dir=None):
         "Alignement des séquences épargne (type I / compte permanent) %s : %d société(s) "
         "concernée(s), trace : %s", 'DRY-RUN (rien modifié)' if dry_run else 'RÉEL',
         len(rows), csv_path or 'non écrite')
+    return rows
+
+
+def activate_draft_containers(env, dry_run=None, log_dir=None):
+    """Correctif du 2026-10-05 (docs_dev/epargne_auto/AUDIT_doublons_creation_client.md §16) :
+    régularise (ou, en dry-run, liste seulement) les conteneurs épargne encore en ``draft``
+    créés avant que ``microfinance.savings.account.create()`` ne pose ``state='active'``
+    directement. Passe uniquement ``state`` à ``active`` par ``write()`` - jamais
+    ``action_activate()`` (qui refuse explicitement un conteneur) et jamais ``opening_date``
+    (poser cette date rendrait le conteneur éligible à la dormance - cf. _compute_is_dormant).
+
+    Respecte le paramètre système ``microfinance_savings.migration_dry_run`` comme les autres
+    opérations de ce fichier. N'appelle jamais commit() : l'appelant décide. Renvoie la liste des
+    lignes du CSV."""
+    if not (env.is_superuser() or env.user.has_group('base.group_system')):
+        raise AccessError(_("Seul un administrateur peut régulariser l'état des conteneurs épargne."))
+    if dry_run is None:
+        dry_run = is_dry_run(env)
+    Account = env['microfinance.savings.account'].with_context(active_test=False)
+    csv_path = _prepare_csv(env, 'activation_conteneurs_epargne', dry_run, log_dir)
+
+    rows = []
+    draft_containers = Account.search([('is_container', '=', True), ('state', '=', 'draft')], order='id')
+    for container in draft_containers:
+        rows.append({
+            'id': container.id, 'nom': container.name, 'client': container.partner_id.display_name,
+            'societe': container.company_id.name, 'etat_avant': container.state,
+            'statut': 'A_ACTIVER' if dry_run else 'ACTIVE',
+        })
+    if not dry_run and draft_containers:
+        draft_containers.write({'state': 'active'})
+
+    if csv_path:
+        with open(csv_path, 'a', encoding='utf-8', newline='') as handle:
+            writer = csv.DictWriter(handle, fieldnames=ACTIVATE_CSV_HEADER, delimiter=';')
+            writer.writeheader()
+            writer.writerows(rows)
+    _logger.info(
+        "Conteneurs épargne en brouillon à régulariser %s : %d conteneur(s), trace : %s",
+        'DRY-RUN (rien modifié)' if dry_run else 'RÉEL', len(rows), csv_path or 'non écrite')
     return rows

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Ordre demandé pour les apps en tête de la barre latérale, devant toutes les autres :
+         Ampaly (sequence -60, posée directement sur menu_microfinance_root dans
+         microfinance_menus.xml), Comptabilité, Paie, Employés, Congés, Dépenses. Ne touche
+         qu'au champ sequence de chaque menu racine, rien d'autre (noms, groupes, actions
+         inchangés) - ces modules restent standards/tiers, seule la position de leur app change
+         via ce module custom. -->
+    <record id="account.menu_finance" model="ir.ui.menu">
+        <field name="sequence">-50</field>
+    </record>
+    <record id="hr_payroll_community.menu_hr_payroll_community_root" model="ir.ui.menu">
+        <field name="sequence">-40</field>
+    </record>
+    <record id="hr.menu_hr_root" model="ir.ui.menu">
+        <field name="sequence">-30</field>
+    </record>
+    <record id="hr_holidays.menu_hr_holidays_root" model="ir.ui.menu">
+        <field name="sequence">-20</field>
+    </record>
+    <record id="hr_expense.menu_hr_expense_root" model="ir.ui.menu">
+        <field name="sequence">-10</field>
+    </record>
+</odoo>

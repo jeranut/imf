@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="mowgli_payroll_sync_wizard_view_form" model="ir.ui.view">
+        <field name="name">mowgli.payroll.sync.wizard.view.form</field>
+        <field name="model">mowgli.payroll.sync.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Synchroniser sur toutes les agences">
+                <field name="state" invisible="1"/>
+                <group>
+                    <field name="structure_id"/>
+                    <field name="target_company_ids" widget="many2many_tags"
+                           invisible="state == 'report'"/>
+                    <field name="create_journal_if_missing"
+                           invisible="state == 'report'"/>
+                </group>
+                <field name="report_text" invisible="state != 'report'"/>
+                <footer>
+                    <button name="action_preview" string="Aperçu"
+                            type="object" class="btn-secondary"
+                            invisible="state == 'report'"/>
+                    <button name="action_apply" string="Appliquer"
+                            type="object" class="btn-primary"/>
+                    <button string="Fermer" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

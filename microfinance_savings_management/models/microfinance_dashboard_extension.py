@@ -16,10 +16,18 @@ class MicrofinanceLoan(models.Model):
     _inherit = 'microfinance.loan'
 
     @api.model
-    def get_dashboard_data(self):
-        data = super().get_dashboard_data()
+    def get_dashboard_data(self, portfolio_id=None):
+        data = super().get_dashboard_data(portfolio_id)
         company = self.env.company
-        Account = self.env['microfinance.savings.account']
+        # sudo() limité à cet agrégat : total/compte des comptes épargne actifs de la société,
+        # une statistique globale au même titre que le KPI "Fonds bailleurs" (déjà visible de tous
+        # les rôles du dashboard) - pas une liste de comptes. Le contrôle d'accès réel (portefeuille
+        # demandé visible pour l'appelant) a déjà eu lieu dans super().get_dashboard_data(). Sans ce
+        # sudo(), un agent crédit (groupe "Agent crédit", sans accès à microfinance.savings.account,
+        # cf. security/ir.model.access.csv) obtient un AccessError ici, qui interrompt tout le
+        # calcul et laisse un tableau de bord vide (l'erreur est notifiée côté JS mais plus aucune
+        # donnée n'est jamais rendue).
+        Account = self.env['microfinance.savings.account'].sudo()
         active_accounts = Account.search([
             ('company_id', '=', company.id), ('state', '=', 'active'),
         ])

@@ -31,6 +31,8 @@
                                 string="Contributions"/>
                         <button name="action_view_loans" type="object" class="oe_stat_button" icon="fa-book"
                                 string="Crédits rattachés"/>
+                        <button name="action_view_portfolio_allocation_history" type="object" class="oe_stat_button" icon="fa-history"
+                                string="Historique des allocations"/>
                     </div>
                     <div class="oe_title">
                         <h1><field name="name" string="Nom du fonds" placeholder="Nom du fonds"/></h1>

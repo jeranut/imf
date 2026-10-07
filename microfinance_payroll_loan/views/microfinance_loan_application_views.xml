@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_application_form_employee_match" model="ir.ui.view">
+        <field name="name">microfinance.loan.application.form.employee.match</field>
+        <field name="model">microfinance.loan.application</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_loan_application_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//sheet" position="inside">
+                <field name="microfinance_employee_match_pending" invisible="1"/>
+                <field name="microfinance_employee_match_candidate_ids" invisible="1"/>
+                <div class="alert alert-warning" role="alert"
+                     invisible="not microfinance_employee_match_pending">
+                    <p>
+                        Ce client correspond par nom ou e-mail à un employé actif de la même
+                        société (sans CIN identique pour confirmer automatiquement) :
+                        <field name="microfinance_employee_match_candidate_ids" readonly="1" nolabel="1"/>.
+                        Le dossier est bloqué jusqu'à résolution.
+                    </p>
+                    <field name="microfinance_employee_match_selected_id"/>
+                    <button name="action_microfinance_link_matched_employee"
+                            string="Lier à l'employé" type="object" class="btn-primary"/>
+                    <button name="action_microfinance_dismiss_employee_match"
+                            string="Ce n'est pas un employé" type="object"/>
+                </div>
+            </xpath>
+        </field>
+    </record>
+</odoo>

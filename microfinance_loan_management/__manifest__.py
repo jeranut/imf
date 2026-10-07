@@ -1,21 +1,27 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Loan Management',
-    'version': '17.0.1.22.0',
+    'version': '17.0.1.25.0',
     'summary': 'Gestion des crédits clients pour institutions de microfinance',
     'description': 'Produits de crédit, demandes, approbations, échéanciers, remboursements, pénalités, recouvrement et risque.',
     'category': 'Accounting/Finance',
     'author': 'SysAdaptPro',
     'website': 'https://sysadaptpro.com',
     'license': 'LGPL-3',
-    'depends': ['base', 'mail', 'account', 'base_vat', 'contacts', 'hr', 'calendar', 'base_accounting_kit'],
+    'depends': [
+        'base', 'mail', 'account', 'base_vat', 'contacts', 'hr', 'calendar', 'base_accounting_kit',
+        'hr_holidays', 'hr_expense', 'hr_payroll_community',
+    ],
     'data': [
         'security/groups.xml',
         'security/microfinance_company_rules.xml',
         'security/microfinance_fond_bailleur_rules.xml',
+        'security/microfinance_portfolio_rules.xml',
+        'security/microfinance_officer_isolation_rules.xml',
         'security/ir.model.access.csv',
         'data/sequence.xml',
         'data/cron.xml',
+        'data/menu_order.xml',
         'data/microfinance_profession_data.xml',
         'data/repayment_frequency_data.xml',
         'data/provision_rules_data.xml',
@@ -76,6 +82,7 @@
         # Odoo ne les résout pas en différé au sein d'un même module.
         'views/microfinance_geo_views.xml',
         'views/microfinance_portfolio_snapshot_views.xml',
+        'views/microfinance_portfolio_views.xml',
     ],
     'assets': {
         'web.assets_backend': [

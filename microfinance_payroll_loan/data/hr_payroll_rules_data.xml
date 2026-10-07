@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Appelé à chaque install/update de CE module (idempotent, recherche par code avant
+         create/write) : crée ou met à jour la règle LOAN sur la structure BASE. Doit s'exécuter
+         après _mowgli_setup_payroll_rules (dépendance du manifest sur mowgli_payroll_pcec :
+         son data se charge avant le nôtre), qui a déjà posé IRSA/NET dont on a besoin ici. -->
+    <function model="hr.salary.rule" name="_microfinance_payroll_setup_loan_rule"/>
+</odoo>

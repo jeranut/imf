@@ -395,7 +395,7 @@ sans coder, conformément à la consigne.** Deux causes à ce décalage :
 2. Il existe, en plus du conteneur épargne (`microfinance.savings.account.is_container`), un
    **second conteneur** que le CONTEXTE ne mentionne pas du tout : `microfinance.loan.account`
    (« Compte crédit »), créé lui aussi à l'enregistrement du client, avec exactement la cardinalité
-   demandée pour le futur conteneur crédit `IS/N` (1 par client et par société, nom dérivé du numéro
+   demandée pour le futur conteneur crédit `IS/N` (1 par client et >par société, nom dérivé du numéro
    de compte permanent du client). Une partie de ce que Micka demande (le conteneur crédit `IS/N`)
    **existe donc déjà**, sous un autre nom et un mécanisme légèrement différent (dérivation directe
    du numéro permanent plutôt que tirage direct d'un compteur COMPTES au moment du couple).
@@ -859,3 +859,85 @@ copie (§16).
 dans n'importe quelle agence de confirmer que le numéro de compte s'affiche bien et qu'aucune
 erreur n'apparaît - et transmettre le cas ELIO (SY) à Micka pour arbitrage manuel (`decision`
 dans le CSV des doublons).
+
+## §18 - Correctif « conteneur jamais en brouillon » - 2026-10-05
+
+### Demande
+
+Le conteneur épargne (`is_container=True`), créé en même temps que le compte crédit à
+l'enregistrement du client, restait en `state='draft'` indéfiniment (aucun produit, donc jamais
+activable). Demande : qu'il soit créé directement actif.
+
+### Investigation (avant correctif)
+
+- **État par défaut** : `draft` (`models/microfinance_savings_account.py:65`), jamais changé à la
+  création - ni dans `create()` ni dans `res_partner.py._get_or_create_microfinance_savings_
+  container`.
+- **Cause du blocage** : ce n'est **pas** `_check_product_required_unless_container` (elle ne
+  regarde que `is_container`/`product_id`, jamais `state`, et exempte déjà le conteneur). C'est
+  `action_activate()` qui refuse explicitement tout conteneur (`UserError` dès que `is_container`
+  est vrai) - le seul chemin possible est de poser `state` directement dans les `vals` de
+  `create()`.
+- **Pas de nouvel état nécessaire** : `'active'` existe déjà dans la `Selection`, sans sémantique
+  liée au produit.
+- **Non-régression transactionnelle confirmée** : `_create_transaction` et `action_close`
+  vérifient `is_container` **avant** et **indépendamment** de `state` - un conteneur actif reste
+  non transactable et non clôturable par ces méthodes.
+- **Point additionnel trouvé en creusant** : `cron_detect_dormant_accounts` recherchait
+  `state == 'active'` sans exclure `is_container`. Sans effet aujourd'hui (`is_dormant` reste
+  `False` tant que le conteneur n'a ni transaction ni `opening_date`), mais fragile - durci en
+  défense en profondeur dans ce correctif.
+- **Vues** : `action_activate`/`action_close` et le statusbar `state` sont déjà
+  `invisible="... or is_container"` - rien à changer côté vues. Seul effet cosmétique : la
+  décoration `decoration-success="state == 'active'"` de la liste s'appliquera désormais aussi
+  aux conteneurs (masqués par défaut via le filtre « Masquer les conteneurs »).
+
+### Correctif appliqué
+
+- `microfinance_savings_account.py.create()` : si `is_container` est vrai et qu'aucun `state`
+  n'est fourni explicitement, pose `'state': 'active'` - posé au niveau du **modèle** (pas
+  seulement chez l'appelant `res_partner.py`), pour garantir l'invariant quel que soit le point de
+  création (tests, scripts, futurs appelants), conformément au « JAMAIS » de la demande.
+- `cron_detect_dormant_accounts` : domaine durci avec `('is_container', '=', False)`, en défense
+  en profondeur.
+- Aucun fichier du module crédit touché.
+- Aucune migration de données de schéma - uniquement une nouvelle fonction utilitaire
+  `activate_draft_containers` dans `container_migration.py` (même patron dry-run/CSV que les
+  opérations §11-16), pour régulariser les conteneurs déjà en base créés avant ce correctif.
+  Écrit uniquement `state` (jamais `opening_date`, pour ne pas rendre le conteneur éligible à la
+  dormance).
+
+### Tests
+
+- `test_savings_account_container.py` : nouveaux tests `test_container_created_active_not_draft`
+  (conteneur actif dès `create()`), `test_container_explicit_state_respected` (un état fourni
+  explicitement n'est pas écrasé) et `test_container_not_flagged_dormant_by_cron` (défense en
+  profondeur du cron). Tests existants inchangés (`test_container_cannot_be_activated`,
+  `test_container_cannot_be_closed`, `test_container_cannot_receive_transaction`,
+  `test_real_account_without_product_raises`, `test_regular_account_flow_unaffected`) : aucun ne
+  supposait un conteneur en brouillon, aucune régression.
+- `test_savings_container_migration.py` : nouvelle classe
+  `TestSavingsContainerActivationMigration` (dry-run n'écrit rien, run réel active puis devient
+  idempotent, `opening_date` jamais écrit, un compte réel en brouillon n'est jamais touché).
+
+### Dry-run sur copie jetable de MOWGLI
+
+Copie créée via `pg_dump MOWGLI | psql test_container_fix_tmp` (pas de verrou sur les connexions
+actives de production), module mis à jour (`-u microfinance_savings_management`), puis supprimée
+en fin d'intervention.
+
+- Suite de tests ciblée (17 tests du module, dont les nouveaux) : **0 échec, 0 erreur**.
+- `activate_draft_containers(env, dry_run=True)` exécuté isolément (hors tests, `odoo-bin
+  shell`) : **23 conteneurs en brouillon à régulariser** sur cette copie, répartis sur plusieurs
+  agences (Isotry, Ambanidia, Ampitatafika, Andoharanofotsy, Mahitsy...) - majoritairement des
+  clients de test/démo mais aussi des clients réels (ex. ELIO, RAKOTONALY Nanahary,
+  RANDRIANASOLO Santatra). Rien écrit (dry-run par défaut, paramètre
+  `microfinance_savings.migration_dry_run` non modifié).
+
+### État avant déploiement
+
+Diff + tests prêts à relire, aucun commit automatique. Aucune base de production touchée - seule
+une copie jetable, supprimée. Migration de rattrapage (`activate_draft_containers`) disponible
+mais **pas exécutée en mode réel sur MOWGLI** : à lancer explicitement après votre validation du
+chiffre ci-dessus, selon le même ordre habituel (sauvegarde, redémarrage, puis mise à jour -
+cf. §17).
