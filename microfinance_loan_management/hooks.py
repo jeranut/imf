@@ -55,10 +55,19 @@ LOAN_NEW_SUBACCOUNTS = {
     # 315 "Créditeurs divers" (générique tiers) — suffixe 001 choisi pour ne pas collisionner avec
     # 219000, déjà utilisé par account_cheques_emis_attente_id (voir synthese_audit_pcec.md §2.3).
     '219001': ('Autres sommes dues à la clientèle - Surpaiement', 'liability_current', False),
-    # Sous-comptes de la classe 13 (Établissements de crédit) dédiés aux 3 journaux banque.
-    '131001': ('Établissements de crédit - Banque opérations', 'asset_cash', False),
-    '131002': ('Établissements de crédit - Banque épargne', 'asset_cash', False),
-    '131003': ('Établissements de crédit - Banque crédits', 'asset_cash', False),
+    # Comptes de trésorerie de la structure cible (voir JOURNALS) : un compte par endroit où se
+    # trouve l'argent. 131001-131003 (anciens journaux BQOP/BQEP/BQCR, archivés) ne sont plus
+    # créés pour les nouvelles sociétés ; les comptes existants ne sont jamais supprimés.
+    '131101': ('Banque BMOI - Crédit', 'asset_cash', False),
+    '131201': ('Banque BNI - Crédit', 'asset_cash', False),
+    '131102': ('Banque BMOI - Épargne', 'asset_cash', False),
+    '131202': ('Banque BNI - Épargne', 'asset_cash', False),
+    '131104': ('Banque BMOI - Exploitation', 'asset_cash', False),
+    '131204': ('Banque BNI - Exploitation', 'asset_cash', False),
+    '141010': ('Mobile money Mvola', 'asset_cash', False),
+    '324200': ('Virements internes en transit', 'asset_current', True),
+    '219010': ('Chèques émis en attente - BMOI', 'liability_current', True),
+    '219020': ('Chèques émis en attente - BNI', 'liability_current', True),
 }
 
 # Champs dont la famille PCEC n'est utilisée que par ce seul champ : réutilisation directe du
@@ -77,32 +86,44 @@ ECART_CAISSE_DIRECT_REUSE_CODES = {
 }
 
 # Journaux créés pour chaque société utilisant le plan PCEC (chart_template == 'mg_pcec').
-# (code, name, type, compte par défaut ou None)
-# CRE et EPG doivent rester de type 'cash' (jamais 'general') : ce sont les journaux retournés
-# par _journal_default('CRE')/_journal_default('EPG') (microfinance_loan_product.py,
-# microfinance_savings_product.py), utilisés comme valeur par défaut de champs dont le domaine
-# de vue exige ('type', 'in', ('bank', 'cash')) — disbursement_journal_id, payment_journal_id,
-# fee_journal_id côté crédit, deposit_journal_id, withdrawal_journal_id côté épargne. Un journal
-# 'general' ne satisfait pas ce domaine (cf. docs_dev/gestion_caisse/AUDIT.md §1.3). OD reste
-# 'general' : jamais utilisé comme défaut de ces champs, réservé aux écritures diverses
-# (radiation, provision — cf. _prepare_writeoff_move/_prepare_provision_move dans
-# microfinance_loan.py, qui recherchent dynamiquement le journal 'general' de la société).
+# (code, name, type, compte par défaut ou None, siège uniquement)
+# Principe : un journal = un endroit où se trouve l'argent. CAI est la caisse ; BMCR/BNCR (crédit),
+# BMEP/BNEP (épargne) et BMOP/BNOP (exploitation) sont les comptes bancaires BMOI/BNI ; MVO est le
+# mobile money ; FDBM/FDBN (fonds reçus des bailleurs avant partage) n'existent que sur la société
+# mère (paramètre microfinance.parent_company_id, cf. res.company._get_microfinance_parent).
+# VIR (type general) porte le transit caisse/Mvola -> banque. OD reste 'general' : réservé aux
+# écritures diverses (radiation, provision — cf. _prepare_writeoff_move/_prepare_provision_move
+# dans microfinance_loan.py, qui recherchent dynamiquement le journal 'general' de la société).
+# CRE, EPG, BQOP, BQEP et BQCR n'existent plus dans cette liste (société neuve) ; sur les sociétés
+# existantes ils sont archivés par docs_dev/migration_ouverture/appliquer_compte_exploitation.py.
 JOURNALS = [
-    ('BQOP', 'Banque - Opérations', 'bank', '131001'),
-    ('BQEP', 'Banque - Épargne', 'bank', '131002'),
-    ('BQCR', 'Banque - Crédits', 'bank', '131003'),
-    ('CAI', 'Caisse', 'cash', '101000'),
-    ('CRE', 'Crédits', 'cash', None),
-    ('EPG', 'Épargne', 'cash', None),
-    ('OD', 'Opérations diverses', 'general', None),
+    ('CAI', 'Caisse', 'cash', '101000', False),
+    ('BMCR', 'Banque BMOI - Crédit', 'bank', '131101', False),
+    ('BNCR', 'Banque BNI - Crédit', 'bank', '131201', False),
+    ('BMEP', 'Banque BMOI - Épargne', 'bank', '131102', False),
+    ('BNEP', 'Banque BNI - Épargne', 'bank', '131202', False),
+    ('MVO', 'Mobile money Mvola', 'bank', '141010', False),
+    ('BMOP', 'Banque BMOI - Exploitation', 'bank', '131104', False),
+    ('BNOP', 'Banque BNI - Exploitation', 'bank', '131204', False),
+    ('FDBM', 'Fonds BMOI (avant partage)', 'bank', '131103', True),
+    ('FDBN', 'Fonds BNI (avant partage)', 'bank', '131203', True),
+    ('VIR', 'Virements internes', 'general', None, False),
+    ('OD', 'Opérations diverses', 'general', None, False),
+    ('AN', 'À-nouveaux', 'general', None, False),
     # TRANSIT : compte de liaison des transferts de fonds inter-agences
     # (module microfinance_transfert_inter_agence). Type 'general' : porte des
     # écritures manuelles de liaison, jamais utilisé comme journal de caisse.
     # default_account_id = 302000 « Opérations entre succursales/agences » (PCEC,
-    # reconcile=True). Créé ici pour que toute agence PCEC en dispose ; le module
-    # de transfert le (re)crée aussi à son installation sur les agences existantes.
-    ('TRANSIT', 'Transit inter-agences', 'general', '302000'),
+    # reconcile=True). Le champ code est limité à 5 caractères : le journal est stocké sous
+    # « TRANS » et retrouvé par la recherche « TRANSIT » (comportement existant, inchangé).
+    ('TRANSIT', 'Transit inter-agences', 'general', '302000', False),
 ]
+
+# Comptes à créer pour la société mère uniquement (voir JOURNALS, colonne « siège uniquement »).
+LOAN_HQ_SUBACCOUNTS = {
+    '131103': ('Fonds BMOI (avant partage)', 'asset_cash', False),
+    '131203': ('Fonds BNI (avant partage)', 'asset_cash', False),
+}
 
 
 def _get_account(env, company, code):
@@ -158,9 +179,26 @@ def _fill_ecart_caisse_accounts(env, company):
             company[field] = account.id
 
 
+def _is_headquarters(env, company):
+    """Vrai si `company` est la société mère désignée dans les paramètres
+    (microfinance.parent_company_id). Sans société mère désignée : faux (aucun journal de fonds)."""
+    parent = env['res.company']._get_microfinance_parent()
+    return bool(parent) and parent.id == company.id
+
+
 def _create_journals(env, company):
-    Journal = env['account.journal']
-    for code, name, journal_type, account_code in JOURNALS:
+    """Crée idempotemment les journaux de JOURNALS. Recherche avec active_test=False : un journal
+    archivé n'est JAMAIS recréé (le code est de toute façon unique par société, archivés compris)."""
+    Journal = env['account.journal'].with_context(active_test=False)
+    is_hq = _is_headquarters(env, company)
+    suspense = _get_account(env, company, '324100')
+    profit = _get_account(env, company, '749000')
+    loss = _get_account(env, company, '649000')
+    payment_in = _get_account(env, company, '139100')
+    payment_out = _get_account(env, company, '139500')
+    for code, name, journal_type, account_code, hq_only in JOURNALS:
+        if hq_only and not is_hq:
+            continue
         if Journal.search_count([('code', '=', code), ('company_id', '=', company.id)]):
             continue
         vals = {'name': name, 'code': code, 'type': journal_type, 'company_id': company.id}
@@ -168,7 +206,31 @@ def _create_journals(env, company):
             account = _get_account_or_warn(env, company, account_code)
             if account:
                 vals['default_account_id'] = account.id
-        Journal.create(vals)
+        if journal_type in ('bank', 'cash'):
+            if suspense:
+                vals['suspense_account_id'] = suspense.id
+            if profit:
+                vals['profit_account_id'] = profit.id
+            if loss:
+                vals['loss_account_id'] = loss.id
+        journal = Journal.create(vals)
+        if journal_type == 'bank':
+            if payment_in:
+                journal.inbound_payment_method_line_ids.write({'payment_account_id': payment_in.id})
+            if payment_out:
+                journal.outbound_payment_method_line_ids.write({'payment_account_id': payment_out.id})
+
+
+def _set_default_operating_journal(env, company):
+    """Renseigne microfinance_operating_journal_id avec le journal BMOP de la société, seulement
+    s'il est vide (ne remplace jamais un choix existant)."""
+    if company.microfinance_operating_journal_id:
+        return
+    journal = env['account.journal'].search([
+        ('code', '=', 'BMOP'), ('company_id', '=', company.id), ('type', '=', 'bank'),
+    ], limit=1)
+    if journal:
+        company.microfinance_operating_journal_id = journal
 
 
 # Agences CEFOR déjà identifiées au moment de l'introduction du champ agency_code (liste non
@@ -790,7 +852,10 @@ def provision_company_pcec(env, company):
     if not company or company.chart_template != 'mg_pcec':
         return
     _create_subaccounts(env, company, LOAN_NEW_SUBACCOUNTS)
+    if _is_headquarters(env, company):
+        _create_subaccounts(env, company, LOAN_HQ_SUBACCOUNTS)
     _create_journals(env, company)
+    _set_default_operating_journal(env, company)
     _fill_ecart_caisse_accounts(env, company)
 
 
