@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from odoo.addons.microfinance_loan_management import hooks
+from odoo.exceptions import ValidationError
 
 from .common import MicrofinanceCommon
 
@@ -10,18 +11,19 @@ class TestJournalHooks(MicrofinanceCommon):
     défaut de champs Many2one account.journal dont le domaine de vue exige
     ('type', 'in', ('bank', 'cash')), et qui ne seraient donc pas sélectionnables tels quels."""
 
-    def test_create_journals_cre_epg_are_cash_not_general(self):
+    def test_create_journals_treasury_structure(self):
+        # Structure cible : un journal = un endroit où se trouve l'argent. CRE, EPG et BQxx
+        # n'existent plus ; les journaux de trésorerie sont de type bank/cash.
         company = self.env['res.company'].create({'name': 'Agence hook journaux (test)', 'agency_code': 'JH1'})
         hooks._create_journals(self.env, company)
-        journals = self.env['account.journal'].search([
-            ('company_id', '=', company.id), ('code', 'in', ('CRE', 'EPG')),
-        ])
-        self.assertEqual(len(journals), 2)
-        for journal in journals:
-            self.assertIn(
-                journal.type, ('bank', 'cash'),
-                "%s doit être de type bank/cash, pas %s" % (journal.code, journal.type),
-            )
+        journals = self.env['account.journal'].search([('company_id', '=', company.id)])
+        codes = set(journals.mapped('code'))
+        for code in ('CAI', 'BMCR', 'BNCR', 'BMEP', 'BNEP', 'MVO', 'BMOP', 'BNOP', 'VIR', 'OD', 'AN'):
+            self.assertIn(code, codes)
+        for code in ('CRE', 'EPG', 'BQOP', 'BQEP', 'BQCR', 'FDBM', 'FDBN'):
+            self.assertNotIn(code, codes)
+        for code in ('CAI', 'BMCR', 'BNCR', 'BMEP', 'BNEP', 'MVO', 'BMOP', 'BNOP'):
+            self.assertIn(journals.filtered(lambda j: j.code == code).type, ('bank', 'cash'))
 
     def test_create_journals_od_stays_general(self):
         # OD (Opérations diverses) n'est jamais utilisé comme défaut d'un champ journal du
@@ -52,7 +54,7 @@ class TestJournalHooks(MicrofinanceCommon):
         product = self.env['microfinance.loan.product'].with_company(company).new({})
         for field_name in ('disbursement_journal_id', 'payment_journal_id', 'fee_journal_id'):
             journal = product[field_name]
-            self.assertTrue(journal, "Le défaut de %s n'a pas trouvé le journal CRE" % field_name)
+            self.assertTrue(journal, "Le défaut de %s n'a pas trouvé le journal CAI" % field_name)
             self.assertIn(journal.type, ('bank', 'cash'))
 
 
@@ -114,3 +116,82 @@ class TestBackfillCashJournalId(MicrofinanceCommon):
         self.assertNotIn(company.name, backfilled_again)
         self.assertNotIn(company.name, missing_again)
         self.assertEqual(company.cash_journal_id, cai)
+
+
+class TestOperatingJournal(MicrofinanceCommon):
+    """Journal bancaire d'exploitation (res.company.microfinance_operating_journal_id) et
+    journaux de fonds réservés à la société mère."""
+
+    def _company(self, name, code):
+        return self.env['res.company'].create({'name': name, 'agency_code': code})
+
+    def test_default_is_bmop_on_new_company(self):
+        company = self._company('Agence exploitation défaut (test)', 'OP1')
+        hooks._create_journals(self.env, company)
+        hooks._set_default_operating_journal(self.env, company)
+        self.assertEqual(company.microfinance_operating_journal_id.code, 'BMOP')
+
+    def test_default_does_not_overwrite_existing_choice(self):
+        company = self._company('Agence exploitation choix (test)', 'OP2')
+        hooks._create_journals(self.env, company)
+        bnop = self.env['account.journal'].search([('company_id', '=', company.id), ('code', '=', 'BNOP')])
+        company.microfinance_operating_journal_id = bnop
+        hooks._set_default_operating_journal(self.env, company)
+        self.assertEqual(company.microfinance_operating_journal_id, bnop)
+
+    def test_constraint_refuses_fund_journals(self):
+        company = self._company('Agence exploitation fonds (test)', 'OP3')
+        for code in ('FDBM', 'FDBN'):
+            fund = self.env['account.journal'].create({
+                'name': 'Fonds %s' % code, 'code': code, 'type': 'bank', 'company_id': company.id})
+            with self.assertRaises(ValidationError):
+                company.microfinance_operating_journal_id = fund
+
+    def test_constraint_refuses_non_bank_journal(self):
+        company = self._company('Agence exploitation non bancaire (test)', 'OP4')
+        hooks._create_journals(self.env, company)
+        cai = self.env['account.journal'].search([('company_id', '=', company.id), ('code', '=', 'CAI')])
+        with self.assertRaises(ValidationError):
+            company.microfinance_operating_journal_id = cai
+
+    def test_credit_journal_gives_warning_not_error(self):
+        company = self._company('Agence exploitation avertissement (test)', 'OP5')
+        hooks._create_journals(self.env, company)
+        bmcr = self.env['account.journal'].search([('company_id', '=', company.id), ('code', '=', 'BMCR')])
+        company.microfinance_operating_journal_id = bmcr  # accepté
+        self.assertEqual(company.microfinance_operating_journal_id, bmcr)
+        self.assertIn('warning', self.env['res.company']._operating_journal_warning(bmcr))
+        bmop = self.env['account.journal'].search([('company_id', '=', company.id), ('code', '=', 'BMOP')])
+        self.assertFalse(self.env['res.company']._operating_journal_warning(bmop))
+
+    def test_replay_does_not_recreate_archived_journal(self):
+        company = self._company('Agence rejeu hook (test)', 'OP6')
+        hooks._create_journals(self.env, company)
+        bmcr = self.env['account.journal'].search([('company_id', '=', company.id), ('code', '=', 'BMCR')])
+        bmcr.active = False
+        hooks._create_journals(self.env, company)  # ne doit ni lever d'erreur ni recréer
+        all_bmcr = self.env['account.journal'].with_context(active_test=False).search([
+            ('company_id', '=', company.id), ('code', '=', 'BMCR')])
+        self.assertEqual(all_bmcr, bmcr)
+        self.assertFalse(all_bmcr.active)
+
+    def test_fund_journals_only_on_parent_company(self):
+        parent = self._company('Siège fonds (test)', 'OP7')
+        agency = self._company('Agence sans fonds (test)', 'OP8')
+        self.env['ir.config_parameter'].sudo().set_param('microfinance.parent_company_id', str(parent.id))
+        hooks._create_journals(self.env, parent)
+        hooks._create_journals(self.env, agency)
+        Journal = self.env['account.journal']
+        self.assertEqual(Journal.search_count([('company_id', '=', parent.id), ('code', 'in', ('FDBM', 'FDBN'))]), 2)
+        self.assertEqual(Journal.search_count([('company_id', '=', agency.id), ('code', 'in', ('FDBM', 'FDBN'))]), 0)
+
+    def test_payroll_journal_follows_operating_journal(self):
+        company = self._company('Agence paie (test)', 'OP9')
+        hooks._create_journals(self.env, company)
+        Journal = self.env['account.journal']
+        bmop = Journal.search([('company_id', '=', company.id), ('code', '=', 'BMOP')])
+        bnop = Journal.search([('company_id', '=', company.id), ('code', '=', 'BNOP')])
+        company.microfinance_operating_journal_id = bmop
+        self.assertEqual(company.payroll_journal_id, bmop)
+        company.microfinance_operating_journal_id = bnop
+        self.assertEqual(company.payroll_journal_id, bnop)
