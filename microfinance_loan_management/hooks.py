@@ -97,19 +97,20 @@ ECART_CAISSE_DIRECT_REUSE_CODES = {
 # CRE, EPG, BQOP, BQEP et BQCR n'existent plus dans cette liste (société neuve) ; sur les sociétés
 # existantes ils sont archivés par docs_dev/migration_ouverture/appliquer_compte_exploitation.py.
 JOURNALS = [
-    ('CAI', 'Caisse', 'cash', '101000', False),
-    ('BMCR', 'Banque BMOI - Crédit', 'bank', '131101', False),
-    ('BNCR', 'Banque BNI - Crédit', 'bank', '131201', False),
-    ('BMEP', 'Banque BMOI - Épargne', 'bank', '131102', False),
-    ('BNEP', 'Banque BNI - Épargne', 'bank', '131202', False),
-    ('MVO', 'Mobile money Mvola', 'bank', '141010', False),
-    ('BMOP', 'Banque BMOI - Exploitation', 'bank', '131104', False),
-    ('BNOP', 'Banque BNI - Exploitation', 'bank', '131204', False),
-    ('FDBM', 'Fonds BMOI (avant partage)', 'bank', '131103', True),
-    ('FDBN', 'Fonds BNI (avant partage)', 'bank', '131203', True),
-    ('VIR', 'Virements internes', 'general', None, False),
-    ('OD', 'Opérations diverses', 'general', None, False),
-    ('AN', 'À-nouveaux', 'general', None, False),
+    # (code, nom, type, compte par défaut, siège uniquement, banque, usage)
+    ('CAI', 'Caisse', 'cash', '101000', False, None, 'cash'),
+    ('BMCR', 'Banque BMOI - Crédit', 'bank', '131101', False, 'BMOI', 'credit'),
+    ('BNCR', 'Banque BNI - Crédit', 'bank', '131201', False, 'BNI', 'credit'),
+    ('BMEP', 'Banque BMOI - Épargne', 'bank', '131102', False, 'BMOI', 'savings'),
+    ('BNEP', 'Banque BNI - Épargne', 'bank', '131202', False, 'BNI', 'savings'),
+    ('MVO', 'Mobile money Mvola', 'bank', '141010', False, None, 'mobile'),
+    ('BMOP', 'Banque BMOI - Exploitation', 'bank', '131104', False, 'BMOI', 'operating'),
+    ('BNOP', 'Banque BNI - Exploitation', 'bank', '131204', False, 'BNI', 'operating'),
+    ('FDBM', 'Fonds BMOI (avant partage)', 'bank', '131103', True, 'BMOI', 'fund'),
+    ('FDBN', 'Fonds BNI (avant partage)', 'bank', '131203', True, 'BNI', 'fund'),
+    ('VIR', 'Virements internes', 'general', None, False, None, None),
+    ('OD', 'Opérations diverses', 'general', None, False, None, None),
+    ('AN', 'À-nouveaux', 'general', None, False, None, None),
     # Le journal TRANSIT (transit inter-agences, compte 302000) n'est plus créé ici : il est créé
     # par microfinance_transfert_inter_agence à l'installation de ce module (hooks.py du module).
 ]
@@ -174,6 +175,12 @@ def _fill_ecart_caisse_accounts(env, company):
             company[field] = account.id
 
 
+def _get_or_create_bank(env, name):
+    """res.bank partagée entre sociétés (BMOI, BNI) : cherchée par nom, créée si elle manque."""
+    bank = env['res.bank'].search([('name', '=', name)], limit=1)
+    return bank or env['res.bank'].create({'name': name})
+
+
 def _is_headquarters(env, company):
     """Vrai si `company` est la société mère désignée dans les paramètres
     (microfinance.parent_company_id). Sans société mère désignée : faux (aucun journal de fonds)."""
@@ -191,12 +198,16 @@ def _create_journals(env, company):
     loss = _get_account(env, company, '649000')
     payment_in = _get_account(env, company, '139100')
     payment_out = _get_account(env, company, '139500')
-    for code, name, journal_type, account_code, hq_only in JOURNALS:
+    for code, name, journal_type, account_code, hq_only, bank_name, usage in JOURNALS:
         if hq_only and not is_hq:
             continue
         if Journal.search_count([('code', '=', code), ('company_id', '=', company.id)]):
             continue
         vals = {'name': name, 'code': code, 'type': journal_type, 'company_id': company.id}
+        if usage:
+            vals['microfinance_usage'] = usage
+        if bank_name:
+            vals['microfinance_bank_id'] = _get_or_create_bank(env, bank_name).id
         if account_code:
             account = _get_account_or_warn(env, company, account_code)
             if account:
