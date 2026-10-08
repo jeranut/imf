@@ -7,7 +7,10 @@
         <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_fond_credit_form"/>
         <field name="arch" type="xml">
             <xpath expr="//field[@name='passer_gl']" position="after">
-                <field name="bank_journal_id" string="Journal bancaire du fonds" options="{'no_create': True}"/>
+                <field name="bank_id" string="Banque du fonds" required="1" options="{'no_create': True, 'no_open': True}"
+                       readonly="has_contributions"/>
+                <field name="has_contributions" invisible="1"/>
+                <field name="fund_journal_id" string="Journal de fonds" readonly="1"/>
             </xpath>
         </field>
     </record>

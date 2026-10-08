@@ -13,10 +13,7 @@ ligne passe en « envoyé, non reçu » ; le bouton « Générer le côté agenc
 généré si le fonds ne passe pas au grand livre (passer_gl faux) ou n'a pas de journal bancaire.
 """
 from odoo import api, fields, models, _, tools
-from odoo.exceptions import UserError
-
-# journal du fonds -> journal crédit de la même banque
-FUND_TO_CREDIT_JOURNAL = {'FDBM': 'BMCR', 'FDBN': 'BNCR'}
+from odoo.exceptions import UserError, ValidationError
 
 
 class ResCompany(models.Model):
@@ -37,12 +34,74 @@ class ResCompany(models.Model):
 class MicrofinanceFondCredit(models.Model):
     _inherit = 'microfinance.fond.credit'
 
-    bank_journal_id = fields.Many2one(
-        'account.journal', string='Journal bancaire du fonds', tracking=True, check_company=False,
-        domain="[('type', '=', 'bank'), ('code', 'in', ('FDBM', 'FDBN'))]",
-        help="Banque du fonds (FDBM = BMOI, FDBN = BNI) : un fonds est sur UNE SEULE banque. Sert de "
-             "journal aux écritures de partage. Sans ce journal, un partage ne génère aucune écriture.",
+    bank_id = fields.Many2one(
+        'res.bank', string='Banque du fonds', tracking=True,
+        help="Banque (BMOI, BNI…) sur laquelle le fonds est reçu : un fonds = une seule banque. Elle "
+             "détermine automatiquement le journal de fonds. Non modifiable dès qu'une contribution existe.",
     )
+    fund_journal_id = fields.Many2one(
+        'account.journal', string='Journal de fonds', compute='_compute_fund_journal_id', store=True,
+        readonly=True, check_company=False,
+        help="Journal actif de la société du fonds (la société mère pour un fonds multi-agences) dont "
+             "l'usage est « Fonds » et dont la banque est celle du fonds. Calculé, jamais saisi : sert aux "
+             "contributions, retraits, remboursements bailleur et partages.",
+    )
+
+    has_contributions = fields.Boolean(compute='_compute_has_contributions')
+
+    def _compute_has_contributions(self):
+        for fond in self:
+            fond.has_contributions = bool(fond.id and fond.sudo().contribution_ids)
+
+    def _fund_company(self):
+        """Société qui porte le fonds : sa société, ou la société mère pour un fonds multi-agences."""
+        self.ensure_one()
+        # Sans société mère désignée (mode historique, sans restriction), repli sur la société courante.
+        return self.company_id or self.env['res.company']._get_microfinance_parent() or self.env.company
+
+    def _fund_journal_candidates(self):
+        self.ensure_one()
+        company = self._fund_company()
+        if not self.bank_id or not company:
+            return self.env['account.journal']
+        return self.env['account.journal'].sudo().search([
+            ('microfinance_usage', '=', 'fund'), ('microfinance_bank_id', '=', self.bank_id.id),
+            ('company_id', '=', company.id), ('active', '=', True)])
+
+    @api.depends('bank_id', 'company_id', 'scope')
+    def _compute_fund_journal_id(self):
+        for fond in self:
+            candidates = fond._fund_journal_candidates()
+            fond.fund_journal_id = candidates if len(candidates) == 1 else False
+
+    @api.constrains('bank_id', 'company_id', 'scope')
+    def _check_fund_journal(self):
+        for fond in self.filtered('bank_id'):
+            company = fond._fund_company()
+            if not company:
+                raise ValidationError(_(
+                    "Impossible de déterminer la société du fonds « %s » : désignez la société mère dans les paramètres."
+                ) % fond.name)
+            count = len(fond._fund_journal_candidates())
+            if count == 0:
+                raise ValidationError(_(
+                    "Aucun journal de fonds actif pour la banque « %(banque)s » dans la société « %(societe)s ». "
+                    "Créez un journal d'usage « Fonds » pour cette banque."
+                ) % {'banque': fond.bank_id.name, 'societe': company.name})
+            if count > 1:
+                raise ValidationError(_(
+                    "Plusieurs journaux de fonds actifs pour la banque « %(banque)s » dans la société « %(societe)s » : "
+                    "un fonds ne peut être que sur une seule banque, avec un seul journal de fonds."
+                ) % {'banque': fond.bank_id.name, 'societe': company.name})
+
+    def write(self, vals):
+        if 'bank_id' in vals:
+            for fond in self:
+                if vals['bank_id'] != fond.bank_id.id and fond.sudo().contribution_ids:
+                    raise UserError(_(
+                        "La banque du fonds « %s » ne peut plus être modifiée : des contributions existent."
+                    ) % fond.name)
+        return super().write(vals)
 
 
 class AccountMove(models.Model):
@@ -138,21 +197,21 @@ class MicrofinanceFondPartage(models.Model):
         }
 
     def _credit_journal_for(self, fund_journal, company):
-        code = FUND_TO_CREDIT_JOURNAL.get(fund_journal.code)
-        journal = self.env['account.journal'].sudo().search(
-            [('code', '=', code), ('company_id', '=', company.id), ('type', '=', 'bank')], limit=1) if code else self.env['account.journal']
-        return journal
+        """Journal crédit (usage « Crédit ») de la même banque que le journal de fonds, dans `company`."""
+        return self.env['account.journal'].sudo().search([
+            ('microfinance_usage', '=', 'credit'), ('microfinance_bank_id', '=', fund_journal.microfinance_bank_id.id),
+            ('company_id', '=', company.id), ('type', '=', 'bank'), ('active', '=', True)], limit=1)
 
     # ------------------------------------------------------------------ génération
     def _create_agency_move(self, line):
         """Côté agence : Dr 139100 / Cr compte de liaison de l'agence (journal crédit de la banque du fonds)."""
         self.ensure_one()
         agency = line.company_id
-        fund_journal = self.fond_id.bank_journal_id
+        fund_journal = self.fond_id.fund_journal_id
         journal = self._credit_journal_for(fund_journal, agency)
         if not journal:
-            raise UserError(_("L'agence « %(agence)s » n'a pas de journal crédit pour la banque du fonds (%(code)s).")
-                            % {'agence': agency.name, 'code': fund_journal.code})
+            raise UserError(_("L'agence « %(agence)s » n'a pas de journal crédit pour la banque du fonds (%(banque)s).")
+                            % {'agence': agency.name, 'banque': fund_journal.microfinance_bank_id.name})
         inbound = self._payment_account(journal, 'inbound')
         liaison = agency.microfinance_liaison_agency_account_id
         if not inbound or not liaison:
@@ -168,17 +227,17 @@ class MicrofinanceFondPartage(models.Model):
             if not fond.passer_gl:
                 partage.message_post(body=_("Aucune écriture comptable : le fonds ne passe pas au grand livre."))
                 continue
-            fund_journal = fond.bank_journal_id
+            fund_journal = fond.fund_journal_id
             if not fund_journal:
                 partage.message_post(body=_(
-                    "Aucune écriture comptable générée : renseignez le journal bancaire du fonds (FDBM/FDBN)."))
+                    "Aucune écriture comptable générée : renseignez la banque du fonds (journal de fonds introuvable)."))
                 continue
             hq = partage.company_id
             for line in partage.line_ids.filtered(lambda l: l.amount > 0 and not l.hq_move_id):
                 if line.company_id == hq:
                     credit_journal = partage._credit_journal_for(fund_journal, hq)
                     if not credit_journal:
-                        raise UserError(_("Journal crédit de la banque du fonds introuvable pour %s.") % hq.name)
+                        raise UserError(_("Journal crédit (même banque que le fonds) introuvable pour %s.") % hq.name)
                     move = partage._create_move(hq, partage._move_vals(
                         line, fund_journal, _('Part gardée %s') % fond.code,
                         credit_journal.default_account_id, fund_journal.default_account_id, 'hq_own'))
