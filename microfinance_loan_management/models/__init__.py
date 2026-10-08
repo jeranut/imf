@@ -45,3 +45,4 @@ from . import microfinance_portfolio_snapshot
 from . import res_partner
 from . import res_config_settings
 from . import ir_attachment
+from . import account_payment_register
