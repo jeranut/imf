@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Fonds : journal bancaire (FDBM/FDBN) -->
+    <record id="view_microfinance_fond_credit_form_bank_journal" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.form.bank.journal</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_fond_credit_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='passer_gl']" position="after">
+                <field name="bank_journal_id" string="Journal bancaire du fonds" options="{'no_create': True}"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Société : comptes de liaison -->
+    <record id="view_company_form_microfinance_liaison" model="ir.ui.view">
+        <field name="name">res.company.form.microfinance.liaison</field>
+        <field name="model">res.company</field>
+        <field name="inherit_id" ref="base.view_company_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Liaison siège" name="microfinance_liaison" groups="account.group_account_manager,base.group_system">
+                    <group>
+                        <field name="microfinance_liaison_hq_account_id" options="{'no_create': True}"/>
+                        <field name="microfinance_liaison_agency_account_id" options="{'no_create': True}"/>
+                    </group>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Partage : colonnes de liaison et bouton -->
+    <record id="view_microfinance_fond_partage_form_liaison" model="ir.ui.view">
+        <field name="name">microfinance.fond.partage.form.liaison</field>
+        <field name="model">microfinance.fond.partage</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_fond_partage_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='line_ids']/tree" position="inside">
+                <field name="hq_move_id" string="Écriture siège" readonly="1" optional="show"/>
+                <field name="agency_move_id" string="Écriture agence" readonly="1" optional="show"/>
+                <field name="liaison_state" string="Liaison" widget="badge" readonly="1"/>
+                <field name="liaison_note" string="Remarque" readonly="1" optional="show"/>
+                <button name="action_generate_agency_move" type="object" string="Générer le côté agence"
+                        icon="fa-share" invisible="liaison_state != 'hq_only'"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Rapports -->
+    <record id="view_microfinance_fond_liaison_report_tree" model="ir.ui.view">
+        <field name="name">microfinance.fond.liaison.report.tree</field>
+        <field name="model">microfinance.fond.liaison.report</field>
+        <field name="arch" type="xml">
+            <tree decoration-danger="state in ('ecart', 'agency_only')" decoration-warning="state == 'hq_only'" decoration-success="state == 'ok'" create="0" edit="0" delete="0">
+                <field name="date"/>
+                <field name="partage_id"/>
+                <field name="fond_id"/>
+                <field name="company_id" string="Agence"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="amount_partage"/>
+                <field name="hq_amount" sum="Total"/>
+                <field name="agency_amount" sum="Total"/>
+                <field name="difference" sum="Total"/>
+                <field name="state" widget="badge"/>
+            </tree>
+        </field>
+    </record>
+    <record id="view_microfinance_fond_liaison_report_search" model="ir.ui.view">
+        <field name="name">microfinance.fond.liaison.report.search</field>
+        <field name="model">microfinance.fond.liaison.report</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="partage_id"/>
+                <field name="company_id"/>
+                <filter name="ecarts" string="Écarts et non reçus" domain="[('state', 'in', ('ecart', 'hq_only', 'agency_only'))]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_company" string="Agence" context="{'group_by': 'company_id'}"/>
+                    <filter name="group_partage" string="Partage" context="{'group_by': 'partage_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="action_microfinance_fond_liaison_report" model="ir.actions.act_window">
+        <field name="name">Écarts de liaison (par partage)</field>
+        <field name="res_model">microfinance.fond.liaison.report</field>
+        <field name="view_mode">tree</field>
+        <field name="context">{'search_default_ecarts': 1}</field>
+    </record>
+
+    <record id="view_microfinance_fond_liaison_solde_tree" model="ir.ui.view">
+        <field name="name">microfinance.fond.liaison.solde.tree</field>
+        <field name="model">microfinance.fond.liaison.solde</field>
+        <field name="arch" type="xml">
+            <tree decoration-danger="difference != 0" create="0" edit="0" delete="0">
+                <field name="company_id" string="Agence"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="hq_balance"/>
+                <field name="agency_balance"/>
+                <field name="difference"/>
+            </tree>
+        </field>
+    </record>
+    <record id="action_microfinance_fond_liaison_solde" model="ir.actions.act_window">
+        <field name="name">Soldes de liaison siège / agences</field>
+        <field name="res_model">microfinance.fond.liaison.solde</field>
+        <field name="view_mode">tree</field>
+    </record>
+
+    <menuitem id="menu_microfinance_fond_liaison_report" name="Écarts de liaison" parent="menu_microfinance_config_financing"
+              action="action_microfinance_fond_liaison_report" sequence="40"/>
+    <menuitem id="menu_microfinance_fond_liaison_solde" name="Soldes de liaison" parent="menu_microfinance_config_financing"
+              action="action_microfinance_fond_liaison_solde" sequence="50"/>
+
+    <!-- Les lignes de rapport suivent la société sélectionnée (agence) -->
+    <record id="rule_fond_liaison_report_company" model="ir.rule">
+        <field name="name">Écarts de liaison : société</field>
+        <field name="model_id" ref="model_microfinance_fond_liaison_report"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="rule_fond_liaison_solde_company" model="ir.rule">
+        <field name="name">Soldes de liaison : société</field>
+        <field name="model_id" ref="model_microfinance_fond_liaison_solde"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="access_fond_liaison_report_manager" model="ir.model.access">
+        <field name="name">fond.liaison.report.manager</field>
+        <field name="model_id" ref="model_microfinance_fond_liaison_report"/>
+        <field name="group_id" ref="group_microfinance_manager"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="access_fond_liaison_report_finance" model="ir.model.access">
+        <field name="name">fond.liaison.report.finance</field>
+        <field name="model_id" ref="model_microfinance_fond_liaison_report"/>
+        <field name="group_id" ref="group_microfinance_finance"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="access_fond_liaison_report_auditor" model="ir.model.access">
+        <field name="name">fond.liaison.report.auditor</field>
+        <field name="model_id" ref="model_microfinance_fond_liaison_report"/>
+        <field name="group_id" ref="group_microfinance_auditor"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="access_fond_liaison_solde_manager" model="ir.model.access">
+        <field name="name">fond.liaison.solde.manager</field>
+        <field name="model_id" ref="model_microfinance_fond_liaison_solde"/>
+        <field name="group_id" ref="group_microfinance_manager"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="access_fond_liaison_solde_finance" model="ir.model.access">
+        <field name="name">fond.liaison.solde.finance</field>
+        <field name="model_id" ref="model_microfinance_fond_liaison_solde"/>
+        <field name="group_id" ref="group_microfinance_finance"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="access_fond_liaison_solde_auditor" model="ir.model.access">
+        <field name="name">fond.liaison.solde.auditor</field>
+        <field name="model_id" ref="model_microfinance_fond_liaison_solde"/>
+        <field name="group_id" ref="group_microfinance_auditor"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+</odoo>

@@ -5,11 +5,16 @@ from odoo.tools import float_compare, float_is_zero, float_round
 
 from .microfinance_fond_allocation import ALLOCATION_TECHNICAL_CONTEXT
 
+# Champs techniques de liaison comptable d'une part, écrits par la validation/génération même d'un partage
+# déjà validé (microfinance_fond_liaison.py) : exemptés du verrou « partage en brouillon ».
+LIAISON_TECHNICAL_FIELDS = {'hq_move_id', 'agency_move_id', 'liaison_note'}
+
 
 class MicrofinanceFondPartage(models.Model):
     """Partage d'un fonds multi-agences entre les agences (société mère incluse). Cumulatif : un
     partage validé ajoute à l'allocation existante de chaque agence, jamais de re-partage
-    destructif. Purement analytique : aucune écriture comptable inter-agences."""
+    destructif. La validation génère aussi les écritures de liaison siège/agence (voir
+    microfinance_fond_liaison.py)."""
     _name = 'microfinance.fond.partage'
     _description = 'Partage de fonds entre agences'
     _inherit = ['mail.thread', 'mail.activity.mixin', 'microfinance.fond.parent.mixin']
@@ -336,6 +341,8 @@ class MicrofinanceFondPartageLine(models.Model):
         return lines
 
     def write(self, vals):
+        if set(vals) <= LIAISON_TECHNICAL_FIELDS:
+            return super().write(vals)
         self._check_parent_only()
         self._check_partage_draft()
         if 'amount' in vals or 'percent' in vals:

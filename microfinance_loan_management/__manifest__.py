@@ -41,6 +41,7 @@
         'views/microfinance_fond_credit_views.xml',
         'views/microfinance_fond_contribution_views.xml',
         'views/microfinance_fond_partage_views.xml',
+        'views/microfinance_fond_liaison_views.xml',
         'views/microfinance_profession_views.xml',
         'views/microfinance_financial_designation_views.xml',
         'views/microfinance_loan_application_activity_views.xml',
