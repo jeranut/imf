@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
+from odoo.tools import float_compare
 
 
 class MicrofinanceFondContribution(models.Model):
@@ -34,6 +35,12 @@ class MicrofinanceFondContribution(models.Model):
              "la société du fonds. Jamais saisi.",
     )
     fond_bank_id = fields.Many2one(related='fond_id.bank_id', string='Banque du fonds', readonly=True)
+    fond_origine = fields.Selection(
+        related='fond_id.origine', string='Origine du fonds', readonly=False,
+        help="Privé (compte 240xxx) ou public (compte 250xxx). Modifiable tant qu'aucune contribution du fonds "
+             "n'est validée ; le compte dédié du fonds suit automatiquement.")
+    fond_account_id = fields.Many2one(related='fond_id.account_id', string='Compte du fonds', readonly=True)
+    fond_has_posted_contribution = fields.Boolean(related='fond_id.has_posted_contribution')
     description = fields.Char(string='Description / Référence bailleur')
     move_id = fields.Many2one(
         'account.move', string='Écriture comptable', readonly=True, copy=False,
@@ -57,6 +64,7 @@ class MicrofinanceFondContribution(models.Model):
     state = fields.Selection([
         ('draft', 'Brouillon'),
         ('posted', 'Validé'),
+        ('cancelled', 'Annulé'),
     ], string='État', default='draft', required=True, tracking=True, copy=False)
 
     def _check_parent_only_shared(self):
@@ -147,30 +155,39 @@ class MicrofinanceFondContribution(models.Model):
             ) % {'actuel': self.journal_id.display_name or _('aucun'), 'attendu': journal.display_name})
         if journal.company_id != company:
             raise UserError(_('Le journal de fonds doit appartenir à la société du fonds (%s).') % company.name)
-        if not journal.default_account_id:
-            raise UserError(_('Le journal de fonds « %s » n\'a pas de compte par défaut.') % journal.display_name)
+        direction = 'inbound' if self.type_mouvement == 'depot' else 'outbound'
+        if not self.env['microfinance.fond.partage']._payment_account(journal, direction):
+            raise UserError(_(
+                "Le journal de fonds « %(journal)s » n'a pas de compte de paiement en suspens (%(sens)s)."
+            ) % {'journal': journal.display_name, 'sens': _('entrant') if direction == 'inbound' else _('sortant')})
         if not fond.account_id:
-            raise UserError(_('Configurez le compte comptable bailleur du fonds "%s".') % fond.name)
+            raise UserError(_(
+                'Le fonds "%s" n\'a pas de compte dédié : renseignez son origine (privé ou public) puis '
+                'enregistrez-le pour créer son compte avant de valider une contribution.'
+            ) % fond.name)
         if fond.account_id.company_id != company:
-            raise UserError(_('Le compte bailleur du fonds « %s » doit appartenir à la société du fonds (%s).') % (fond.name, company.name))
+            raise UserError(_('Le compte du fonds « %s » doit appartenir à la société du fonds (%s).') % (fond.name, company.name))
 
     def _prepare_contribution_move(self):
-        """Squelette identique à MicrofinanceLoan._prepare_disbursement_move() : un dict prêt
-        pour account.move.create(), 2 lignes équilibrées. Un dépôt bailleur crédite le compte GL
-        du fonds (fond_id.account_id) et débite le compte du journal de fonds ; un retrait fait l'inverse."""
+        """Un dépôt bailleur débite le compte de paiement en suspens entrant du journal de fonds (139100) et
+        crédite le compte dédié du fonds ; un retrait fait l'inverse avec le compte sortant (139500). La
+        banque elle-même n'est touchée qu'au rapprochement du relevé, qui solde le compte en suspens."""
         self.ensure_one()
         fond = self.fond_id
         journal = self.journal_id
-        label = _('Dépôt bailleur %s') % fond.name if self.type_mouvement == 'depot' else _('Retrait bailleur %s') % fond.name
+        Partage = self.env['microfinance.fond.partage']
+        label = _('Dépôt bailleur %s') % fond.code if self.type_mouvement == 'depot' else _('Retrait bailleur %s') % fond.code
         if self.type_mouvement == 'depot':
+            suspense = Partage._payment_account(journal, 'inbound')
             line_ids = [
-                (0, 0, {'name': label, 'account_id': journal.default_account_id.id, 'debit': self.amount, 'credit': 0.0}),
+                (0, 0, {'name': label, 'account_id': suspense.id, 'debit': self.amount, 'credit': 0.0}),
                 (0, 0, {'name': label, 'account_id': fond.account_id.id, 'debit': 0.0, 'credit': self.amount}),
             ]
         else:
+            suspense = Partage._payment_account(journal, 'outbound')
             line_ids = [
                 (0, 0, {'name': label, 'account_id': fond.account_id.id, 'debit': self.amount, 'credit': 0.0}),
-                (0, 0, {'name': label, 'account_id': journal.default_account_id.id, 'debit': 0.0, 'credit': self.amount}),
+                (0, 0, {'name': label, 'account_id': suspense.id, 'debit': 0.0, 'credit': self.amount}),
             ]
         return {
             'date': self.date,
@@ -193,6 +210,35 @@ class MicrofinanceFondContribution(models.Model):
                 move.action_post()
                 contrib.move_id = move.id
             contrib.state = 'posted'
+        return True
+
+    def action_cancel(self):
+        """Annule une contribution validée : extourne de sa pièce (si elle existe) puis état « annulé ». Les
+        contributions annulées ne comptent plus dans le solde du fonds. Refusée si la pièce est déjà
+        rapprochée avec un relevé, ou si le fonds est déjà partagé au-delà de ce qui resterait."""
+        self._check_parent_only_shared()
+        for contrib in self:
+            if contrib.state != 'posted':
+                raise UserError(_('Seule une contribution validée peut être annulée.'))
+            fond = contrib.fond_id
+            if contrib.type_mouvement == 'depot' and \
+                    float_compare(fond.reste_partageable, contrib.amount, precision_rounding=contrib.currency_id.rounding) < 0:
+                raise UserError(_(
+                    "Annulation impossible : le fonds « %s » est déjà partagé ou utilisé au-delà du solde restant. "
+                    "Annulez d'abord les partages."
+                ) % fond.name)
+            move = contrib.move_id.sudo()
+            if move:
+                if move.line_ids.filtered(lambda l: l.matched_debit_ids or l.matched_credit_ids):
+                    raise UserError(_(
+                        "Annulation impossible : l'écriture de cette contribution est déjà rapprochée avec un relevé."))
+                move.with_company(move.company_id).with_context(allowed_company_ids=[move.company_id.id])._reverse_moves([{
+                    'date': fields.Date.context_today(self),
+                    'ref': _('Extourne %s') % (move.ref or move.name),
+                    'microfinance_fond_contribution_id': contrib.id,
+                }], cancel=True)
+            contrib.state = 'cancelled'
+            contrib.message_post(body=_('Contribution annulée (écriture extournée).'))
         return True
 
 

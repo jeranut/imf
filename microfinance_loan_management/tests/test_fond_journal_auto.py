@@ -88,7 +88,12 @@ class TestFondJournalAuto(TestFondPartageBase):
         company_b = self.company_b
         account_b = self.env['account.account'].create({
             'name': 'Dette bailleur B', 'code': 'TFONDGLB', 'account_type': 'liability_current', 'company_id': company_b.id})
-        self._fund_journal('FDBB', self.bmoi, company_b)
+        journal_b = self._fund_journal('FDBB', self.bmoi, company_b)
+        # le dépôt passe par le compte de paiement en suspens entrant du journal de fonds (139100 en production)
+        suspense_b = self.env['account.account'].create({
+            'name': 'Entrant en suspens B', 'code': 'TFONDSB', 'account_type': 'asset_current',
+            'reconcile': True, 'company_id': company_b.id})
+        journal_b.inbound_payment_method_line_ids.write({'payment_account_id': suspense_b.id})
         fond = self._create_fond(name='Fonds agence B', scope='single_company', company_id=company_b.id,
                                  account_id=account_b.id, bank_id=self.bmoi.id)
         contrib = self._create_contribution(fond, saisie_company_id=self.env.company.id)  # saisie depuis company_a
