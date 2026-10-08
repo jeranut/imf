@@ -20,7 +20,7 @@ class TestJournalHooks(MicrofinanceCommon):
         codes = set(journals.mapped('code'))
         for code in ('CAI', 'BMCR', 'BNCR', 'BMEP', 'BNEP', 'MVO', 'BMOP', 'BNOP', 'VIR', 'OD', 'AN'):
             self.assertIn(code, codes)
-        for code in ('CRE', 'EPG', 'BQOP', 'BQEP', 'BQCR', 'FDBM', 'FDBN'):
+        for code in ('CRE', 'EPG', 'BQOP', 'BQEP', 'BQCR', 'FDBM', 'FDBN', 'TRANS', 'TRANSIT'):
             self.assertNotIn(code, codes)
         for code in ('CAI', 'BMCR', 'BNCR', 'BMEP', 'BNEP', 'MVO', 'BMOP', 'BNOP'):
             self.assertIn(journals.filtered(lambda j: j.code == code).type, ('bank', 'cash'))
@@ -195,3 +195,64 @@ class TestOperatingJournal(MicrofinanceCommon):
         self.assertEqual(company.payroll_journal_id, bmop)
         company.microfinance_operating_journal_id = bnop
         self.assertEqual(company.payroll_journal_id, bnop)
+
+
+class TestPaymentAccountsByJournalType(MicrofinanceCommon):
+    """139100/139500 (établissements de crédit) sont réservés aux journaux bancaires ; un journal de
+    caisse a pour compte de paiement son compte par défaut (101000)."""
+
+    def _company_with_accounts(self, name, code):
+        company = self.env['res.company'].create({'name': name, 'agency_code': code})
+        Account = self.env['account.account']
+        accounts = {}
+        for acode, atype, rec in (
+                ('101000', 'asset_cash', False), ('139100', 'asset_current', True),
+                ('139500', 'liability_current', True), ('201000', 'asset_receivable', True),
+                ('401000', 'liability_payable', True)):
+            accounts[acode] = Account.create({
+                'code': acode, 'name': 'Test %s' % acode, 'account_type': atype,
+                'reconcile': rec, 'company_id': company.id})
+        return company, accounts
+
+    def test_cash_journal_has_default_account_as_payment_account_bank_has_139(self):
+        company, accounts = self._company_with_accounts('Agence comptes paiement (test)', 'PA1')
+        hooks._create_journals(self.env, company)
+        Journal = self.env['account.journal']
+        cai = Journal.search([('company_id', '=', company.id), ('code', '=', 'CAI')])
+        for line in cai.inbound_payment_method_line_ids | cai.outbound_payment_method_line_ids:
+            self.assertEqual(line.payment_account_id, accounts['101000'])
+        bmop = Journal.search([('company_id', '=', company.id), ('code', '=', 'BMOP')])
+        self.assertEqual(bmop.inbound_payment_method_line_ids.payment_account_id, accounts['139100'])
+        self.assertEqual(bmop.outbound_payment_method_line_ids.payment_account_id, accounts['139500'])
+
+    def test_replay_does_not_recreate_archived_journal_or_transit(self):
+        company, _accounts = self._company_with_accounts('Agence rejeu sans TRANS (test)', 'PA2')
+        hooks._create_journals(self.env, company)
+        Journal = self.env['account.journal'].with_context(active_test=False)
+        self.assertFalse(Journal.search([('company_id', '=', company.id), ('code', 'in', ('TRANS', 'TRANSIT'))]))
+        cai = Journal.search([('company_id', '=', company.id), ('code', '=', 'CAI')])
+        cai.active = False
+        count = Journal.search_count([('company_id', '=', company.id)])
+        hooks._create_journals(self.env, company)
+        self.assertEqual(Journal.search_count([('company_id', '=', company.id)]), count)
+
+    def test_cash_payment_in_and_out_lands_on_101000_and_is_matched(self):
+        company, accounts = self._company_with_accounts('Agence paiement espèces (test)', 'PA3')
+        hooks._create_journals(self.env, company)
+        cai = self.env['account.journal'].search([('company_id', '=', company.id), ('code', '=', 'CAI')])
+        partner = self.env['res.partner'].create({'name': 'Client paiement espèces (test)'})
+        for payment_type, partner_type, destination in (
+                ('inbound', 'customer', accounts['201000']), ('outbound', 'supplier', accounts['401000'])):
+            lines = (cai.inbound_payment_method_line_ids if payment_type == 'inbound'
+                     else cai.outbound_payment_method_line_ids)
+            payment = self.env['account.payment'].with_company(company).create({
+                'payment_type': payment_type, 'partner_type': partner_type, 'partner_id': partner.id,
+                'amount': 1000.0, 'journal_id': cai.id, 'payment_method_line_id': lines[:1].id,
+                'destination_account_id': destination.id,
+            })
+            payment.action_post()
+            liquidity = payment.move_id.line_ids.filtered(lambda l: l.account_id == payment.outstanding_account_id)
+            self.assertEqual(payment.state, 'posted')
+            self.assertEqual(liquidity.account_id, accounts['101000'], payment_type)
+            self.assertTrue(payment.is_matched, "Un paiement en espèces doit être rapproché d'emblée (%s)" % payment_type)
+            self.assertFalse(payment.move_id.line_ids.filtered(lambda l: l.account_id.code in ('139100', '139500')))
