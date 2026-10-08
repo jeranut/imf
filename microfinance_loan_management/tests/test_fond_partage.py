@@ -21,7 +21,9 @@ class TestFondPartageBase(TestFondBailleurCommon):
             'microfinance.parent_company_id', company.id if company else False)
 
     def _create_shared_fond(self, **kwargs):
-        vals = {'name': 'Fonds partagé test', 'scope': 'multi_company', 'company_id': False}
+        # passer_gl faux par défaut : ces tests portent sur les allocations, pas sur la comptabilité (les
+        # écritures de partage sont couvertes par test_fond_liaison.py).
+        vals = {'name': 'Fonds partagé test', 'scope': 'multi_company', 'company_id': False, 'passer_gl': False}
         vals.update(kwargs)
         return self._create_fond(**vals)
 
@@ -324,7 +326,7 @@ class TestFondParentOnlyGuards(TestFondPartageBase):
             self._create_contribution(fond)
         contrib = self.env['microfinance.fond.contribution'].with_company(self.company_b).create({
             'fond_id': fond.id, 'type_mouvement': 'depot', 'amount': 1000.0,
-            'mode_paiement': 'especes', 'journal_id': self.disbursement_journal.id})
+            'mode_paiement': 'virement'})
         self.assertEqual(contrib.saisie_company_id, self.company_b)
         with self.assertRaises(UserError):
             contrib.with_company(self.company_a).action_post()
@@ -350,7 +352,7 @@ class TestFondMotherBase(TestFondPartageBase):
             'verification_disponibilite': 'at_disbursement'})
         self.env['microfinance.fond.contribution'].with_company(self.company_b).create({
             'fond_id': fond.id, 'type_mouvement': 'depot', 'amount': contribution,
-            'mode_paiement': 'especes'}).action_post()
+            'mode_paiement': 'virement'}).action_post()
         if shares:
             base = sum(shares.values())
             partage = self.env['microfinance.fond.partage'].with_company(self.company_b).create(

@@ -86,13 +86,16 @@ class TestMicrofinanceFondCreditPurgeWizard(MicrofinanceDataResetCommon):
     #    avec le fonds, sans jamais toucher l'account.move déjà posté.
     def test_purge_cascades_contributions_without_touching_posted_move(self):
         fond_a = self._create_fond(self.company_a, self.account_a, passer_gl=True)
-        journal = self.env['account.journal'].create({
-            'name': 'Banque PA', 'code': 'PABQ', 'type': 'bank', 'company_id': self.company_a.id,
+        bank = self.env['res.bank'].create({'name': 'Banque PA (test)'})
+        self.env['account.journal'].create({
+            'name': 'Fonds PA', 'code': 'PABQ', 'type': 'bank', 'company_id': self.company_a.id,
             'default_account_id': self.account_a.id,
+            'microfinance_usage': 'fund', 'microfinance_bank_id': bank.id,
         })
+        fond_a.bank_id = bank
         contribution = self.env['microfinance.fond.contribution'].create({
             'fond_id': fond_a.id, 'type_mouvement': 'depot', 'amount': 1000.0,
-            'mode_paiement': 'virement', 'journal_id': journal.id,
+            'mode_paiement': 'virement',
         })
         contribution.action_post()
         move = contribution.move_id
@@ -151,3 +154,64 @@ class TestMicrofinanceFondCreditPurgeWizard(MicrofinanceDataResetCommon):
         self.assertNotIn('ERREUR', wizard.log)
         self.assertTrue(fond_a.exists(), "Un fonds avec un crédit DÉCAISSÉ ne doit jamais être supprimé.")
         self.assertTrue(loan.exists())
+
+    # 7. Cas du fonds 360 (MOWGLI) : fonds multi-agences avec allocation d'agence ET répartition
+    #    de portefeuille validée (microfinance.portfolio.allocation.fond_id, ondelete='restrict').
+    #    Avant correctif : ForeignKeyViolation à la suppression du fonds.
+    def _create_fond_with_portfolio_allocation(self):
+        fond = self._create_fond(
+            self.company_a, self.account_a, scope='multi_company', company_id=False)
+        allocation = self.env['microfinance.fond.allocation'].sudo().with_context(
+            fond_partage_technique=True, microfinance_skip_parent_check=True).create({
+                'fond_id': fond.id, 'company_id': self.company_a.id, 'amount_allocated': 1000.0,
+            })
+        portfolio = self.env['microfinance.portfolio'].sudo().create({
+            'agent_id': self.env.user.id, 'company_id': self.company_a.id,
+        })
+        repartition = self.env['microfinance.portfolio.allocation'].sudo().create({
+            'fond_id': fond.id, 'company_id': self.company_a.id, 'base_amount': 1000.0,
+            'line_ids': [(0, 0, {'portfolio_id': portfolio.id, 'percent': 100.0, 'amount': 1000.0})],
+        })
+        repartition.action_validate()
+        self.assertEqual(repartition.state, 'validated')
+        self.assertEqual(portfolio.amount_allocated, 1000.0)
+        return fond, allocation, portfolio, repartition
+
+    def test_purge_fund_with_validated_portfolio_allocation(self):
+        fond, allocation, portfolio, repartition = self._create_fond_with_portfolio_allocation()
+        line = repartition.line_ids
+        self.assertEqual(len(line), 1)
+
+        wizard = self._make_purge_wizard(self.company_a)
+        self.env['ir.config_parameter'].sudo().set_param('microfinance.fond_credit_purge_apply', 'True')
+        wizard.i_confirm = True
+        wizard.confirm_text = 'SUPPRIMER'
+        wizard.action_run_execute()
+
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertFalse(fond.exists(), "Le fonds avec répartition de portefeuille doit être purgé.")
+        self.assertFalse(repartition.exists())
+        self.assertFalse(line.exists())
+        self.assertFalse(allocation.exists())
+        # La répartition validée a été annulée avant suppression : le portefeuille est restitué.
+        self.assertEqual(portfolio.amount_allocated, 0.0)
+        self.assertIn('1 répartition(s) de portefeuille supprimée(s)', wizard.log)
+        self.assertIn('1 annulée(s) au préalable', wizard.log)
+
+    # 8. Dry-run : détail par modèle (y compris les répartitions de portefeuille), rien supprimé.
+    def test_dry_run_lists_counts_per_model_and_rolls_back(self):
+        fond, allocation, portfolio, repartition = self._create_fond_with_portfolio_allocation()
+
+        wizard = self._make_purge_wizard(self.company_a)
+        wizard.action_run_dry_run()
+
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertIn('0 contribution(s), 1 répartition(s) de portefeuille (dont 1 validée(s) à annuler) '
+                      'avec 1 ligne(s), 0 partage(s), 1 allocation(s) d\'agence', wizard.log)
+        self.assertIn('fonds supprimé', wizard.log)
+        # Rollback effectif.
+        self.assertTrue(fond.exists())
+        self.assertTrue(repartition.exists())
+        self.assertTrue(allocation.exists())
+        self.assertEqual(portfolio.amount_allocated, 1000.0)
+        self.assertEqual(repartition.state, 'validated')

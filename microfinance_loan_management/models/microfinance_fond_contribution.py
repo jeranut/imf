@@ -23,17 +23,17 @@ class MicrofinanceFondContribution(models.Model):
         'res.currency', string='Devise', related='fond_id.currency_id', store=True, readonly=True,
     )
     mode_paiement = fields.Selection([
-        ('especes', 'Espèces'),
         ('cheque', 'Chèque'),
         ('virement', 'Virement'),
-    ], string='Mode de paiement', required=True, tracking=True)
+    ], string='Mode de paiement', required=True, tracking=True,
+        help="Un fonds ne se reçoit (et ne se rembourse) que par la banque : virement ou chèque.")
     journal_id = fields.Many2one(
-        'account.journal', string='Journal bancaire',
-        domain="[('type', 'in', ('bank', 'cash')), ('company_id', '=', saisie_company_id)]",
-        help="Requis si le mode de paiement est chèque ou virement. Filtré sur l'agence de "
-             "saisie (saisie_company_id), pas sur company_id : pour un fonds « Multi-agences », "
-             "company_id est vide alors que saisie_company_id est toujours renseigné.",
+        'account.journal', string='Journal de fonds', compute='_compute_journal_id', store=True,
+        readonly=True, check_company=False,
+        help="Déduit du fonds (fond_id.fund_journal_id) : journal de fonds de la banque du fonds, dans "
+             "la société du fonds. Jamais saisi.",
     )
+    fond_bank_id = fields.Many2one(related='fond_id.bank_id', string='Banque du fonds', readonly=True)
     description = fields.Char(string='Description / Référence bailleur')
     move_id = fields.Many2one(
         'account.move', string='Écriture comptable', readonly=True, copy=False,
@@ -70,6 +70,15 @@ class MicrofinanceFondContribution(models.Model):
         fonds = self.env['microfinance.fond.credit'].browse([v['fond_id'] for v in vals_list if v.get('fond_id')])
         if any(fond.scope == 'multi_company' for fond in fonds):
             self._check_parent_only()
+        for vals in vals_list:
+            # Odoo ignorerait silencieusement la valeur d'un champ calculé en lecture seule à la création ;
+            # on refuse explicitement un journal différent de celui du fonds.
+            if vals.get('journal_id') and vals.get('fond_id'):
+                expected = self.env['microfinance.fond.credit'].browse(vals['fond_id']).fund_journal_id
+                if vals['journal_id'] != expected.id:
+                    raise ValidationError(_(
+                        "Le journal d'une contribution est imposé par le fonds (%s) ; il ne peut pas être choisi."
+                    ) % (expected.display_name or _('aucun')))
         return super().create(vals_list)
 
     def unlink(self):
@@ -86,13 +95,20 @@ class MicrofinanceFondContribution(models.Model):
                     ))
         return super().write(vals)
 
-    @api.constrains('mode_paiement', 'journal_id')
-    def _check_journal_required(self):
+    @api.depends('fond_id.fund_journal_id')
+    def _compute_journal_id(self):
         for contrib in self:
-            if contrib.mode_paiement in ('cheque', 'virement') and not contrib.journal_id:
+            contrib.journal_id = contrib.fond_id.fund_journal_id
+
+    @api.constrains('journal_id', 'fond_id')
+    def _check_journal_is_fund_journal(self):
+        for contrib in self:
+            expected = contrib.fond_id.fund_journal_id
+            if contrib.journal_id and contrib.journal_id != expected:
                 raise ValidationError(_(
-                    'Le journal bancaire est requis pour un mode de paiement par chèque ou virement.'
-                ))
+                    "Le journal d'une contribution est imposé par le fonds (%(attendu)s) ; il ne peut pas être "
+                    "remplacé par « %(journal)s »."
+                ) % {'attendu': expected.display_name or _('aucun'), 'journal': contrib.journal_id.display_name})
 
     @api.constrains('amount')
     def _check_amount(self):
@@ -100,21 +116,51 @@ class MicrofinanceFondContribution(models.Model):
             if contrib.amount <= 0:
                 raise ValidationError(_('Le montant de la contribution doit être strictement positif.'))
 
+    def _contribution_company(self):
+        """Société de l'écriture : toujours celle du fonds (la société mère pour un fonds multi-agences),
+        quelle que soit l'agence de saisie, qui reste tracée dans saisie_company_id."""
+        self.ensure_one()
+        return self.fond_id._fund_company()
+
+    def _check_ready_to_post(self):
+        self.ensure_one()
+        fond = self.fond_id
+        if self.amount <= 0:
+            raise UserError(_('Le montant de la contribution doit être strictement positif.'))
+        if not fond.passer_gl:
+            return
+        if not fond.bank_id:
+            raise UserError(_(
+                'Le fonds « %s » n\'a pas de banque : renseignez la banque du fonds avant de valider une contribution.'
+            ) % fond.name)
+        company = self._contribution_company()
+        if not company:
+            raise UserError(_('Société du fonds « %s » introuvable : désignez la société mère dans les paramètres.') % fond.name)
+        journal = fond.fund_journal_id
+        if not journal:
+            raise UserError(_(
+                'Aucun journal de fonds pour la banque « %(banque)s » dans la société « %(societe)s ».'
+            ) % {'banque': fond.bank_id.name, 'societe': company.name})
+        if self.journal_id != journal:
+            raise UserError(_(
+                'Le journal de la contribution (%(actuel)s) ne correspond pas au journal de fonds de la banque (%(attendu)s).'
+            ) % {'actuel': self.journal_id.display_name or _('aucun'), 'attendu': journal.display_name})
+        if journal.company_id != company:
+            raise UserError(_('Le journal de fonds doit appartenir à la société du fonds (%s).') % company.name)
+        if not journal.default_account_id:
+            raise UserError(_('Le journal de fonds « %s » n\'a pas de compte par défaut.') % journal.display_name)
+        if not fond.account_id:
+            raise UserError(_('Configurez le compte comptable bailleur du fonds "%s".') % fond.name)
+        if fond.account_id.company_id != company:
+            raise UserError(_('Le compte bailleur du fonds « %s » doit appartenir à la société du fonds (%s).') % (fond.name, company.name))
+
     def _prepare_contribution_move(self):
         """Squelette identique à MicrofinanceLoan._prepare_disbursement_move() : un dict prêt
         pour account.move.create(), 2 lignes équilibrées. Un dépôt bailleur crédite le compte GL
-        du fonds (fond_id.account_id) et débite le compte banque/caisse (journal_id.default_account_id) ;
-        un retrait fait l'inverse."""
+        du fonds (fond_id.account_id) et débite le compte du journal de fonds ; un retrait fait l'inverse."""
         self.ensure_one()
         fond = self.fond_id
         journal = self.journal_id
-        if not journal or not journal.default_account_id:
-            raise UserError(_(
-                'Configurez le journal bancaire/caisse de la contribution (et son compte par défaut) '
-                'avant de la valider.'
-            ))
-        if not fond.account_id:
-            raise UserError(_('Configurez le compte comptable bailleur du fonds "%s".') % fond.name)
         label = _('Dépôt bailleur %s') % fond.name if self.type_mouvement == 'depot' else _('Retrait bailleur %s') % fond.name
         if self.type_mouvement == 'depot':
             line_ids = [
@@ -139,8 +185,11 @@ class MicrofinanceFondContribution(models.Model):
         for contrib in self:
             if contrib.state == 'posted':
                 raise UserError(_('Cette contribution est déjà validée.'))
+            contrib._check_ready_to_post()
             if contrib.fond_id.passer_gl:
-                move = self.env['account.move'].create(contrib._prepare_contribution_move())
+                company = contrib._contribution_company()
+                Move = self.env['account.move'].sudo().with_company(company).with_context(allowed_company_ids=[company.id])
+                move = Move.create(contrib._prepare_contribution_move())
                 move.action_post()
                 contrib.move_id = move.id
             contrib.state = 'posted'

@@ -18,6 +18,18 @@ class TestFondBailleurCommon(MicrofinanceCommon):
             'name': 'Dette bailleur test', 'code': 'TFONDGL', 'account_type': 'liability_current',
             'company_id': cls.env.company.id,
         })
+        # Banque et journal de fonds de la société courante : le journal d'une contribution est imposé
+        # par le fonds (banque du fonds -> journal d'usage « Fonds »).
+        cls.bank = cls.env['res.bank'].create({'name': 'Banque fonds test'})
+        cls.fund_bank_account = cls.env['account.account'].create({
+            'name': 'Banque fonds test', 'code': 'TFONDBK', 'account_type': 'asset_cash',
+            'company_id': cls.env.company.id,
+        })
+        cls.fund_journal = cls.env['account.journal'].create({
+            'name': 'Fonds test', 'code': 'FDBT', 'type': 'bank', 'company_id': cls.env.company.id,
+            'default_account_id': cls.fund_bank_account.id,
+            'microfinance_usage': 'fund', 'microfinance_bank_id': cls.bank.id,
+        })
         cls.income_account = cls.env['account.account'].create({
             'name': 'Compte revenu test (invalide pour fonds)', 'code': 'TFONDBAD', 'account_type': 'income',
             'company_id': cls.env.company.id,
@@ -29,6 +41,7 @@ class TestFondBailleurCommon(MicrofinanceCommon):
             'bailleur_id': self.bailleur.id,
             'date_debut': '2020-01-01',
             'account_id': self.fond_account.id,
+            'bank_id': self.bank.id,
         }
         vals.update(kwargs)
         return self.env['microfinance.fond.credit'].create(vals)
@@ -38,8 +51,7 @@ class TestFondBailleurCommon(MicrofinanceCommon):
             'fond_id': fond.id,
             'type_mouvement': 'depot',
             'amount': 1000.0,
-            'mode_paiement': 'especes',
-            'journal_id': self.disbursement_journal.id,
+            'mode_paiement': 'virement',
         }
         vals.update(kwargs)
         return self.env['microfinance.fond.contribution'].create(vals)
@@ -85,7 +97,7 @@ class TestFondContributionComptabilisation(TestFondBailleurCommon):
         self.assertEqual(debit_total, 5000.0)
         debit_line = contrib.move_id.line_ids.filtered(lambda l: l.debit > 0)
         credit_line = contrib.move_id.line_ids.filtered(lambda l: l.credit > 0)
-        self.assertEqual(debit_line.account_id, self.bank_account)
+        self.assertEqual(debit_line.account_id, self.fund_bank_account)
         self.assertEqual(credit_line.account_id, self.fond_account)
 
     def test_withdrawal_passer_gl_true_generates_inverse_move(self):
@@ -97,7 +109,7 @@ class TestFondContributionComptabilisation(TestFondBailleurCommon):
         debit_line = withdrawal.move_id.line_ids.filtered(lambda l: l.debit > 0)
         credit_line = withdrawal.move_id.line_ids.filtered(lambda l: l.credit > 0)
         self.assertEqual(debit_line.account_id, self.fond_account)
-        self.assertEqual(credit_line.account_id, self.bank_account)
+        self.assertEqual(credit_line.account_id, self.fund_bank_account)
         self.assertEqual(fond.solde_disponible, 3000.0)
 
     def test_contribution_passer_gl_false_generates_no_move(self):

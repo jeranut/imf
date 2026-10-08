@@ -14,17 +14,19 @@ class TestFondLiaison(TestFondPartageBase):
     def setUpClass(cls):
         super().setUpClass()
         cls.hq, cls.agency, cls.agency2 = cls.company_a, cls.company_b, cls.company_c
+        cls.bank = cls.env['res.bank'].create({'name': 'BMOI liaison (test)'})
         cls.hq_liaison = cls._acc(cls.hq, 'T301HQB', 'asset_current', True)
         cls.hq_out = cls._acc(cls.hq, 'T139500H', 'liability_current', True)
         cls.hq_bank = cls._acc(cls.hq, 'T131103H', 'asset_cash', False)
         cls.hq_credit_bank = cls._acc(cls.hq, 'T131101H', 'asset_cash', False)
-        cls.fdbm = cls._journal(cls.hq, 'FDBM', cls.hq_bank, outbound=cls.hq_out)
-        cls.hq_credit_bank = cls._journal(cls.hq, 'BMCR', cls.hq_credit_bank).default_account_id
+        cls.hq_fond_account = cls.fond_account
+        cls.fdbm = cls._journal(cls.hq, 'FDBM', cls.hq_bank, outbound=cls.hq_out, usage='fund')
+        cls.hq_credit_bank = cls._journal(cls.hq, 'BMCR', cls.hq_credit_bank, usage='credit').default_account_id
         cls.hq_bank = cls.fdbm.default_account_id
         cls.ag_in = cls._acc(cls.agency, 'T139100A', 'asset_current', True)
         cls.ag_liaison = cls._acc(cls.agency, 'T301010A', 'asset_current', True)
         cls.ag_bank = cls._acc(cls.agency, 'T131101A', 'asset_cash', False)
-        cls.ag_journal = cls._journal(cls.agency, 'BMCR', cls.ag_bank, inbound=cls.ag_in)
+        cls.ag_journal = cls._journal(cls.agency, 'BMCR', cls.ag_bank, inbound=cls.ag_in, usage='credit')
         cls.agency.microfinance_liaison_hq_account_id = cls.hq_liaison
         cls.agency.microfinance_liaison_agency_account_id = cls.ag_liaison
         # agence 2 : compte de liaison côté siège seulement (côté agence non configuré)
@@ -39,12 +41,14 @@ class TestFondLiaison(TestFondPartageBase):
                                       'reconcile': reconcile, 'company_id': company.id})
 
     @classmethod
-    def _journal(cls, company, code, default_account, inbound=None, outbound=None):
+    def _journal(cls, company, code, default_account, inbound=None, outbound=None, usage=None):
         Journal = cls.env['account.journal']
         journal = Journal.search([('company_id', '=', company.id), ('code', '=', code)], limit=1)
         if not journal:
             journal = Journal.create({'name': code, 'code': code, 'type': 'bank', 'company_id': company.id,
                                       'default_account_id': default_account.id})
+        if usage:
+            journal.write({'microfinance_usage': usage, 'microfinance_bank_id': cls.bank.id})
         if inbound:
             journal.inbound_payment_method_line_ids.write({'payment_account_id': inbound.id})
         if outbound:
@@ -55,10 +59,11 @@ class TestFondLiaison(TestFondPartageBase):
         super().setUp()
         self._set_parent(self.hq)
 
-    def _fond(self, bank=True, passer_gl=True):
-        fond = self._create_shared_fond(verification_disponibilite='at_disbursement', passer_gl=passer_gl)
-        if bank:
-            fond.bank_journal_id = self.fdbm
+    def _fond(self, passer_gl=True):
+        fond = self._create_shared_fond(
+            verification_disponibilite='at_disbursement', passer_gl=passer_gl,
+            bank_id=self.bank.id,
+            account_id=self.hq_fond_account.id)
         self._create_contribution(fond, amount=5000.0).action_post()
         return fond
 
@@ -134,7 +139,7 @@ class TestFondLiaison(TestFondPartageBase):
         # l'agence est configurée : le bouton génère le côté agence, l'écart disparaît
         ag2_bank = self._acc(self.agency2, 'T131101C', 'asset_cash', False)
         ag2_in = self._acc(self.agency2, 'T139100C', 'asset_current', True)
-        self._journal(self.agency2, 'BMCR', ag2_bank, inbound=ag2_in)
+        self._journal(self.agency2, 'BMCR', ag2_bank, inbound=ag2_in, usage='credit')
         self.agency2.microfinance_liaison_agency_account_id = self._acc(self.agency2, 'T301010C', 'asset_current', True)
         line.action_generate_agency_move()
         self.env.flush_all()
@@ -186,9 +191,18 @@ class TestFondLiaison(TestFondPartageBase):
         self.assertEqual({(l.account_id, l.debit, l.credit) for l in moves.line_ids},
                          {(self.hq_credit_bank, self.AMOUNT, 0.0), (self.hq_bank, 0.0, self.AMOUNT)})
 
-    def test_no_moves_without_gl_or_without_bank_journal(self):
-        for kwargs in ({'passer_gl': False}, {'bank': False}):
-            partage = self._partage(self._fond(**kwargs), {self.agency: 100.0})
-            partage.action_validate()
-            self.assertEqual(partage.state, 'validated')
-            self.assertFalse(self._moves(partage), kwargs)
+    def test_no_moves_without_gl_or_without_fund_journal(self):
+        # fonds sans passer_gl
+        partage = self._partage(self._fond(passer_gl=False), {self.agency: 100.0})
+        partage.action_validate()
+        self.assertEqual(partage.state, 'validated')
+        self.assertFalse(self._moves(partage))
+        # fonds dont le journal de fonds a été archivé après les contributions : plus de journal, plus d'écriture
+        fond = self._fond()
+        self.fdbm.active = False
+        self.env.flush_all()
+        self.assertFalse(fond.fund_journal_id)
+        partage = self._partage(fond, {self.agency: 100.0})
+        partage.action_validate()
+        self.assertEqual(partage.state, 'validated')
+        self.assertFalse(self._moves(partage))

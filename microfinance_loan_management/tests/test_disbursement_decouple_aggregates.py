@@ -107,7 +107,7 @@ class TestDecoupleFondTotals(_NoFundMixin, MicrofinanceCommon):
         })
         self.env['microfinance.fond.contribution'].create({
             'fond_id': fond.id, 'type_mouvement': 'depot', 'amount': amount,
-            'mode_paiement': 'especes', 'journal_id': self.disbursement_journal.id,
+            'mode_paiement': 'virement',
         }).action_post()
         return fond
 

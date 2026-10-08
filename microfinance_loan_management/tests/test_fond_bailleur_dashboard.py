@@ -234,7 +234,7 @@ class TestFondMatrix(TestFondBailleurCommon):
         self.assertIn(fond_a.name, fund_names)
 
     def test_single_company_fund_of_unauthorized_company_never_appears(self):
-        self._create_fond(name='Fonds isole agence B (matrice)', scope='single_company', company_id=self.company_b.id)
+        self._create_fond(name='Fonds isole agence B (matrice)', scope='single_company', company_id=self.company_b.id, bank_id=False)
         result = self.env['microfinance.fond.credit'].get_fond_matrix(self.env.company.ids)
         fund_names = {f['name'] for f in result['funds']}
         self.assertNotIn('Fonds isole agence B (matrice)', fund_names)

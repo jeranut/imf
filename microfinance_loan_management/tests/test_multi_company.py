@@ -79,9 +79,11 @@ class TestMultiCompanyIsolation(MicrofinanceCommon):
         # domaine doit filtrer sur saisie_company_id, toujours renseigné, pas company_id.
         # saisie_company_id apparaît non quoté (référence de valeur), 'company_id' quoté (champ
         # comparé) — cf. domaine réel : "[('type', 'in', (...)), ('company_id', '=', saisie_company_id)]".
+        # Depuis 17.0.1.27 le journal n'est plus choisi : il est déduit du fonds (banque du fonds ->
+        # journal de fonds de la société du fonds), calculé, stocké et en lecture seule.
         field = self.env['microfinance.fond.contribution']._fields['journal_id']
-        self.assertIn("saisie_company_id", field.domain or '')
-        self.assertNotIn("'saisie_company_id'", field.domain or '')
+        self.assertTrue(field.compute and field.store and field.readonly)
+        self.assertFalse(field.domain)
 
     # --- Point 1ter : le journal d'une autre agence reste invisible sans ir.rule dédiée
     # (Odoo core fournit déjà journal_comp_rule sur account.journal, domain_force =
