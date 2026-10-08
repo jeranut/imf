@@ -21,6 +21,15 @@
                             <field name="microfinance_parent_company_id" options="{'no_create': True, 'no_open': True}"/>
                         </setting>
                     </block>
+                    <block title="Trésorerie d'exploitation" id="microfinance_operating_journal_settings"
+                        groups="account.group_account_manager,base.group_system">
+                        <setting string="Journal bancaire d'exploitation"
+                            help="Compte bancaire de l'agence pour les salaires (virement), le loyer et les fournisseurs (chèque). Séparé des fonds de crédit et de l'épargne. Les journaux de fonds (FDBM, FDBN) sont refusés. Le journal de paie et le journal proposé pour les paiements fournisseurs suivent ce choix.">
+                            <field name="microfinance_operating_journal_id"
+                                domain="[('type', '=', 'bank'), ('company_id', '=', company_id)]"
+                                options="{'no_create': True, 'no_open': True}"/>
+                        </setting>
+                    </block>
                 </app>
             </xpath>
         </field>

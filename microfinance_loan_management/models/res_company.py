@@ -265,6 +265,63 @@ class ResCompany(models.Model):
             self.mapped('partner_id').write({'microfinance_partner_type': 'agence'})
         return res
 
+    microfinance_operating_journal_id = fields.Many2one(
+        'account.journal', string='Journal bancaire d\'exploitation',
+        domain="[('type', '=', 'bank'), ('company_id', '=', id)]",
+        help="Compte bancaire d'exploitation de l'agence (salaires par virement, loyer et "
+             "fournisseurs par chèque), séparé des fonds de crédit et de l'épargne. Défaut : le "
+             "journal BMOP de la société. Les journaux de fonds (FDBM, FDBN) sont refusés. Le "
+             "journal de paie et le journal proposé par défaut pour les paiements fournisseurs "
+             "suivent ce champ.",
+    )
+    payroll_journal_id = fields.Many2one(
+        compute='_compute_payroll_journal_id', store=True, readonly=False,
+    )
+
+    OPERATING_FORBIDDEN_CODES = ('FDBM', 'FDBN')
+    OPERATING_DISCOURAGED_CODES = ('BMCR', 'BNCR', 'BMEP', 'BNEP')
+
+    @api.depends('microfinance_operating_journal_id')
+    def _compute_payroll_journal_id(self):
+        """Le journal de paie suit le journal d'exploitation ; sans journal d'exploitation, la
+        valeur actuelle (choix manuel) est conservée. Reste modifiable à la main."""
+        for company in self:
+            company.payroll_journal_id = (
+                company.microfinance_operating_journal_id or company.payroll_journal_id)
+
+    @api.constrains('microfinance_operating_journal_id')
+    def _check_microfinance_operating_journal(self):
+        for company in self:
+            journal = company.microfinance_operating_journal_id
+            if not journal:
+                continue
+            if journal.code in self.OPERATING_FORBIDDEN_CODES:
+                raise ValidationError(_(
+                    "Le journal « %s » est un journal de fonds : il ne peut pas servir de "
+                    "journal bancaire d'exploitation.") % journal.display_name)
+            if journal.type != 'bank' or journal.company_id != company:
+                raise ValidationError(_(
+                    "Le journal bancaire d'exploitation doit être un journal de type banque "
+                    "de la société %s.") % company.name)
+
+    @api.model
+    def _operating_journal_warning(self, journal):
+        """Avertissement (jamais bloquant) si le journal choisi est dédié au crédit ou à
+        l'épargne. Retourne un dict `warning` utilisable par un onchange, ou {}."""
+        if journal and journal.code in self.OPERATING_DISCOURAGED_CODES:
+            return {'warning': {
+                'title': _("Journal de crédit ou d'épargne"),
+                'message': _(
+                    "Le journal « %s » sert au crédit ou à l'épargne des clients. L'exploitation "
+                    "devrait passer par son propre compte bancaire (BMOP ou BNOP).")
+                    % journal.display_name,
+            }}
+        return {}
+
+    @api.onchange('microfinance_operating_journal_id')
+    def _onchange_microfinance_operating_journal_id(self):
+        return self._operating_journal_warning(self.microfinance_operating_journal_id)
+
     is_microfinance_parent = fields.Boolean(
         string='Société mère (fonds bailleurs)', compute='_compute_is_microfinance_parent',
         help="Vrai si cette société est la société mère désignée dans les paramètres. Non stocké : "

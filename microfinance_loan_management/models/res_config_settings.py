@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class ResConfigSettings(models.TransientModel):
@@ -25,3 +25,13 @@ class ResConfigSettings(models.TransientModel):
              "entre les agences (elle-même incluse). Tant qu'aucune société mère n'est "
              "désignée, le fonctionnement des fonds reste celui d'origine (aucune restriction).",
     )
+
+    microfinance_operating_journal_id = fields.Many2one(
+        related='company_id.microfinance_operating_journal_id', readonly=False,
+        string="Journal bancaire d'exploitation",
+    )
+
+    @api.onchange('microfinance_operating_journal_id')
+    def _onchange_microfinance_operating_journal_id(self):
+        return self.env['res.company']._operating_journal_warning(
+            self.microfinance_operating_journal_id)
