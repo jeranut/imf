@@ -110,13 +110,8 @@ JOURNALS = [
     ('VIR', 'Virements internes', 'general', None, False),
     ('OD', 'Opérations diverses', 'general', None, False),
     ('AN', 'À-nouveaux', 'general', None, False),
-    # TRANSIT : compte de liaison des transferts de fonds inter-agences
-    # (module microfinance_transfert_inter_agence). Type 'general' : porte des
-    # écritures manuelles de liaison, jamais utilisé comme journal de caisse.
-    # default_account_id = 302000 « Opérations entre succursales/agences » (PCEC,
-    # reconcile=True). Le champ code est limité à 5 caractères : le journal est stocké sous
-    # « TRANS » et retrouvé par la recherche « TRANSIT » (comportement existant, inchangé).
-    ('TRANSIT', 'Transit inter-agences', 'general', '302000', False),
+    # Le journal TRANSIT (transit inter-agences, compte 302000) n'est plus créé ici : il est créé
+    # par microfinance_transfert_inter_agence à l'installation de ce module (hooks.py du module).
 ]
 
 # Comptes à créer pour la société mère uniquement (voir JOURNALS, colonne « siège uniquement »).
@@ -215,10 +210,19 @@ def _create_journals(env, company):
                 vals['loss_account_id'] = loss.id
         journal = Journal.create(vals)
         if journal_type == 'bank':
+            # 139100/139500 (autres sommes dues par/aux établissements de crédit) : réservés aux
+            # journaux bancaires.
             if payment_in:
                 journal.inbound_payment_method_line_ids.write({'payment_account_id': payment_in.id})
             if payment_out:
                 journal.outbound_payment_method_line_ids.write({'payment_account_id': payment_out.id})
+        elif journal_type == 'cash' and journal.default_account_id:
+            # Espèces : le compte de paiement est le compte par défaut du journal (101000), jamais
+            # 139. Sans compte propre, Odoo retomberait sur les comptes de la société (139100/
+            # 139500) ; avec le compte du journal, le paiement est rapproché d'emblée, sans compte
+            # en suspens.
+            (journal.inbound_payment_method_line_ids | journal.outbound_payment_method_line_ids).write(
+                {'payment_account_id': journal.default_account_id.id})
 
 
 def _set_default_operating_journal(env, company):
