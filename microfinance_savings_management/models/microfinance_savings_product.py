@@ -244,12 +244,12 @@ class MicrofinanceSavingsProduct(models.Model):
     deposit_journal_id = fields.Many2one(
         'account.journal', string='Journal dépôt',
         domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
-        default=_journal_default('EPG'),
+        default=_journal_default('CAI'),
     )
     withdrawal_journal_id = fields.Many2one(
         'account.journal', string='Journal retrait',
         domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
-        default=_journal_default('EPG'),
+        default=_journal_default('CAI'),
     )
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True)
     currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)

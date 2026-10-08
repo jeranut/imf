@@ -128,12 +128,12 @@ class MicrofinanceLoanProduct(models.Model):
     disbursement_journal_id = fields.Many2one(
         'account.journal', string='Journal décaissement',
         domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
-        default=_journal_default('CRE'),
+        default=_journal_default('CAI'),
     )
     payment_journal_id = fields.Many2one(
         'account.journal', string='Journal remboursement',
         domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
-        default=_journal_default('CRE'),
+        default=_journal_default('CAI'),
     )
     disbursement_limit_amount = fields.Monetary(
         string='Plafond de décaissement en espèces', default=0.0,
@@ -386,7 +386,7 @@ class MicrofinanceLoanProduct(models.Model):
     fee_journal_id = fields.Many2one(
         'account.journal', string='Journal encaissement frais',
         domain="[('type', 'in', ('bank','cash')), ('company_id', '=', company_id)]",
-        default=_journal_default('CRE'),
+        default=_journal_default('CAI'),
         help='Journal utilisé pour encaisser les frais de dossier, distinct des journaux de '
              'décaissement/remboursement si l\'institution le souhaite (peut être identique à l\'un des deux).',
     )
