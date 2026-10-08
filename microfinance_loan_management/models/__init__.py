@@ -35,6 +35,7 @@ from . import microfinance_fond_contribution
 from . import microfinance_fond_allocation
 from . import microfinance_fond_partage
 from . import microfinance_fond_liaison
+from . import microfinance_fond_origine
 from . import microfinance_portfolio
 from . import microfinance_portfolio_allocation
 from . import microfinance_caisse_fiche_journee
