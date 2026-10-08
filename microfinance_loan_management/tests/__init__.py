@@ -85,3 +85,4 @@ from . import test_disbursement_planned_date
 from . import test_portfolio
 from . import test_portfolio_funds_tab
 from . import test_officer_isolation
+from . import test_fond_origine

@@ -15,6 +15,40 @@
         </field>
     </record>
 
+    <!-- Fonds : origine (privé / public) et compte dédié créé automatiquement -->
+    <record id="view_microfinance_fond_credit_form_origine" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.form.origine</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_fond_credit_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='account_id']" position="replace">
+                <field name="origine" string="Origine du fonds" readonly="has_posted_contribution"/>
+                <field name="has_posted_contribution" invisible="1"/>
+                <field name="account_id" string="Compte du fonds (créé automatiquement)" readonly="1"
+                       invisible="not passer_gl"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Contribution : origine du fonds (choix privé / public) et compte attribué automatiquement -->
+    <record id="view_microfinance_fond_contribution_form_origine" model="ir.ui.view">
+        <field name="name">microfinance.fond.contribution.form.origine</field>
+        <field name="model">microfinance.fond.contribution</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_fond_contribution_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_post']" position="after">
+                <button name="action_cancel" string="Annuler" type="object" invisible="state != 'posted'"
+                        confirm="Extourner l'écriture de cette contribution et l'annuler ?"/>
+            </xpath>
+            <xpath expr="//field[@name='fond_bank_id']" position="after">
+                <field name="fond_origine" string="Origine du fonds"
+                       readonly="state == 'posted' or fond_has_posted_contribution"/>
+                <field name="fond_has_posted_contribution" invisible="1"/>
+                <field name="fond_account_id" string="Compte du fonds" readonly="1"/>
+            </xpath>
+        </field>
+    </record>
+
     <!-- Société : comptes de liaison -->
     <record id="view_company_form_microfinance_liaison" model="ir.ui.view">
         <field name="name">res.company.form.microfinance.liaison</field>
