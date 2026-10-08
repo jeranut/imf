@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, Command, _
 from odoo.exceptions import UserError, ValidationError
+from decimal import Decimal, ROUND_FLOOR
+
 from odoo.tools import float_compare, float_is_zero, float_round
 
 from .microfinance_fond_allocation import ALLOCATION_TECHNICAL_CONTEXT
@@ -8,6 +10,29 @@ from .microfinance_fond_allocation import ALLOCATION_TECHNICAL_CONTEXT
 # Champs techniques de liaison comptable d'une part, écrits par la validation/génération même d'un partage
 # déjà validé (microfinance_fond_liaison.py) : exemptés du verrou « partage en brouillon ».
 LIAISON_TECHNICAL_FIELDS = {'hq_move_id', 'agency_move_id', 'liaison_note'}
+
+
+def largest_remainder(total, weights, rounding, priority=None):
+    """Répartit `total` au prorata de `weights` par la méthode du plus fort reste, à la précision `rounding`
+    de la devise : chaque part est arrondie par défaut, puis les unités restantes vont aux plus grosses
+    parties fractionnaires. La somme des parts est EXACTEMENT `total`. `priority` (liste de nombres, plus petit
+    d'abord) départage les restes égaux. Retourne une liste de montants alignée sur `weights`."""
+    if not weights:
+        return []
+    unit = Decimal(str(rounding))
+    units = int((Decimal(str(total)) / unit).to_integral_value())
+    weights = [Decimal(str(max(w, 0.0))) for w in weights]
+    sum_w = sum(weights)
+    if sum_w <= 0:
+        weights, sum_w = [Decimal(1)] * len(weights), Decimal(len(weights))
+    quotas = [Decimal(units) * w / sum_w for w in weights]
+    floors = [int(q.to_integral_value(rounding=ROUND_FLOOR)) for q in quotas]
+    left = units - sum(floors)
+    priority = priority or list(range(len(weights)))
+    order = sorted(range(len(weights)), key=lambda i: (-(quotas[i] - floors[i]), priority[i], i))
+    for i in order[:left]:
+        floors[i] += 1
+    return [float(Decimal(f) * unit) for f in floors]
 
 
 class MicrofinanceFondPartage(models.Model):
@@ -121,23 +146,35 @@ class MicrofinanceFondPartage(models.Model):
             remaining_pct = max(float_round(100.0 - percent, precision_digits=4), 0.0)
             remaining_amount = max(float_round(base - amount, precision_rounding=rounding), 0.0) if base > 0 else 0.0
             weights = [max(o.percent_ref, 0.0) for o in others]
-            total = sum(weights)
-            if total <= 0:
-                weights, total = [1.0] * len(others), float(len(others))
-            cum_share = prev_pct = prev_amount = 0.0
-            for index, other in enumerate(others):
-                cum_share += weights[index] / total
-                if index == len(others) - 1:
-                    # reliquat d'arrondi sur la dernière des autres lignes
-                    cum_pct, cum_amount = remaining_pct, remaining_amount
-                else:
-                    cum_pct = float_round(remaining_pct * cum_share, precision_digits=4)
-                    cum_amount = float_round(remaining_amount * cum_share, precision_rounding=rounding)
-                other.percent = max(float_round(cum_pct - prev_pct, precision_digits=4), 0.0)
-                other.amount = max(float_round(cum_amount - prev_amount, precision_rounding=rounding), 0.0)
-                prev_pct, prev_amount = cum_pct, cum_amount
+            amounts = largest_remainder(remaining_amount, weights, rounding, self._hq_priority(others))
+            pcts = largest_remainder(remaining_pct, weights, 0.0001)
+            for other, other_pct, other_amount in zip(others, pcts, amounts):
+                other.percent = other_pct
+                other.amount = other_amount
         for line in lines:
             line.percent_ref, line.amount_ref = line.percent, line.amount
+
+    def _hq_priority(self, lines):
+        """Départage des restes égaux : la part du siège d'abord, puis l'ordre des lignes."""
+        hq = self.company_id
+        return [0 if line.company_id == hq else 1 for line in lines]
+
+    def _normalize_amounts(self):
+        """Ramène la somme des parts à EXACTEMENT le montant partagé (plus fort reste, au prorata des montants
+        saisis). Écart toléré : un quantum monétaire par ligne ; au-delà, la répartition est incomplète."""
+        self.ensure_one()
+        rounding = self.currency_id.rounding
+        lines = self.line_ids
+        gap = self.base_amount - sum(lines.mapped('amount'))
+        if float_is_zero(gap, precision_rounding=rounding):
+            return
+        if abs(gap) > rounding * len(lines) + rounding / 2.0:
+            raise UserError(_(
+                'La répartition est incomplète : %(reparti)s réparti sur %(base)s à partager (écart de %(ecart)s).'
+            ) % {'reparti': sum(lines.mapped('amount')), 'base': self.base_amount, 'ecart': float_round(gap, precision_rounding=rounding)})
+        amounts = largest_remainder(self.base_amount, lines.mapped('amount'), rounding, self._hq_priority(lines))
+        for line, amount in zip(lines, amounts):
+            line.with_context(fond_partage_defer_check=True).write({'amount': amount})
 
     @api.constrains('base_amount')
     def _check_base_amount(self):
@@ -174,10 +211,15 @@ class MicrofinanceFondPartage(models.Model):
             # Le pourcentage reste la référence : les montants sont recalculés dans la même
             # écriture (commandes), pour que le contrôle du total voie la base et les lignes à jour.
             for partage in self:
-                line_updates = [Command.update(line.id, {
-                    'amount': line._amount_from_percent(vals['base_amount'], line.percent),
-                    'percent': line.percent,
-                }) for line in partage.line_ids]
+                percents = partage.line_ids.mapped('percent')
+                rounding = partage.currency_id.rounding
+                # Les pourcentages ne totalisent pas forcément 100 (brouillon en cours de saisie) : on répartit
+                # la part de la base qu'ils représentent, exactement (plus fort reste).
+                share = float_round(vals['base_amount'] * sum(percents) / 100.0, precision_rounding=rounding)
+                new_amounts = (largest_remainder(share, percents, rounding, partage._hq_priority(partage.line_ids))
+                               if sum(percents) > 0 else [0.0] * len(percents))
+                line_updates = [Command.update(line.id, {'amount': amount, 'percent': line.percent})
+                                for line, amount in zip(partage.line_ids, new_amounts)]
                 super(MicrofinanceFondPartage, partage.with_context(fond_partage_defer_check=True)).write(
                     dict(vals, line_ids=line_updates))
             return True
@@ -199,18 +241,10 @@ class MicrofinanceFondPartage(models.Model):
         if not lines:
             raise UserError(_('Aucune agence à répartir.'))
         rounding = self.currency_id.rounding
-        share_pct = float_round(100.0 / len(lines), precision_digits=4)
-        share_amount = float_round(self.base_amount / len(lines), precision_rounding=rounding)
-        remaining_pct, remaining_amount = 100.0, self.base_amount
-        for line in lines[:-1]:
-            line.write({'percent': share_pct, 'amount': share_amount})
-            remaining_pct -= share_pct
-            remaining_amount -= share_amount
-        # reliquat d'arrondi sur la dernière ligne : total % = 100, total montants = base
-        lines[-1].write({
-            'percent': float_round(remaining_pct, precision_digits=4),
-            'amount': float_round(remaining_amount, precision_rounding=rounding),
-        })
+        amounts = largest_remainder(self.base_amount, [1.0] * len(lines), rounding, self._hq_priority(lines))
+        pcts = largest_remainder(100.0, [1.0] * len(lines), 0.0001, self._hq_priority(lines))
+        for line, amount, pct in zip(lines, amounts, pcts):
+            line.write({'percent': pct, 'amount': amount})
         return True
 
     def _percent_total_ok(self):
@@ -232,6 +266,7 @@ class MicrofinanceFondPartage(models.Model):
                 raise UserError(_(
                     'Le montant à partager (%(base)s) dépasse le reste partageable du fonds « %(fond)s » (%(reste)s).'
                 ) % {'base': partage.base_amount, 'fond': partage.fond_id.name, 'reste': partage.fond_id.reste_partageable})
+            partage._normalize_amounts()
             if not partage._percent_total_ok():
                 raise UserError(_(
                     'La répartition doit totaliser 100 %% du montant à partager (actuellement %.4f %%).'
