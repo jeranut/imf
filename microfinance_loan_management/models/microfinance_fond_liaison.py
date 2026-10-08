@@ -6,8 +6,9 @@ Validation d'un partage (une part par agence, société mère incluse) :
     relevé de chaque société :
       siège  : journal du fonds (FDBM/FDBN)   Dr 301xxx (liaison agence) / Cr 139500
       agence : journal crédit de la même banque (BMCR si FDBM, BNCR si FDBN)   Dr 139100 / Cr 301010
-  - part gardée par la société mère : UNE écriture, Dr journal crédit (BMCR/BNCR) / Cr journal du fonds,
-    même banque, sans compte de liaison.
+  - part gardée par la société mère : UNE écriture sur le journal du fonds, par les comptes en suspens :
+    Dr 139100 (entrant du journal crédit BMCR/BNCR, même banque) / Cr 139500 (sortant du journal du fonds),
+    sans compte de liaison ; chaque relevé solde ensuite son compte en suspens.
 Si le côté agence ne peut pas être créé (agence non configurée), le côté siège reste en suspens et la
 ligne passe en « envoyé, non reçu » ; le bouton « Générer le côté agence » le crée ensuite. Rien n'est
 généré si le fonds ne passe pas au grand livre (passer_gl faux) ou n'a pas de journal bancaire.
@@ -187,7 +188,7 @@ class MicrofinanceFondPartage(models.Model):
     def _move_vals(self, line, journal, label, debit_account, credit_account, side):
         return {
             'move_type': 'entry', 'date': self.date, 'journal_id': journal.id,
-            'ref': '%s - %s' % (self.name, label),
+            'ref': self.name,
             'microfinance_fond_partage_id': self.id, 'microfinance_fond_partage_line_id': line.id,
             'microfinance_partage_side': side,
             'line_ids': [
@@ -217,7 +218,7 @@ class MicrofinanceFondPartage(models.Model):
         if not inbound or not liaison:
             raise UserError(_("L'agence « %s » n'a pas de compte de paiement en suspens (139100) ou de compte de liaison configuré.") % agency.name)
         move = self._create_move(agency, self._move_vals(
-            line, journal, _('Fonds reçu %s') % self.fond_id.code, inbound, liaison, 'agency'))
+            line, journal, _('Fonds %s reçu') % self.fond_id.code, inbound, liaison, 'agency'))
         line.agency_move_id = move
         return move
 
@@ -235,12 +236,20 @@ class MicrofinanceFondPartage(models.Model):
             hq = partage.company_id
             for line in partage.line_ids.filtered(lambda l: l.amount > 0 and not l.hq_move_id):
                 if line.company_id == hq:
+                    # Part gardée : par les comptes en suspens, comme les parts envoyées. Le relevé du journal de
+                    # fonds solde le 139500, celui du journal crédit solde le 139100 (aucune écriture directe
+                    # entre les deux comptes bancaires, qui serait doublée par les relevés).
                     credit_journal = partage._credit_journal_for(fund_journal, hq)
                     if not credit_journal:
                         raise UserError(_("Journal crédit (même banque que le fonds) introuvable pour %s.") % hq.name)
+                    inbound = partage._payment_account(credit_journal, 'inbound')
+                    outbound = partage._payment_account(fund_journal, 'outbound')
+                    if not inbound or not outbound:
+                        raise UserError(_(
+                            "Comptes de paiement en suspens manquants pour la part gardée : entrant du journal crédit « %(c)s » "
+                            "ou sortant du journal de fonds « %(f)s ».") % {'c': credit_journal.display_name, 'f': fund_journal.display_name})
                     move = partage._create_move(hq, partage._move_vals(
-                        line, fund_journal, _('Part gardée %s') % fond.code,
-                        credit_journal.default_account_id, fund_journal.default_account_id, 'hq_own'))
+                        line, fund_journal, _('Part gardée %s') % fond.code, inbound, outbound, 'hq_own'))
                     line.hq_move_id = move
                     continue
                 liaison_hq = line.company_id.microfinance_liaison_hq_account_id
@@ -250,7 +259,8 @@ class MicrofinanceFondPartage(models.Model):
                         "Configurez le compte de liaison côté siège de l'agence « %s » (et le compte "
                         "en suspens sortant du journal du fonds) avant de valider le partage.") % line.company_id.name)
                 move = partage._create_move(hq, partage._move_vals(
-                    line, fund_journal, _('Fonds envoyé à %s') % line.company_id.name, liaison_hq, outbound, 'hq'))
+                    line, fund_journal, _('Fonds %(code)s envoyé à %(agence)s') % {'code': fond.code, 'agence': line.company_id.name},
+                    liaison_hq, outbound, 'hq'))
                 line.hq_move_id = move
                 try:
                     with self.env.cr.savepoint():

@@ -188,8 +188,13 @@ class TestFondLiaison(TestFondPartageBase):
         moves = self._moves(partage)
         self.assertEqual(len(moves), 1)
         self.assertEqual(moves.microfinance_partage_side, 'hq_own')
+        # part gardée par les comptes en suspens (139100 du journal crédit / 139500 du journal de fonds), jamais
+        # directement entre les deux comptes bancaires : les relevés des deux banques se rapprochent ensuite.
+        credit_journal = partage._credit_journal_for(self.fdbm, self.hq)
         self.assertEqual({(l.account_id, l.debit, l.credit) for l in moves.line_ids},
-                         {(self.hq_credit_bank, self.AMOUNT, 0.0), (self.hq_bank, 0.0, self.AMOUNT)})
+                         {(partage._payment_account(credit_journal, 'inbound'), self.AMOUNT, 0.0),
+                          (self.hq_out, 0.0, self.AMOUNT)})
+        self.assertFalse(set(moves.line_ids.account_id) & {self.hq_credit_bank, self.hq_bank})
 
     def test_no_moves_without_gl_or_without_fund_journal(self):
         # fonds sans passer_gl
