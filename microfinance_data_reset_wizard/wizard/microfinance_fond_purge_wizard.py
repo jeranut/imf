@@ -315,3 +315,329 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
                         "%(f)s : %(n)d ligne(s) de relevé rapprochée(s) avec les écritures du fonds - cochez « Défaire les "
                         "rapprochements bancaires ».") % {'f': label, 'n': len(entries)})
         return blockers
+
+    # ------------------------------------------------------------------ soldes de contrôle
+    def _balances(self, pairs):
+        """{(société, compte): solde des lignes comptabilisées}."""
+        self.env.flush_all()
+        result = {pair: 0.0 for pair in pairs}
+        if not pairs:
+            return result
+        companies = list({pair[0] for pair in pairs})
+        accounts = list({pair[1] for pair in pairs})
+        self.env.cr.execute("""
+            SELECT company_id, account_id, COALESCE(SUM(balance), 0)
+              FROM account_move_line
+             WHERE parent_state = 'posted' AND company_id = ANY(%s) AND account_id = ANY(%s)
+          GROUP BY company_id, account_id
+        """, (companies, accounts))
+        for company_id, account_id, balance in self.env.cr.fetchall():
+            if (company_id, account_id) in result:
+                result[(company_id, account_id)] = float(balance)
+        return result
+
+    # ------------------------------------------------------------------ cœur
+    def _purge(self, funds, collected):
+        """Dans la transaction en cours (savepoint géré par _run). Retourne les statistiques."""
+        self.ensure_one()
+        env = self.env
+        today = fields.Date.context_today(self)
+        reverse_mode = self.move_mode == 'reverse'
+        counts = []
+
+        def add(company, item, n, amount=0.0, note=''):
+            if n:
+                counts.append((company or '', item, n, amount, note))
+
+        def debit(moves):
+            return sum(moves.line_ids.mapped('debit'))
+
+        Move = env['account.move'].sudo().with_context(active_test=False)
+        all_moves = Move.browse()
+        targets = Move.browse()
+        plines = env['microfinance.fond.partage.line']
+        entries_all = env['microfinance.bank.statement.entry']
+        for c in collected:
+            fund = c['fund']
+            fund_company = fund._fund_company().name
+            add(fund_company, _('Fonds'), 1, 0.0, _('supprimé') if self.mode_raz == 'delete_fund' else _('remis à zéro'))
+            add(fund_company, _('Contributions'), len(c['contribs']), sum(c['contribs'].mapped('amount')))
+            for partage in c['partages']:
+                add(partage.company_id.name, _('Partages'), 1, partage.base_amount, partage.name)
+            for line in c['plines']:
+                add(line.company_id.name, _('Parts de partage'), 1, line.amount)
+            for alloc in c['allocs']:
+                add(alloc.company_id.name, _('Allocations'), 1, alloc.amount_allocated)
+            for rep in c['portfolio']:
+                add(rep.company_id.name, _('Répartitions de portefeuille'), 1, rep.base_amount)
+            all_moves |= c['moves']
+            targets |= self._targets(c['moves'])
+            plines |= c['plines']
+        reversible, drafts, neutral = self._split_moves(targets)
+        posted_effect = reversible if reverse_mode else (targets - drafts)
+        kept_mirrors = all_moves - targets
+        for company in targets.company_id | kept_mirrors.company_id:
+            mine = lambda recs: recs.filtered(lambda m: m.company_id == company)
+            add(company.name, _('Écritures en brouillon (supprimées)'), len(mine(drafts)), debit(mine(drafts)))
+            if reverse_mode:
+                add(company.name, _('Écritures comptabilisées (extournées)'), len(mine(reversible)),
+                    debit(mine(reversible)))
+                add(company.name, _('Écritures déjà neutralisées (conservées)'), len(mine(neutral)),
+                    debit(mine(neutral)))
+            else:
+                add(company.name, _('Écritures comptabilisées (supprimées)'), len(mine(targets - drafts)),
+                    debit(mine(targets - drafts)))
+            add(company.name, _('dont écritures miroirs des agences'), len(mine(targets).filtered(
+                lambda m: m.microfinance_partage_side == 'agency')))
+            add(company.name, _('Écritures miroirs des agences laissées en place (déliées)'), len(mine(kept_mirrors)))
+        entries_all = self._bank_entries(targets) if self.undo_bank else entries_all
+        for entry in entries_all:
+            add(entry.company_id.name, _('Lignes de relevé délettrées (remises à traiter)'), 1, entry.amount)
+
+        # Soldes avant et effet attendu (comptes touchés par les écritures + compte du fonds).
+        pairs = {(line.company_id.id, line.account_id.id) for line in targets.line_ids}
+        for c in collected:
+            if c['fund'].account_id:
+                pairs.add((c['fund']._fund_company().id, c['fund'].account_id.id))
+        before = self._balances(pairs)
+        impact = defaultdict(float)
+        for line in posted_effect.line_ids:
+            impact[(line.company_id.id, line.account_id.id)] -= line.balance
+
+        # 1. Rapprochements bancaires (avant toute extourne : une ligne lettrée ne peut pas être extournée).
+        if entries_all:
+            entries_all._cancel_treatment_unchecked(_('Purge des fonds'))
+
+        # 2. Répartitions de portefeuille (dépendent des allocations d'agence).
+        for c in collected:
+            repartitions = c['portfolio']
+            if repartitions:
+                to_cancel = repartitions.filtered(lambda r: r.state == 'validated')
+                if to_cancel:
+                    to_cancel.action_cancel()
+                repartitions.unlink()
+
+        # 3. Écritures : déliage des partages (RESTRICT), puis extourne / suppression.
+        plines.sudo().write({'hq_move_id': False, 'agency_move_id': False})
+        all_moves.write({'microfinance_fond_partage_id': False, 'microfinance_fond_partage_line_id': False})
+        created = Move.browse()
+        if reverse_mode:
+            for move in reversible:
+                company = move.company_id
+                created |= move.with_company(company).with_context(allowed_company_ids=[company.id])._reverse_moves(
+                    [{'date': today, 'ref': _('Extourne %s') % (move.ref or move.name)}], cancel=True)
+            drafts.unlink()
+        else:
+            reconciled = targets.line_ids.filtered(lambda l: l.matched_debit_ids or l.matched_credit_ids)
+            if reconciled:
+                reconciled.remove_move_reconcile()
+            targets.with_context(force_delete=True).unlink()
+        kept = (all_moves - drafts) if reverse_mode else kept_mirrors
+        kept_names = ['%s (%s)' % (m.name, m.company_id.name) for m in kept.exists()]
+        created_names = ['%s (%s)' % (m.name, m.company_id.name) for m in created]
+        for company in created.company_id:
+            add(company.name, _('Écritures d\'extourne créées'), len(created.filtered(lambda m: m.company_id == company)))
+
+        # 4. Partages (parts en cascade), contributions, allocations.
+        Partage = env['microfinance.fond.partage'].sudo().with_context(active_test=False, **TECH_CONTEXT)
+        Contribution = env['microfinance.fond.contribution'].sudo().with_context(active_test=False, **TECH_CONTEXT)
+        Allocation = env['microfinance.fond.allocation'].sudo().with_context(
+            active_test=False, fond_partage_technique=True, **TECH_CONTEXT)
+        for c in collected:
+            partages = Partage.browse(c['partages'].ids)
+            open_partages = partages.filtered(lambda p: p.state == 'validated')
+            if open_partages:
+                open_partages.write({'state': 'cancelled'})
+            partages.unlink()
+            Contribution.browse(c['contribs'].ids).unlink()
+            Allocation.browse(c['allocs'].ids).unlink()
+
+        # 5. Fonds : conservés (stockés recalculés) ou supprimés (compte automatique archivé).
+        archived = []
+        parent = env['res.company']._get_microfinance_parent()
+        allowed_move_ids = set(all_moves.ids) | set(created.ids)
+        Fond = env['microfinance.fond.credit'].sudo().with_context(active_test=False)
+        for c in collected:
+            fund = Fond.browse(c['fund'].id)
+            if self.mode_raz == 'reset':
+                if fund.destination != 'exploitation' and fund.scope == 'multi_company':
+                    fund.write({'allocation_required': bool(parent)})
+                continue
+            account = fund.account_id if fund.account_auto else env['account.account']
+            company = fund._fund_company()
+            fund_id = fund.id
+            fund.with_context(**TECH_CONTEXT).unlink()
+            if not account:
+                continue
+            others = Fond.search_count([('account_id', '=', account.id), ('id', '!=', fund_id)])
+            lines = env['account.move.line'].sudo().search([('account_id', '=', account.id)])
+            foreign = lines.filtered(lambda l: l.move_id.id not in allowed_move_ids)
+            posted_balance = sum(lines.filtered(lambda l: l.parent_state == 'posted').mapped('balance'))
+            if not others and not foreign and float_is_zero(posted_balance, precision_digits=2):
+                account.write({'deprecated': True})
+                archived.append((company.name, account.code))
+        for company_name, code in archived:
+            add(company_name, _('Comptes d\'origine archivés'), 1, 0.0, code)
+
+        # 6. Recalcul des montants stockés et rafraîchissement.
+        remaining = Fond.browse([c['fund'].id for c in collected]).exists()
+        for fname in STORED_FUND_FIELDS:
+            env.add_to_compute(remaining._fields[fname], remaining)
+        env.flush_all()
+        env.invalidate_all()
+
+        # 7. Soldes après et contrôle.
+        after = self._balances(pairs)
+        accounts = {a.id: a for a in env['account.account'].sudo().browse({p[1] for p in pairs})}
+        companies = {c.id: c for c in env['res.company'].sudo().browse({p[0] for p in pairs})}
+        balance_rows, anomalies = [], []
+        for pair in sorted(pairs, key=lambda p: (companies[p[0]].name, accounts[p[1]].code)):
+            b, a, e = before[pair], after[pair], impact.get(pair, 0.0)
+            flag = ''
+            if not float_is_zero(a - (b + e), precision_digits=2):
+                flag = _('ANOMALIE : écart avec l\'effet attendu')
+                anomalies.append('%s %s : avant %.2f, attendu %.2f, obtenu %.2f' % (
+                    companies[pair[0]].name, accounts[pair[1]].code, b, b + e, a))
+            elif not float_is_zero(a, precision_digits=2):
+                flag = _('Solde non nul')
+            balance_rows.append((companies[pair[0]].name, accounts[pair[1]].code, accounts[pair[1]].name, b, e, a, flag))
+        return {'counts': counts, 'balances': balance_rows, 'anomalies': anomalies, 'kept': kept_names,
+                'created': created_names, 'funds': ['%s « %s »' % (c['fund'].code, c['fund'].name) for c in collected],
+                'companies': sorted({row[0] for row in balance_rows} | {row[0] for row in counts if row[0]})}
+
+    # ------------------------------------------------------------------ présentation et audit
+    @staticmethod
+    def _fmt_counts(counts):
+        return '\n'.join('%s | %s | %d | %.2f%s' % (company, item, n, amount, (' | ' + note) if note else '')
+                         for company, item, n, amount, note in counts)
+
+    @staticmethod
+    def _fmt_balances(rows, index):
+        return '\n'.join('%s | %s %s | %.2f' % (row[0], row[1], row[2], row[index]) for row in rows)
+
+    def _write_report(self, stats, blockers, execute, error=None):
+        self.ensure_one()
+        self.line_ids.unlink()
+        self.balance_ids.unlink()
+        if stats:
+            Line = self.env['microfinance.fond.purge.wizard.line']
+            for seq, (company, item, n, amount, note) in enumerate(sorted(stats['counts'], key=lambda r: (r[0], r[1]))):
+                Line.create({'wizard_id': self.id, 'sequence': seq, 'company_name': company, 'item': item, 'count': n,
+                             'amount': amount, 'note': note})
+            Balance = self.env['microfinance.fond.purge.wizard.balance']
+            for company, code, name, b, e, a, flag in stats['balances']:
+                Balance.create({'wizard_id': self.id, 'company_name': company, 'account_code': code, 'account_name': name,
+                                'before': b, 'impact': e, 'after': a, 'flag': flag})
+        lines = []
+        stamp = datetime.now().strftime('%H:%M:%S')
+        lines.append('[%s] %s' % (stamp, _("EXÉCUTION RÉELLE") if execute else _("SIMULATION (rien n'est modifié)")))
+        for blocker in blockers:
+            lines.append('BLOQUÉ : %s' % blocker)
+        if error:
+            lines.append('ERREUR : %s' % error)
+            lines.append(_("Rollback complet effectué - aucune donnée modifiée."))
+        if stats:
+            lines.append(_("Fonds : %s") % ', '.join(stats['funds']))
+            if stats['anomalies']:
+                lines.append(_("ANOMALIES DE SOLDE (rien n'a été corrigé) :"))
+                lines += ['  - %s' % a for a in stats['anomalies']]
+            else:
+                lines.append(_("Soldes de contrôle conformes à l'effet attendu."))
+            if stats['kept']:
+                lines.append(_("Écritures conservées et déliées : %s") % ', '.join(stats['kept']))
+            if stats['created']:
+                lines.append(_("Extournes créées : %s") % ', '.join(stats['created']))
+        self.log = '\n'.join(lines)
+
+    def _create_audit(self, stats, execute, error):
+        self.ensure_one()
+        user = self.env.user
+        self.env['microfinance.fond.purge.log'].sudo().create({
+            'name': 'PURGE-FONDS/%s' % datetime.now().strftime('%Y%m%d-%H%M%S'),
+            'user_id': user.id, 'user_name': user.name,
+            'state': 'failed' if error else 'done',
+            'companies': ', '.join(stats['companies']) if stats else '',
+            'scope': dict(self._fields['scope'].selection)[self.scope],
+            'funds': '\n'.join(stats['funds']) if stats else '',
+            'mode_raz': dict(self._fields['mode_raz'].selection)[self.mode_raz],
+            'move_mode': dict(self._fields['move_mode'].selection)[self.move_mode],
+            'options': 'miroirs agences : %s ; rapprochements défaits : %s' % (
+                _('oui') if self.include_mirror else _('non'), _('oui') if self.undo_bank else _('non')),
+            'counts': self._fmt_counts(stats['counts']) if stats else '',
+            'balances_before': self._fmt_balances(stats['balances'], 3) if stats else '',
+            'balances_after': self._fmt_balances(stats['balances'], 5) if stats else '',
+            'anomalies': '\n'.join(stats['anomalies']) if stats else '',
+            'kept_moves': '\n'.join(stats['kept'] + stats['created']) if stats else '',
+            'message': error or '',
+        })
+
+    # ------------------------------------------------------------------ exécution
+    def _run(self, execute):
+        self.ensure_one()
+        funds = self._get_funds()
+        collected = [self._collect(fund) for fund in funds]
+        blockers = self._blockers(funds, collected)
+        if blockers:
+            self.write({'has_blockers': True, 'simulated_key': False})
+            self._write_report(None, blockers, execute)
+            return self._reopen()
+        savepoint = self.env.cr.savepoint()
+        stats, error = None, None
+        try:
+            stats = self._purge(funds, collected)
+        except Exception as exc:  # rollback complet, quelle que soit l'erreur
+            savepoint.close(rollback=True)
+            self.env.invalidate_all()
+            error = '%s: %s' % (type(exc).__name__, exc)
+        else:
+            savepoint.close(rollback=not execute)
+            self.env.invalidate_all()
+        key = self._selection_key()
+        if execute:
+            self._create_audit(stats, execute, error)
+            self.write({'done': not error, 'simulated_key': False if not error else self.simulated_key,
+                        'has_blockers': False, 'confirm_text': False})
+        else:
+            self.write({'has_blockers': bool(error), 'simulated_key': False if error else key})
+        self._write_report(stats, [], execute, error)
+        return self._reopen()
+
+    def _acquire_lock_or_raise(self):
+        self.env.cr.execute("SELECT pg_try_advisory_xact_lock(%s)", (self._LOCK_KEY,))
+        if not self.env.cr.fetchone()[0]:
+            raise UserError(_("Une autre purge de fonds est déjà en cours."))
+
+    def action_simulate(self):
+        self.ensure_one()
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError(_("Réservé à l'administrateur technique."))
+        self._acquire_lock_or_raise()
+        return self._run(execute=False)
+
+    def action_execute(self):
+        self.ensure_one()
+        if not self.env.user.has_group('base.group_system'):
+            raise AccessError(_("Réservé à l'administrateur technique."))
+        if self.env['ir.config_parameter'].sudo().get_param(self.APPLY_PARAM) != 'True':
+            raise UserError(_(
+                "L'exécution réelle est désactivée par le paramètre système « %s » (absent ou différent de \"True\"). "
+                "Un administrateur technique doit l'activer explicitement.") % self.APPLY_PARAM)
+        if (self.confirm_text or '').strip() != self.PHRASE:
+            raise UserError(_('Tapez exactement « %s » pour confirmer.') % self.PHRASE)
+        if not self.simulated_key or self.simulated_key != self._selection_key():
+            raise UserError(_("Lancez d'abord la simulation de cette même sélection (la sélection a changé ou n'a pas "
+                              "été simulée)."))
+        self._acquire_lock_or_raise()
+        return self._run(execute=True)
+
+    def action_reset(self):
+        self.ensure_one()
+        self.write({'simulated_key': False, 'has_blockers': False, 'done': False, 'confirm_text': False, 'log': False})
+        self.line_ids.unlink()
+        self.balance_ids.unlink()
+        return self._reopen()
+
+    def _reopen(self):
+        self.ensure_one()
+        return {'type': 'ir.actions.act_window', 'res_model': self._name, 'res_id': self.id, 'view_mode': 'form',
+                'target': 'new'}
