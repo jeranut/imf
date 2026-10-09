@@ -29,10 +29,21 @@ class ResCompany(models.Model):
              "l'agence moins l'utilisé. Activé, il se fait sur le montant reçu en banque (ligne en suspens lettrée "
              "avec un relevé) moins l'utilisé : l'agence ne décaisse pas un fonds encore en transit.",
     )
+    microfinance_transfer_rounding_unit = fields.Float(
+        string="Unité d'arrondi des virements", default=1.0, digits=(16, 4),
+        help="Les parts d'un partage de fonds sont des multiples de cette unité (1 = Ariary entier, la plus petite "
+             "unité des virements), la somme des parts restant exactement égale au montant partagé. Indépendant de "
+             "la précision de la monnaie. Lue sur la société mère du partage ; 0 = précision de la monnaie.",
+    )
 
 
 class ResConfigSettings(models.TransientModel):
     _inherit = 'res.config.settings'
+
+    microfinance_transfer_rounding_unit = fields.Float(
+        related='company_id.microfinance_transfer_rounding_unit', readonly=False, digits=(16, 4),
+        string="Unité d'arrondi des virements",
+    )
 
     microfinance_fond_require_received = fields.Boolean(
         related='company_id.microfinance_fond_require_received', readonly=False,

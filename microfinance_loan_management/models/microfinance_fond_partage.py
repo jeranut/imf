@@ -117,11 +117,12 @@ class MicrofinanceFondPartage(models.Model):
         if not lines or self.state != 'draft':
             return
         currency = self.currency_id or self.env.company.currency_id
-        rounding = currency.rounding
+        currency_rounding = currency.rounding
         base = self.base_amount or 0.0
+        rounding = self._share_rounding(base)
         edited = amount_edited = None
         for line in lines:
-            a_changed = float_compare(line.amount, line.amount_ref, precision_rounding=rounding) != 0
+            a_changed = float_compare(line.amount, line.amount_ref, precision_rounding=currency_rounding) != 0
             p_changed = float_compare(line.percent, line.percent_ref, precision_digits=4) != 0
             if a_changed or p_changed:
                 # les deux ont changé : le montant prime
@@ -154,6 +155,17 @@ class MicrofinanceFondPartage(models.Model):
         for line in lines:
             line.percent_ref, line.amount_ref = line.percent, line.amount
 
+    def _share_rounding(self, total=None):
+        """Pas des parts : l'unité d'arrondi des virements de la société mère (1 = Ariary entier) si le montant
+        partagé en est un multiple, sinon la précision de la monnaie (la somme des parts doit rester exacte)."""
+        currency_rounding = (self.currency_id or self.env.company.currency_id).rounding
+        unit = self.company_id.microfinance_transfer_rounding_unit or 0.0
+        total = self.base_amount if total is None else total
+        if unit > currency_rounding and float_is_zero(total - unit * round(total / unit),
+                                                      precision_rounding=currency_rounding):
+            return unit
+        return currency_rounding
+
     def _hq_priority(self, lines):
         """Départage des restes égaux : la part du siège d'abord, puis l'ordre des lignes."""
         hq = self.company_id
@@ -163,7 +175,7 @@ class MicrofinanceFondPartage(models.Model):
         """Ramène la somme des parts à EXACTEMENT le montant partagé (plus fort reste, au prorata des montants
         saisis). Écart toléré : un quantum monétaire par ligne ; au-delà, la répartition est incomplète."""
         self.ensure_one()
-        rounding = self.currency_id.rounding
+        rounding = self._share_rounding()
         lines = self.line_ids
         gap = self.base_amount - sum(lines.mapped('amount'))
         if float_is_zero(gap, precision_rounding=rounding):
@@ -212,7 +224,7 @@ class MicrofinanceFondPartage(models.Model):
             # écriture (commandes), pour que le contrôle du total voie la base et les lignes à jour.
             for partage in self:
                 percents = partage.line_ids.mapped('percent')
-                rounding = partage.currency_id.rounding
+                rounding = partage._share_rounding(vals['base_amount'])
                 # Les pourcentages ne totalisent pas forcément 100 (brouillon en cours de saisie) : on répartit
                 # la part de la base qu'ils représentent, exactement (plus fort reste).
                 share = float_round(vals['base_amount'] * sum(percents) / 100.0, precision_rounding=rounding)
@@ -240,7 +252,7 @@ class MicrofinanceFondPartage(models.Model):
         lines = self.line_ids
         if not lines:
             raise UserError(_('Aucune agence à répartir.'))
-        rounding = self.currency_id.rounding
+        rounding = self._share_rounding()
         amounts = largest_remainder(self.base_amount, [1.0] * len(lines), rounding, self._hq_priority(lines))
         pcts = largest_remainder(100.0, [1.0] * len(lines), 0.0001, self._hq_priority(lines))
         for line, amount, pct in zip(lines, amounts, pcts):
@@ -252,7 +264,7 @@ class MicrofinanceFondPartage(models.Model):
         if not self.base_amount:
             return False
         # Tolérance : 0,01 point + quantum d'arrondi monétaire de chaque ligne.
-        tolerance = 0.01 + 100.0 * self.currency_id.rounding * len(self.line_ids) / self.base_amount
+        tolerance = 0.01 + 100.0 * self._share_rounding() * len(self.line_ids) / self.base_amount
         return abs(self.total_percent - 100.0) <= tolerance
 
     def action_validate(self):
@@ -349,8 +361,10 @@ class MicrofinanceFondPartageLine(models.Model):
 
     @api.model
     def _amount_from_percent(self, base_amount, percent):
-        currency = self.partage_id.currency_id or self.env.company.currency_id
-        return currency.round(base_amount * percent / 100.0)
+        partage = self.partage_id
+        currency = partage.currency_id or self.env.company.currency_id
+        rounding = partage._share_rounding(base_amount) if partage else currency.rounding
+        return float_round(base_amount * percent / 100.0, precision_rounding=rounding)
 
     @api.model
     def _percent_from_amount(self, base_amount, amount):
