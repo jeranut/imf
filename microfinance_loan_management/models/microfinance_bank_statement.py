@@ -170,8 +170,28 @@ class AccountBankStatement(models.Model):
         self.mf_entry_ids.filtered(lambda e: e.state == 'todo' and e.treatment).action_treat()
         return True
 
+    # ------------------------------------------------------------------ société
+    @api.model
+    def _mf_check_company_allowed(self, company):
+        """La société du journal doit être cochée dans le sélecteur de sociétés : sinon la règle multi-sociétés
+        refuserait la ligne avec un message technique. Les accès administrateur (sudo) ne passent pas par les règles."""
+        if self.env.su or not company or company in self.env.companies:
+            return
+        raise UserError(_("Sélectionnez la société « %s » dans le sélecteur de sociétés pour saisir ce relevé.")
+                        % company.name)
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        journals = self.env['account.journal'].sudo()
+        for vals in vals_list:
+            if vals.get('journal_id'):
+                self._mf_check_company_allowed(journals.browse(vals['journal_id']).company_id)
+        return super().create(vals_list)
+
     # ------------------------------------------------------------------ verrou d'un relevé validé
     def write(self, vals):
+        if vals.get('journal_id'):
+            self._mf_check_company_allowed(self.env['account.journal'].sudo().browse(vals['journal_id']).company_id)
         if LOCKED_FIELDS & set(vals) and not self.env.context.get('mf_allow'):
             if any(stmt.mf_state == 'validated' for stmt in self):
                 raise UserError(_("Un relevé validé n'est plus modifiable : rouvrez-le (comptable) avec un motif."))

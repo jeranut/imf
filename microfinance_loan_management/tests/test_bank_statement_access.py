@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, UserError
 
 from .test_fond_liaison import TestFondLiaison
 
@@ -110,3 +110,45 @@ class TestBankStatementAccess(TestFondLiaison):
         self.assertIn('Saisir un relevé', arch(self.chief))
         self.assertIn('Saisir un relevé', arch(self.accountant))
         self.assertNotIn('Saisir un relevé', arch(self.cashier))
+
+    # ------------------------------------------------------------------ société de la ligne
+    def _create_statement_as(self, user, journal, allowed):
+        env_user = self.env['account.bank.statement'].with_user(user).with_context(
+            allowed_company_ids=[c.id for c in allowed])
+        return env_user.create({
+            'journal_id': journal.id, 'mf_state': 'draft', 'mf_date_from': '2026-10-01', 'mf_date_to': '2026-10-31',
+            'balance_start': 0.0, 'balance_end_real': 5.0,
+            'mf_entry_ids': [(0, 0, {'date': '2026-10-05', 'name': 'Dépôt', 'amount_in': 5.0})]})
+
+    def test_statement_with_lines_for_journal_company_only_selected(self):
+        stmt = self._create_statement_as(self.accountant, self.fdbm, [self.hq])
+        self.assertEqual(stmt.mf_entry_ids.company_id, self.hq)
+
+    def test_statement_line_company_is_the_journal_one_when_several_companies_selected(self):
+        stmt = self._create_statement_as(self.accountant, self.fdbm, [self.agency, self.hq])
+        self.assertEqual(stmt.company_id, self.hq)
+        self.assertEqual(stmt.mf_entry_ids.company_id, self.hq)
+
+    def test_journal_of_unselected_company_gives_a_clear_message(self):
+        with self.assertRaises(UserError) as cm:
+            self._create_statement_as(self.accountant, self.fdbm, [self.agency])
+        self.assertIn('Sélectionnez la société', cm.exception.args[0])
+        self.assertIn(self.hq.name, cm.exception.args[0])
+
+    def test_adding_a_line_to_a_statement_of_unselected_company_gives_a_clear_message(self):
+        entries = self.env['microfinance.bank.statement.entry'].with_user(self.accountant).with_context(
+            allowed_company_ids=[self.agency.id])
+        with self.assertRaises(UserError) as cm:
+            entries.create({'statement_id': self.hq_stmt.id, 'name': 'X', 'amount_in': 1.0, 'date': '2026-10-06'})
+        self.assertIn('Sélectionnez la société', cm.exception.args[0])
+
+    def test_agency_user_cannot_read_or_write_lines_of_another_company(self):
+        entry = self.hq_stmt.mf_entry_ids
+        self.assertTrue(entry)
+        as_chief = entry.with_user(self.chief)
+        with self.assertRaises(AccessError):
+            as_chief.read(['name'])
+        with self.assertRaises(AccessError):
+            as_chief.write({'name': 'pirate'})
+        self.assertFalse(self.env['microfinance.bank.statement.entry'].with_user(self.chief).search(
+            [('id', '=', entry.id)]))

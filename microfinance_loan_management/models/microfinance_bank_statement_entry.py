@@ -127,7 +127,12 @@ class MicrofinanceBankStatementEntry(models.Model):
         if any(s.mf_state == 'validated' for s in statements):
             raise UserError(_("Un relevé validé n'est plus modifiable."))
         last_dates = {}
+        for stmt in statements.sudo():
+            self.env['account.bank.statement']._mf_check_company_allowed(stmt.journal_id.company_id)
         for vals in vals_list:
+            if vals.get('statement_id'):  # société posée à l'insertion, jamais déduite d'un enregistrement non enregistré
+                vals['company_id'] = self.env['account.bank.statement'].sudo().browse(
+                    vals['statement_id']).journal_id.company_id.id
             if not vals.get('date') and vals.get('statement_id'):
                 stmt = self.env['account.bank.statement'].browse(vals['statement_id'])
                 vals['date'] = last_dates.get(stmt.id) or (stmt.mf_entry_ids.sorted('id')[-1:].date) or stmt.mf_date_from
