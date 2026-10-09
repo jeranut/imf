@@ -20,13 +20,14 @@
         <field name="groups" eval="[]"/>
     </record>
 
-    <!-- company_id est un champ related=fond_id.company_id, store=True sur la contribution :
-         on peut donc appliquer directement le même domaine de partage optionnel sans jointure
-         via fond_id. -->
+    <!-- Contribution : company_id est un champ related=fond_id.company_id, store=True. Une contribution d'un fonds
+         d'agence est visible de son agence ; celle d'un fonds multi-agences (company_id vide) n'est lisible que de
+         la société qui l'a saisie (la mère) : une agence ne doit pas voir le dépôt total du bailleur, seulement sa
+         part (allocation). Les totaux stockés du fonds sont calculés en sudo (microfinance_fond_vue_agence.py). -->
     <record id="microfinance_fond_contribution_company_rule" model="ir.rule">
-        <field name="name">Microfinance contribution bailleur : partage optionnel par société</field>
+        <field name="name">Microfinance contribution bailleur : agence ou société de saisie</field>
         <field name="model_id" ref="model_microfinance_fond_contribution"/>
-        <field name="domain_force">['|', ('company_id', 'in', company_ids), ('company_id', '=', False)]</field>
+        <field name="domain_force">['|', ('company_id', 'in', company_ids), '&amp;', ('company_id', '=', False), ('saisie_company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[]"/>
     </record>
 
