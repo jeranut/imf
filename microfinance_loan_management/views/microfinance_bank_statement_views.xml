@@ -120,15 +120,23 @@
         <field name="view_mode">tree,form</field>
         <field name="domain">[('mf_state', '!=', False)]</field>
         <field name="context">{'default_mf_state': 'draft'}</field>
+        <field name="groups_id" eval="[(6, 0, [ref('microfinance_loan_management.group_microfinance_finance'),
+            ref('microfinance_loan_management.group_microfinance_comptable'),
+            ref('microfinance_loan_management.group_microfinance_auditor'), ref('account.group_account_manager')])]"/>
         <field name="search_view_id" ref="view_microfinance_bank_statement_search"/>
         <field name="view_ids" eval="[(5, 0, 0),
             (0, 0, {'view_mode': 'tree', 'view_id': ref('view_microfinance_bank_statement_tree')}),
             (0, 0, {'view_mode': 'form', 'view_id': ref('view_microfinance_bank_statement_form')})]"/>
     </record>
 
-    <menuitem id="menu_microfinance_bank_statement" name="Relevés bancaires" parent="menu_caisse_root"
-              action="action_microfinance_bank_statement" sequence="30"
-              groups="microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor"/>
+    <!-- Comptabilité > Banque > Relevés bancaires : travail comptable, pas de caisse. Section placée entre « Journaux »
+         (séquence 1) et « Gestion » (séquence 10) du menu Comptabilité. Réservé à Finance (dont Gestionnaire), Comptable,
+         gestionnaire comptable d'Odoo, et Auditeur en lecture ; pas au Caissier. -->
+    <menuitem id="menu_microfinance_bank_section" name="Banque" parent="account.menu_finance_entries" sequence="5"
+              groups="microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor,account.group_account_manager"/>
+    <menuitem id="menu_microfinance_bank_statement" name="Relevés bancaires" parent="menu_microfinance_bank_section"
+              action="action_microfinance_bank_statement" sequence="10"
+              groups="microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor,account.group_account_manager"/>
 
     <!-- Assistant : motif d'annulation d'un traitement ou de réouverture d'un relevé -->
     <record id="view_microfinance_bank_cancel_wizard_form" model="ir.ui.view">
@@ -170,8 +178,10 @@
         <field name="inherit_id" ref="account.account_journal_dashboard_kanban_view"/>
         <field name="arch" type="xml">
             <xpath expr="//button[@name='action_configure_bank_journal']" position="replace">
-                <button name="action_mf_new_statement" type="object" class="btn btn-primary">Saisir un relevé</button>
-                <div t-if="dashboard.mf_enabled" class="mt-2 small">
+                <button name="action_mf_new_statement" type="object" class="btn btn-primary"
+                        groups="microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_comptable,account.group_account_manager">Saisir un relevé</button>
+                <div t-if="dashboard.mf_enabled" class="mt-2 small"
+                     groups="microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor,account.group_account_manager">
                     <div>Solde du relevé<t t-if="dashboard.mf_last_statement"> (au <t t-esc="dashboard.mf_last_statement"/>)</t> : <strong t-esc="dashboard.mf_statement_balance"/></div>
                     <div>Solde comptable : <strong t-esc="dashboard.mf_book_balance"/></div>
                     <div t-att-class="dashboard.mf_gap_nonzero and 'text-danger' or 'text-success'">Écart : <strong t-esc="dashboard.mf_gap"/></div>
