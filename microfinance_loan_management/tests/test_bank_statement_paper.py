@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
+from unittest.mock import patch
+
 from odoo.exceptions import AccessError, UserError
 from odoo.tests import Form
 
+from ..models.res_company import ResCompany
 from .test_fond_liaison import TestFondLiaison
 from .test_fond_origine import TestFondOrigine
 
@@ -17,7 +20,9 @@ class TestBankStatementPaper(TestFondLiaison):
 
     @classmethod
     def setUpClass(cls):
-        super().setUpClass()
+        # base déjà configurée avec une société mère (MOWGLI) : les fixtures de départ la refuseraient
+        with patch.object(ResCompany, '_get_microfinance_parent', lambda self: self.browse()):
+            super().setUpClass()
         base = cls.env.ref('base.group_user')
         finance = cls.env.ref('microfinance_loan_management.group_microfinance_finance')
         comptable = cls.env.ref('microfinance_loan_management.group_microfinance_comptable')
