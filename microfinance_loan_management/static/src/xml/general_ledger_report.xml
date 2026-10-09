@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="microfinance_loan_management.GeneralLedgerReport">
+        <div class="o_bak_journal_ledger_report">
+
+            <div class="bak-toolbar">
+                <div class="bak-left">
+                    <button class="btn btn-primary" t-on-click="this.printPdf">PDF</button>
+                    <button class="btn btn-secondary" t-on-click="this.exportXlsx">XLSX</button>
+                    <strong t-esc="state.title"/>
+                </div>
+
+                <div class="bak-filterbar">
+                    <div class="bak-dropdown">
+                        <button class="bak-filter-button" type="button" t-on-click="() => this.toggleDropdown('period')">
+                            <i class="fa fa-calendar"/>
+                            <span t-esc="periodButtonLabel()"/>
+                        </button>
+                        <div t-if="this.isDropdownOpen('period')" class="bak-menu bak-date-menu">
+                            <button type="button" t-on-click="() => this.selectPeriodPreset('month')">Mois en cours</button>
+                            <button type="button" t-on-click="() => this.selectPeriodPreset('quarter')">Trimestre en cours</button>
+                            <button type="button" t-on-click="() => this.selectPeriodPreset('year')">Exercice en cours</button>
+                            <div class="bak-menu-separator"/>
+                            <label class="bak-menu-field">
+                                Du
+                                <input type="date" t-att-value="state.dateFrom" t-on-change="this.onDateFromChange"/>
+                            </label>
+                            <label class="bak-menu-field">
+                                Au
+                                <input type="date" t-att-value="state.dateTo" t-on-change="this.onDateToChange"/>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="bak-dropdown">
+                        <button t-att-class="state.selectedJournalIds.length !== state.journals.length ? 'bak-filter-button active' : 'bak-filter-button'" type="button" t-on-click="() => this.toggleDropdown('journals')">
+                            <i class="fa fa-book"/>
+                            <span t-esc="state.journalsLabel"/>
+                        </button>
+                        <div t-if="this.isDropdownOpen('journals')" class="bak-menu bak-journal-menu">
+                            <button type="button" t-on-click="this.clearJournals">Tous les journaux</button>
+                            <div class="bak-menu-separator"/>
+                            <t t-foreach="state.journals" t-as="journal" t-key="journal.id">
+                                <label t-att-class="isJournalSelected(journal.id) ? 'bak-check-row active' : 'bak-check-row'">
+                                    <input type="checkbox" t-att-checked="isJournalSelected(journal.id)" t-on-change="() => this.toggleJournal(journal.id)"/>
+                                    <span t-esc="journal.name"/>
+                                </label>
+                            </t>
+                            <div t-if="!state.journals.length" class="bak-empty-menu">Aucun journal actif</div>
+                        </div>
+                    </div>
+
+                    <div class="bak-dropdown">
+                        <button class="bak-filter-button" type="button" t-on-click="() => this.toggleDropdown('entries')">
+                            <i class="fa fa-sliders"/>
+                            <span t-esc="state.targetMoveLabel"/>
+                        </button>
+                        <div t-if="this.isDropdownOpen('entries')" class="bak-menu">
+                            <button type="button" t-att-class="state.targetMove === 'all' ? 'active' : ''" t-on-click="() => this.setTargetMove('all')">Toutes les écritures</button>
+                            <button type="button" t-att-class="state.targetMove === 'posted' ? 'active' : ''" t-on-click="() => this.setTargetMove('posted')">Pièces comptabilisées</button>
+                        </div>
+                    </div>
+
+                    <div class="bak-dropdown">
+                        <button class="bak-filter-button" type="button" t-on-click="() => this.toggleDropdown('accounts')">
+                            <i class="fa fa-list"/>
+                            <span t-esc="displayAccountLabel()"/>
+                        </button>
+                        <div t-if="this.isDropdownOpen('accounts')" class="bak-menu">
+                            <button type="button" t-att-class="state.displayAccount === 'all' ? 'active' : ''" t-on-click="() => this.setDisplayAccount('all')">Tous les comptes</button>
+                            <button type="button" t-att-class="state.displayAccount === 'movement' ? 'active' : ''" t-on-click="() => this.setDisplayAccount('movement')">Avec mouvements</button>
+                            <button type="button" t-att-class="state.displayAccount === 'not_zero' ? 'active' : ''" t-on-click="() => this.setDisplayAccount('not_zero')">Solde différent de 0</button>
+                        </div>
+                    </div>
+
+                    <div class="bak-dropdown">
+                        <button class="bak-filter-button" type="button" t-on-click="() => this.toggleDropdown('sort')">
+                            <i class="fa fa-sort"/>
+                            <span t-esc="sortLabel()"/>
+                        </button>
+                        <div t-if="this.isDropdownOpen('sort')" class="bak-menu">
+                            <button type="button" t-att-class="state.sortby === 'sort_date' ? 'active' : ''" t-on-click="() => this.setSortby('sort_date')">Date</button>
+                            <button type="button" t-att-class="state.sortby === 'sort_journal_partner' ? 'active' : ''" t-on-click="() => this.setSortby('sort_journal_partner')">Journal et tiers</button>
+                        </div>
+                    </div>
+
+                    <div class="bak-dropdown">
+                        <button t-att-class="state.initBalance ? 'bak-filter-button active' : 'bak-filter-button'" type="button" t-on-click="this.toggleInitBalance">
+                            <i t-att-class="state.initBalance ? 'fa fa-check-square-o' : 'fa fa-square-o'"/>
+                            <span>Soldes initiaux</span>
+                        </button>
+                    </div>
+
+                    <div class="bak-dropdown">
+                        <button class="bak-filter-button" type="button" t-on-click="() => this.toggleDropdown('currency')">
+                            <i class="fa fa-money"/>
+                            <span t-esc="currencyButtonLabel()"/>
+                        </button>
+                        <div t-if="this.isDropdownOpen('currency')" class="bak-menu">
+                            <button type="button" t-att-class="state.currencyFormat === 'full' ? 'active' : ''" t-on-click="() => this.setCurrencyFormat('full')">En .Ar</button>
+                            <button type="button" t-att-class="state.currencyFormat === 'ar' ? 'active' : ''" t-on-click="() => this.setCurrencyFormat('ar')">En Ar</button>
+                            <button type="button" t-att-class="state.currencyFormat === 'kar' ? 'active' : ''" t-on-click="() => this.setCurrencyFormat('kar')">En KAr</button>
+                            <button type="button" t-att-class="state.currencyFormat === 'mar' ? 'active' : ''" t-on-click="() => this.setCurrencyFormat('mar')">En MAr</button>
+                        </div>
+                    </div>
+
+                    <div class="bak-search">
+                        <i class="fa fa-search"/>
+                        <input type="text" t-att-placeholder="onSearchPlaceholder()" t-att-value="state.search" t-on-input="this.onSearchInput"/>
+                    </div>
+                </div>
+            </div>
+
+            <div t-if="state.unpostedEntriesExist" class="bak-alert-banner">
+                <i class="fa fa-info-circle"/>
+                <span>Il y a des pièces non comptabilisées sur cette période.</span>
+                <a href="#" t-on-click.prevent="this.openUnpostedEntries">Voir les pièces</a>
+            </div>
+
+            <div class="bak-page-wrapper">
+                <div class="bak-page">
+
+                    <div class="bak-report-title">
+                        <h2 t-esc="state.title"/>
+                        <div t-esc="state.companyName"/>
+                    </div>
+
+                    <div class="bak-report-meta">
+                        <div><span>Période</span><strong t-esc="periodButtonLabel()"/></div>
+                        <div><span>Journaux</span><strong t-esc="state.journalsLabel"/></div>
+                        <div><span>Pièces</span><strong t-esc="state.targetMoveLabel"/></div>
+                    </div>
+
+                    <t t-if="state.loading">
+                        <div class="bak-loading">Chargement du grand livre...</div>
+                    </t>
+                    <t t-if="state.error">
+                        <div class="alert alert-danger" t-esc="state.error"/>
+                    </t>
+
+                    <t t-if="!state.loading and !state.error and state.reportData">
+                        <div t-if="!accounts().length" class="bak-empty-menu">Aucun compte pour ces filtres.</div>
+                        <table t-if="accounts().length" class="bak-ledger-table">
+                            <thead>
+                                <tr>
+                                    <th>Compte</th><th class="text-end">Solde initial</th>
+                                    <th class="text-end">Débit</th><th class="text-end">Crédit</th>
+                                    <th class="text-end">Solde final</th>
+                                </tr>
+                            </thead>
+                            <t t-foreach="accounts()" t-as="account" t-key="account.id">
+                                <tbody>
+                                    <tr class="bak-gl-account-header" t-on-click="() => this.toggleAccount(account)">
+                                        <td>
+                                            <button class="bak-caret" type="button">
+                                                <t t-if="!isFolded('account_' + account.id)">▾</t>
+                                                <t t-else="">▸</t>
+                                            </button>
+                                            <span t-esc="account.code + ' — ' + account.name"/>
+                                        </td>
+                                        <td class="text-end" t-esc="formatAmount(account.opening)"/>
+                                        <td class="text-end" t-esc="formatAmount(account.debit)"/>
+                                        <td class="text-end" t-esc="formatAmount(account.credit)"/>
+                                        <td class="text-end" t-esc="formatAmount(account.closing)"/>
+                                    </tr>
+                                    <tr t-if="!isFolded('account_' + account.id)">
+                                        <td colspan="5">
+                                            <table class="bak-ledger-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Date</th><th>Pièce</th><th>Journal</th><th>Tiers</th>
+                                                        <th>Libellé</th><th class="text-end">Débit</th>
+                                                        <th class="text-end">Crédit</th><th class="text-end">Solde cumulé</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr t-if="state.initBalance">
+                                                        <td colspan="7">Solde initial</td>
+                                                        <td class="text-end" t-esc="formatAmount(account.opening)"/>
+                                                    </tr>
+                                                    <tr t-foreach="lines(account).rows" t-as="line" t-key="line.line_id">
+                                                        <td t-esc="formatDate(line.date)"/>
+                                                        <td>
+                                                            <a href="#" t-on-click.prevent="() => this.openMove(line.move_id)" t-esc="line.piece"/>
+                                                            <i class="fa fa-search bak-loupe" title="Ouvrir la pièce" t-on-click="() => this.openMove(line.move_id)"/>
+                                                        </td>
+                                                        <td t-esc="line.journal"/>
+                                                        <td t-esc="line.partner_name"/>
+                                                        <td t-esc="line.label"/>
+                                                        <td class="text-end" t-esc="formatAmount(line.debit)"/>
+                                                        <td class="text-end" t-esc="formatAmount(line.credit)"/>
+                                                        <td class="text-end" t-esc="formatAmount(line.balance)"/>
+                                                    </tr>
+                                                    <tr t-if="lines(account).loading"><td colspan="8">Chargement...</td></tr>
+                                                    <tr t-if="!account.count and !lines(account).loading"><td colspan="8">Aucun mouvement sur la période.</td></tr>
+                                                </tbody>
+                                            </table>
+                                            <div t-if="lines(account).hasMore" class="bak-gl-more">
+                                                <button class="btn btn-secondary" type="button" t-on-click="() => this.loadMore(account)">Voir plus</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </t>
+                            <tfoot>
+                                <tr class="bak-ledger-total-row">
+                                    <td>Total général</td>
+                                    <td class="text-end" t-esc="formatAmount(state.reportData.totals.opening)"/>
+                                    <td class="text-end" t-esc="formatAmount(state.reportData.totals.debit)"/>
+                                    <td class="text-end" t-esc="formatAmount(state.reportData.totals.credit)"/>
+                                    <td class="text-end" t-esc="formatAmount(state.reportData.totals.closing)"/>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </t>
+
+                </div>
+            </div>
+        </div>
+    </t>
+
+</templates>

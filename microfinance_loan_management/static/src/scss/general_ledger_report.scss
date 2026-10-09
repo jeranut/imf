@@ -1,0 +1,13 @@
+// Grand livre : réutilise les classes .bak-* du Journal de banque ; seules les lignes de compte sont propres.
+.o_bak_journal_ledger_report {
+    .bak-gl-account-header {
+        cursor: pointer;
+        background: #eef1f5;
+        font-weight: 600;
+    }
+
+    .bak-gl-more {
+        text-align: center;
+        padding: 8px;
+    }
+}
