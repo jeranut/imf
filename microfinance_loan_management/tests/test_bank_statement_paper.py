@@ -322,6 +322,41 @@ class TestBankStatementPaper(TestFondLiaison):
         self.assertEqual(self.env['account.bank.statement'].with_context(**action['context']).new({})._mf_currency(),
                          self.ag_journal.company_id.currency_id)
 
+    # nom lisible : jamais « False » ni « None »
+    def _assert_clean_name(self, statement):
+        for label in (statement.name, statement.display_name):
+            self.assertTrue(label)
+            self.assertNotIn('False', label)
+            self.assertNotIn('None', label)
+
+    def test_statement_name_from_the_form_with_a_single_journal(self):
+        form = Form(self.env['account.bank.statement'].with_context(default_mf_state='draft'), view=self.FORM_VIEW)
+        form.journal_id = self.ag_journal
+        statement = form.save()
+        self._assert_clean_name(statement)
+        self.assertEqual(statement.name, self.ag_journal.code)
+
+    def test_statement_name_created_by_the_orm_without_period_or_journal(self):
+        no_period = self.env['account.bank.statement'].create({'journal_id': self.ag_journal.id, 'mf_state': 'draft'})
+        self._assert_clean_name(no_period)
+        self.assertEqual(no_period.name, self.ag_journal.code)
+        no_journal = self.env['account.bank.statement'].create({'mf_state': 'draft'})
+        self._assert_clean_name(no_journal)
+        self.assertEqual(no_journal.name, 'Nouveau relevé')
+
+    def test_statement_name_with_period_follows_changes_in_draft_and_is_frozen_once_validated(self):
+        stmt = self._mf_statement(self.ag_journal, 0.0, 200.0, [{'name': 'Dépôt', 'amount_in': 200.0}])
+        self._assert_clean_name(stmt)
+        self.assertEqual(stmt.name, '%s – 01/10/26 → 31/10/26' % self.ag_journal.code)
+        stmt.mf_date_to = '2026-10-30'
+        self.assertEqual(stmt.name, '%s – 01/10/26 → 30/10/26' % self.ag_journal.code)
+        stmt.mf_date_to = '2026-10-31'
+        stmt.action_mf_validate()
+        frozen = stmt.name
+        stmt.with_context(mf_allow=True).write({'mf_date_from': '2026-09-28'})
+        self.assertEqual(stmt.name, frozen)
+        self._assert_clean_name(stmt)
+
     def test_new_statement_prefills_initial_balance_from_the_previous_one(self):
         first = self._mf_statement(self.ag_journal, 0.0, 200.0, [{'name': 'Dépôt', 'amount_in': 200.0}])
         first.action_mf_validate()
