@@ -59,3 +59,4 @@ from . import account_journal
 from . import account_financial_report_mf
 from . import account_general_ledger_report
 from . import report_general_ledger_mf
+from . import microfinance_fond_partage_exploitation
