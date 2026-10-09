@@ -33,6 +33,22 @@ ACCOUNT_TYPES_BY_XMLID = {
     'account_financial_report_expense0': ['expense', 'expense_depreciation'],  # total des charges du résultat
 }
 
+# Bilan : le résultat de l'exercice appartient aux capitaux propres. Un parent « sum » additionne les soldes bruts de ses
+# enfants : déplacer la ligne d'un parent à l'autre (même signe -1) retire son montant du PASSIF et l'ajoute aux CAPITAUX
+# PROPRES, sans le compter deux fois.
+RESULT_LINE_XMLID = 'account_financial_report_profitloss_toreport0'
+EQUITY_SECTION_XMLID = 'account_financial_report_equitysection0'
+RESULT_LINE_SEQUENCE = 3       # après « Capital et réserves » (1) et « Résultat non affecté » (2)
+# Libellés en double dans le Bilan (le contrôleur tiers traduit « Liability » en PASSIF et « Current Assets » en
+# « Actifs circulants » pour les lignes parentes comme pour les sous-lignes) : seules les sous-lignes sont renommées.
+BALANCE_SHEET_RENAMES = {
+    'account_financial_report_liability0': 'Dettes',
+    'account_financial_report_asset_current0': 'Autres actifs circulants',
+}
+NET_PROFIT_XMLID = 'financial_report_net_profit'
+NET_PROFIT_NAME = 'Résultat net'
+REPORT_LANGS = ('en_US', 'fr_FR', 'fr_BE')
+
 
 class AccountFinancialReport(models.Model):
     _inherit = 'account.financial.report'
@@ -62,6 +78,69 @@ class AccountFinancialReport(models.Model):
                 if not dry_run:
                     report.sign = sign
         return changed
+
+    @api.model
+    def _mf_apply_result_under_equity(self, dry_run=False):
+        """Idempotent : « Résultat de l'exercice » devient une ligne des CAPITAUX PROPRES (et non du PASSIF). Lignes
+        retrouvées par xmlid. Retourne [(xmlid, ancien parent, nouveau parent)] si la ligne est déplacée."""
+        result = self.env.ref(KIT + RESULT_LINE_XMLID, raise_if_not_found=False)
+        equity = self.env.ref(KIT + EQUITY_SECTION_XMLID, raise_if_not_found=False)
+        if not result or not equity or result.parent_id == equity:
+            return []
+        changed = [(RESULT_LINE_XMLID, result.parent_id.id, equity.id)]
+        if not dry_run:
+            result.write({'parent_id': equity.id, 'sequence': RESULT_LINE_SEQUENCE})
+        return changed
+
+    def _mf_set_name(self, name, langs=REPORT_LANGS):
+        """Écrit le libellé dans chaque langue où il diffère. Retourne True si une langue a changé."""
+        changed = False
+        for lang in langs:
+            if lang != 'en_US' and not self.env['res.lang']._lang_get(lang):
+                continue
+            if self.with_context(lang=lang).name != name:
+                self.with_context(lang=lang).name = name
+                changed = True
+        return changed
+
+    @api.model
+    def _mf_apply_balance_sheet_names(self, dry_run=False):
+        """Idempotent : renomme les sous-lignes « PASSIF » en « Dettes » et « Actifs circulants » en « Autres actifs
+        circulants ». Lignes retrouvées par xmlid ; les lignes parentes ne sont pas touchées. Retourne les xmlid
+        renommés (ou à renommer)."""
+        changed = []
+        for xmlid, name in BALANCE_SHEET_RENAMES.items():
+            report = self.env.ref(KIT + xmlid, raise_if_not_found=False)
+            if not report:
+                continue
+            if any(report.with_context(lang=lang).name != name for lang in REPORT_LANGS
+                   if lang == 'en_US' or self.env['res.lang']._lang_get(lang)):
+                changed.append(xmlid)
+                if not dry_run:
+                    report._mf_set_name(name)
+        return changed
+
+    @api.model
+    def _mf_apply_net_profit_line(self, dry_run=False):
+        """Idempotent : ligne « Résultat net » (produits − charges, positive pour un bénéfice) du Compte de résultat.
+        Valeur du rapport racine (account_financial_report_profitandloss0) ; placée sous CHARGE, dont le calcul est
+        par type de compte et ignore ses enfants : le total des charges, des produits et du résultat ne change pas, et
+        la ligne n'est pas un enfant de la racine (pas de récursion). Retrouvée par xmlid. Retourne True si créée."""
+        xmlid = 'microfinance_loan_management.' + NET_PROFIT_XMLID
+        existing = self.env.ref(xmlid, raise_if_not_found=False)
+        root = self.env.ref(KIT + 'account_financial_report_profitandloss0', raise_if_not_found=False)
+        expense = self.env.ref(KIT + 'account_financial_report_expense0', raise_if_not_found=False)
+        if existing or not root or not expense:
+            return False
+        if not dry_run:
+            line = self.create({
+                'name': NET_PROFIT_NAME, 'parent_id': expense.id, 'sequence': 3, 'type': 'account_report',
+                'account_report_id': root.id, 'sign': '-1', 'display_detail': 'no_detail'})
+            line._mf_set_name(NET_PROFIT_NAME)
+            self.env['ir.model.data'].create({
+                'module': 'microfinance_loan_management', 'name': NET_PROFIT_XMLID, 'model': self._name,
+                'res_id': line.id, 'noupdate': True})
+        return True
 
 
 class FinancialReport(models.TransientModel):

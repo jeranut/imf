@@ -5,4 +5,9 @@
     <function model="account.financial.report" name="_mf_apply_liability_signs"/>
     <!-- Compte de résultat : produits et charges en positif, même principe. -->
     <function model="account.financial.report" name="_mf_apply_profit_loss_signs"/>
+    <!-- Bilan : « Résultat de l'exercice » sous CAPITAUX PROPRES, sous-lignes en double renommées. Compte de résultat :
+         ligne « Résultat net ». Même principe (xmlid, idempotent). -->
+    <function model="account.financial.report" name="_mf_apply_result_under_equity"/>
+    <function model="account.financial.report" name="_mf_apply_balance_sheet_names"/>
+    <function model="account.financial.report" name="_mf_apply_net_profit_line"/>
 </odoo>
