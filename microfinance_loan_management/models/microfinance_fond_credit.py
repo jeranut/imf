@@ -309,7 +309,7 @@ class MicrofinanceFondCredit(models.Model):
             'res_model': 'microfinance.fond.contribution',
             'view_mode': 'tree,form',
             'domain': [('fond_id', '=', self.id)],
-            'context': {'default_fond_id': self.id},
+            'context': {'default_fond_id': self.id, 'contribution_destination': self.destination},
         }
 
     def action_view_loans(self):
