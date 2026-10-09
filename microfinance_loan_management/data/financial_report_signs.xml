@@ -3,4 +3,6 @@
     <!-- Passif et capitaux propres en positif dans le Bilan : lignes retrouvées par xmlid, idempotent, rejoué à chaque
          mise à jour du module (les lignes du module tiers sont en noupdate). -->
     <function model="account.financial.report" name="_mf_apply_liability_signs"/>
+    <!-- Compte de résultat : produits et charges en positif, même principe. -->
+    <function model="account.financial.report" name="_mf_apply_profit_loss_signs"/>
 </odoo>

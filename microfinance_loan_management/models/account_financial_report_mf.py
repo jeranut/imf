@@ -13,6 +13,19 @@ LIABILITY_SIGN_XMLIDS = [
     'account_financial_report_liability_non_current0', 'account_financial_report_equitysection0',
     'account_financial_report_equity0', 'account_financial_report_equity_unaffected0',
 ]
+# Compte de résultat : les produits (crédit, solde brut négatif) s'affichent en positif avec le signe -1, comme la ligne
+# PRODUIT (account_financial_report_income0, déjà à -1) ; les charges (débit, solde brut positif) avec le signe +1. Les
+# parents « sum » additionnent les soldes bruts, le signe d'une ligne n'agit que sur son propre affichage : le résultat net
+# (account_financial_report_profitandloss0 = −(produits + charges bruts)) ne change pas.
+PROFIT_LOSS_SIGNS = {
+    'financial_report_gross_profit': '-1',                         # Marge brute
+    'account_financial_report_other_income0': '-1',               # Autres produits
+    'account_financial_report_operating_income0': '-1',           # Produits d'exploitation
+    'account_financial_report_expense0': '1',                     # CHARGE
+    'financial_report_cost_of_revenue': '1',
+    'account_financial_report_expense_regular0': '1',
+    'account_financial_report_expense_depreciation0': '1',
+}
 # Types de comptes sommés par ligne (identifiant de la ligne), quand ils dépassent le type de la ligne.
 EXPENSE_TYPES = ['expense', 'expense_depreciation', 'expense_direct_cost']
 ACCOUNT_TYPES_BY_XMLID = {
@@ -35,6 +48,19 @@ class AccountFinancialReport(models.Model):
                 changed.append(report.id)
                 if not dry_run:
                     report.sign = '-1'
+        return changed
+
+    @api.model
+    def _mf_apply_profit_loss_signs(self, dry_run=False):
+        """Idempotent : produits positifs (-1) et charges positives (+1) dans le Compte de résultat. Lignes retrouvées
+        par xmlid, jamais par nom traduit. Retourne [(xmlid, ancien, nouveau)] des lignes modifiées (ou à modifier)."""
+        changed = []
+        for xmlid, sign in PROFIT_LOSS_SIGNS.items():
+            report = self.env.ref(KIT + xmlid, raise_if_not_found=False)
+            if report and report.sign != sign:
+                changed.append((xmlid, report.sign, sign))
+                if not dry_run:
+                    report.sign = sign
         return changed
 
 
