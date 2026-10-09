@@ -50,6 +50,13 @@ class TestBilanResultat(TestFondLiaison):
         move.action_post()
         return move
 
+    def setUp(self):
+        super().setUp()
+        Report = self.env['account.financial.report']
+        Report._mf_apply_result_under_equity()
+        Report._mf_apply_balance_sheet_names()
+        Report._mf_apply_net_profit_line()
+
     def _scenario(self):
         ag = self.agency
         bank = self._acc(ag, 'T131999A', 'asset_cash', False)
@@ -115,7 +122,8 @@ class TestBilanResultat(TestFondLiaison):
             result = bs[self._xml('account_financial_report_profitloss_toreport0')]
             self.assertEqual(assets, 60000.0, lang)
             self.assertEqual(result, pl[self._xml('account_financial_report_profitandloss0')], lang)
-            self.assertEqual(liability, 60000.0, lang)   # dettes 5 000 + résultat 55 000
+            self.assertEqual(liability, 5000.0, lang)    # dettes seules
+            self.assertEqual(equity, 55000.0, lang)      # résultat de l'exercice sous CAPITAUX PROPRES
             self.assertEqual(assets, liability + equity, lang)
 
     def test_expense_line_does_not_depend_on_its_translated_name(self):
@@ -166,3 +174,73 @@ class TestBilanResultat(TestFondLiaison):
             self.assertEqual(assets, 60000000.0, lang)
             self.assertEqual(assets, bs[self._xml('account_financial_report_liabilitysum0')]
                              + bs[self._xml('account_financial_report_equitysection0')], lang)
+
+    # ------------------------------------------------------------------ résultat sous capitaux propres, résultat net
+    def _scenario_capitaux(self, company):
+        bank = self._acc(company, 'T131999C', 'asset_cash', False)
+        subvention = self._acc(company, 'T762000C', 'income_other', False)
+        charge = self._acc(company, 'T622000C', 'expense', False)
+        capital = self._acc(company, 'T563000C', 'equity', False)
+        report_nouveau = self._acc(company, 'T581000C', 'equity', False)
+        self._post(company, [(bank, 100000000.0, 0.0), (subvention, 0.0, 100000000.0)])
+        self._post(company, [(charge, 40000000.0, 0.0), (bank, 0.0, 40000000.0)])
+        self._post(company, [(bank, 10000000.0, 0.0), (capital, 0.0, 10000000.0)])
+        self._post(company, [(bank, 5000000.0, 0.0), (report_nouveau, 0.0, 5000000.0)])
+        self.env.flush_all()
+
+    def test_result_sits_under_equity_and_balance_sheet_balances_in_both_languages(self):
+        self._scenario_capitaux(self.agency)
+        result_line = self.env.ref(KIT + 'account_financial_report_profitloss_toreport0')
+        self.assertEqual(result_line.parent_id, self.env.ref(KIT + 'account_financial_report_equitysection0'))
+        net_profit = self.env.ref('microfinance_loan_management.financial_report_net_profit')
+        for lang in ('fr_FR', 'en_US'):
+            pl = self._lines('account_financial_report_profitandloss0', self.agency, lang)
+            self.assertEqual(pl[net_profit.id], 60000000.0, lang)                                        # Résultat net
+            self.assertEqual(pl[self._xml('account_financial_report_profitandloss0')], 60000000.0, lang)
+            self.assertEqual(pl[self._xml('account_financial_report_income0')], 100000000.0, lang)       # inchangés
+            self.assertEqual(pl[self._xml('account_financial_report_expense0')], 40000000.0, lang)
+            bs = self._lines('account_financial_report_balancesheet0', self.agency, lang)
+            self.assertEqual(bs[result_line.id], 60000000.0, lang)
+            self.assertEqual(bs[result_line.id], pl[net_profit.id], lang)
+            self.assertEqual(bs[self._xml('account_financial_report_equity0')], 15000000.0, lang)
+            self.assertEqual(bs[self._xml('account_financial_report_equitysection0')], 75000000.0, lang)
+            self.assertEqual(bs[self._xml('account_financial_report_liabilitysum0')], 0.0, lang)
+            self.assertEqual(bs[self._xml('account_financial_report_assets0')], 75000000.0, lang)
+            lines = self._report_data('account_financial_report_balancesheet0', self.agency, lang)
+            by_r = {line['r_id']: line for line in lines if line['type'] == 'report'}
+            self.assertEqual(by_r[result_line.id]['parent'], by_r[self._xml('account_financial_report_equitysection0')]['id'], lang)
+
+    def test_controller_balance_check_is_ok_with_the_result_under_equity(self):
+        self._scenario_capitaux(self.agency)
+        lines = [{'name': name, 'parent': False, 'balance': balance} for name, balance in
+                 (('ACTIF', 75000000.0), ('PASSIF', 0.0), ('CAPITAUX PROPRES', 75000000.0))]
+        check = MfFinancialReportController()._get_balance_sheet_check(
+            lines, {'section_rank': {'ACTIF': 0, 'PASSIF': 1, 'CAPITAUX PROPRES': 2}})
+        self.assertTrue(check['ok'])
+
+    def test_sub_lines_have_distinct_labels_and_parents_keep_theirs(self):
+        for lang in ('fr_FR', 'en_US'):
+            names = {xmlid: self.env.ref(KIT + xmlid).with_context(lang=lang).name for xmlid in (
+                'account_financial_report_liability0', 'account_financial_report_asset_current0')}
+            self.assertEqual(names['account_financial_report_liability0'], 'Dettes', lang)
+            self.assertEqual(names['account_financial_report_asset_current0'], 'Autres actifs circulants', lang)
+        self.assertEqual(self.env.ref(KIT + 'account_financial_report_liabilitysum0').with_context(lang='en_US').name, 'Liability')
+        self.assertEqual(self.env.ref(KIT + 'account_financial_report_asset_current_group0').with_context(lang='en_US').name,
+                         'Current Assets Group')
+
+    def test_structure_scripts_are_idempotent(self):
+        Report = self.env['account.financial.report']
+        before = Report.search_count([])
+        self.assertEqual(Report._mf_apply_result_under_equity(), [])
+        self.assertEqual(Report._mf_apply_balance_sheet_names(), [])
+        self.assertFalse(Report._mf_apply_net_profit_line())
+        self.assertEqual(Report.search_count([]), before)
+        self.assertEqual(self.env['ir.model.data'].search_count([
+            ('module', '=', 'microfinance_loan_management'), ('name', '=', 'financial_report_net_profit')]), 1)
+
+    def test_balance_sheet_of_a_company_without_entries_is_all_zero(self):
+        for lang in ('fr_FR', 'en_US'):
+            for xmlid in ('account_financial_report_balancesheet0', 'account_financial_report_profitandloss0'):
+                data = self._report_data(xmlid, self.agency2, lang)
+                self.assertTrue(data)
+                self.assertFalse([line for line in data if line['balance']], '%s %s' % (xmlid, lang))
