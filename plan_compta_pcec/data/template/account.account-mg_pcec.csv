@@ -293,8 +293,8 @@ pcec_744,Produits sur activités annexes *,744000,income,False
 pcec_746,Quote-part sur opérations faites en commun *,746000,income,False
 pcec_747,Produits accessoires *,747000,income,False
 pcec_749,Autres produits opérationnels divers *,749000,income,False
-pcec_761,Subventions d'exploitation reçues *,761000,income_other,False
-pcec_762,Subventions d'équilibre *,762000,income_other,False
+pcec_761,Subventions d'équilibre *,761000,income_other,False
+pcec_762,Autres subventions d'exploitation *,762000,income_other,False
 pcec_770,Éléments extraordinaires - produits *,770000,income,False
 pcec_7821,Reprises de pertes de valeur - trésorerie *,782100,income,False
 pcec_7822,Reprises de pertes de valeur - clientèle *,782200,income,False
