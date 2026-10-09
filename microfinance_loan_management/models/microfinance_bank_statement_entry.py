@@ -256,6 +256,11 @@ class MicrofinanceBankStatementEntry(models.Model):
         """Défait le lettrage et extourne l'écriture de la ligne de relevé (jamais supprimée), ou retire le
         pointage. La ligne repasse « à traiter » ; utilisateur, date et motif sont tracés."""
         self._mf_check_cancel_rights()
+        self._cancel_treatment_unchecked(reason)
+
+    def _cancel_treatment_unchecked(self, reason):
+        """Corps de _cancel_treatment sans contrôle de groupe : réservé aux appelants déjà protégés par un droit
+        plus fort (assistant de purge des fonds, administrateur technique)."""
         for entry in self:
             if entry.state != 'done':
                 raise UserError(_("La ligne « %s » n'est pas traitée.") % entry.name)
