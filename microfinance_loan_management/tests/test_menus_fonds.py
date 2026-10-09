@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo.exceptions import AccessError
+from odoo.exceptions import AccessError, UserError
 
 from .test_fond_partage import TestFondPartageBase
 
@@ -59,7 +59,8 @@ class TestMenusFonds(TestFondPartageBase):
             allowed_company_ids=user.company_ids.ids)._visible_menu_ids()
 
     def _menu(self, xmlid):
-        return self.env.ref(MF + xmlid)
+        # liste complète : child_id masque sinon les menus invisibles pour l'utilisateur courant
+        return self.env['ir.ui.menu'].with_context(**{'ir.ui.menu.full_list': True}).browse(self.env.ref(MF + xmlid).id)
 
     # ---------------------------------------------------------------- emplacement
     def test_menus_moved_out_of_configuration(self):
@@ -129,7 +130,7 @@ class TestMenusFonds(TestFondPartageBase):
             self.assertFalse(Fond.search(domain), user.login)
             with self.assertRaises(AccessError):
                 Fond.browse(fond.id).read(['name'])
-            with self.assertRaises(AccessError):
+            with self.assertRaises(UserError):  # AccessError en est une sous-classe
                 Fond.create({'name': 'Intrus', 'bailleur_id': self.bailleur.id, 'destination': 'exploitation',
                              'nature': 'subvention', 'bank_id': self.bmoi.id})
         Fond = self.env['microfinance.fond.credit'].with_user(self.direction).with_company(self.hq)
