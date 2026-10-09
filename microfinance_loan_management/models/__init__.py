@@ -54,3 +54,4 @@ from . import res_config_settings
 from . import ir_attachment
 from . import account_payment_register
 from . import account_journal
+from . import account_financial_report_mf

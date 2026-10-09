@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Passif et capitaux propres en positif dans le Bilan : lignes retrouvées par xmlid, idempotent, rejoué à chaque
+         mise à jour du module (les lignes du module tiers sont en noupdate). -->
+    <function model="account.financial.report" name="_mf_apply_liability_signs"/>
+</odoo>

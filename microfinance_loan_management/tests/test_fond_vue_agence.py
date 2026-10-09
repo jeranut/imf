@@ -124,8 +124,8 @@ class TestFondVueAgence(TestFondLiaison):
         assets = by_id[self.env.ref('base_accounting_kit.account_financial_report_assets0').id]
         liabilities = by_id[self.env.ref('base_accounting_kit.account_financial_report_liabilitysum0').id]
         self.assertEqual(assets, 300.0)
-        self.assertEqual(liabilities, -300.0)
-        self.assertEqual(assets + liabilities, 0.0)
+        self.assertEqual(liabilities, 300.0)  # passif affiché en positif
+        self.assertEqual(assets - liabilities, 0.0)
 
     # (6) une agence ne lit pas les allocations des autres
     def test_agency_cannot_read_other_agencies_allocations(self):

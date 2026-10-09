@@ -21,6 +21,7 @@
         'security/microfinance_officer_isolation_rules.xml',
         'security/ir.model.access.csv',
         'data/sequence.xml',
+        'data/financial_report_signs.xml',
         'data/cron.xml',
         'data/menu_order.xml',
         'data/microfinance_profession_data.xml',
