@@ -26,4 +26,8 @@ class MicrofinanceFondPurgeLog(models.Model):
     balances_after = fields.Text(string='Soldes des comptes de bilan après', readonly=True)
     anomalies = fields.Text(string='Anomalies signalées', readonly=True)
     kept_moves = fields.Text(string='Écritures conservées (déliées des partages) et extournes créées', readonly=True)
+    statements = fields.Text(string='Relevés bancaires supprimés', readonly=True)
+    n_statements = fields.Integer(string='Relevés supprimés', readonly=True)
+    n_entries = fields.Integer(string='Lignes de relevé supprimées', readonly=True)
+    n_moves = fields.Integer(string='Écritures supprimées', readonly=True)
     message = fields.Text(string='Message', readonly=True)

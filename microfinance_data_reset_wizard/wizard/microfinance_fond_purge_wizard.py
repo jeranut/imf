@@ -39,6 +39,13 @@ KNOWN_FOREIGN_KEYS = {
     ('microfinance_fond_contribution', 'move_id'),
     # sélection de fonds de cet assistant lui-même (transitoire)
     ('microfinance_fond_purge_wizard_fond_rel', 'fond_id'),
+    # relevés bancaires papier supprimés avec leurs lignes et écritures
+    ('microfinance_bank_statement_entry', 'statement_id'),
+    ('microfinance_bank_statement_log', 'statement_id'),
+    ('microfinance_bank_statement_cancel_wizard', 'statement_id'),
+    ('account_bank_statement_line', 'statement_id'),
+    ('account_move_line', 'statement_id'),
+    ('account_bank_statement_ir_attachment_rel', 'account_bank_statement_id'),
 }
 # Tables du cœur comptable qui référencent une écriture en CASCADE par construction (lignes, relevés, assistants).
 ACCOUNT_MOVE_CASCADE_TABLES = {
@@ -105,6 +112,11 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         help="« Remettre à zéro » supprime les contributions, partages et allocations du fonds et garde le fonds. "
              "« Supprimer le fonds » fait la même chose puis supprime le fonds ; son compte d'origine automatique "
              "(240xxx / 250xxx) est archivé, jamais supprimé.")
+    delete_other_statements = fields.Boolean(
+        string='Supprimer aussi tous les autres relevés bancaires des sociétés concernées', default=False,
+        help="Coché : supprime AUSSI les relevés bancaires papier sans lien avec les fonds, avec leurs lignes et leurs "
+             "écritures, pour les journaux bancaires des sociétés concernées. Décoché : seuls les relevés liés aux "
+             "fonds sont supprimés.")
     include_orphans = fields.Boolean(
         string='Inclure les écritures orphelines des journaux de fonds et d\'exploitation', default=True,
         help="Écritures sans plus aucun lien avec un fonds existant (fonds déjà supprimé, purge précédente) dans un journal "
@@ -118,7 +130,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
                                   readonly=True)
 
     # ------------------------------------------------------------------ champs calculés
-    @api.depends('scope', 'fond_ids', 'company_ids', 'include_orphans')
+    @api.depends('scope', 'fond_ids', 'company_ids', 'include_orphans', 'delete_other_statements')
     def _compute_summary(self):
         for wiz in self:
             funds = wiz._get_funds()
@@ -126,7 +138,9 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             for fund in funds:
                 moves |= wiz._collect(fund)['moves']
             moves |= wiz._orphan_moves()
-            wiz.summary = _("%(f)d fonds et %(m)d écritures comptables concernés") % {'f': len(funds), 'm': len(moves)}
+            scope = wiz._statement_scope(moves, funds)
+            wiz.summary = _("%(f)d fonds, %(s)d relevés et %(m)d écritures comptables concernés") % {
+                'f': len(funds), 's': len(scope['statements']), 'm': len(moves) + len(scope['lines'])}
 
     # ------------------------------------------------------------------ périmètre
     def _get_funds(self):
@@ -185,16 +199,30 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         Move = self.env['account.move'].sudo().with_context(active_test=False)
         return set(Move.search([('reversed_entry_id', 'in', moves.ids)]).mapped('reversed_entry_id').ids)
 
-    def _bank_entries(self, moves):
-        """Lignes de relevé (lot B) rapprochées avec une ligne de ces écritures : par le lettrage, jamais par libellé."""
+    def _statement_scope(self, moves, funds):
+        """Relevés bancaires papier à supprimer : ceux dont une ligne est liée à ces écritures (lettrage des lignes de
+        suspens, ou lien direct d'une ligne saisie), plus, si la case est cochée, tous les autres relevés des journaux
+        bancaires des sociétés concernées."""
+        Entry = self.env['microfinance.bank.statement.entry'].sudo()
+        Statement = self.env['account.bank.statement'].sudo().with_context(active_test=False)
         lines = moves.sudo().line_ids
         partials = lines.matched_debit_ids | lines.matched_credit_ids
         others = (partials.debit_move_id | partials.credit_move_id) - lines
-        stmt_lines = others.move_id.statement_line_id
-        if not stmt_lines:
-            return self.env['microfinance.bank.statement.entry']
-        return self.env['microfinance.bank.statement.entry'].sudo().search([
-            ('statement_line_id', 'in', stmt_lines.ids), ('state', '=', 'done')])
+        st_lines = others.move_id.statement_line_id
+        linked_entries = Entry.search([
+            '|', '|', ('statement_line_id', 'in', st_lines.ids), ('target_line_id', 'in', lines.ids),
+            ('pointed_line_id', 'in', lines.ids)])
+        linked = st_lines.statement_id | linked_entries.statement_id
+        statements = linked
+        if self.delete_other_statements:
+            companies = moves.company_id | st_lines.company_id | linked.journal_id.company_id
+            for fund in funds:
+                companies |= fund._fund_company()
+            statements |= Statement.search([
+                ('mf_state', '!=', False), ('journal_id.type', '=', 'bank'),
+                ('journal_id.company_id', 'in', companies.ids)])
+        return {'statements': statements, 'lines': st_lines | statements.line_ids,
+                'entries': statements.mf_entry_ids, 'linked_entries': linked_entries, 'linked': linked}
 
     # ------------------------------------------------------------------ blocages
     def _unknown_dependencies(self, collected):
@@ -211,7 +239,13 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             ids_by_model['microfinance.fond.allocation'].update(c['allocs'].ids)
             ids_by_model['microfinance.portfolio.allocation'].update(c['portfolio'].ids)
             ids_by_model['account.move'].update(moves.ids)
-        ids_by_model['account.move'].update(self._orphan_moves().ids)
+        orphans = self._orphan_moves()
+        ids_by_model['account.move'].update(orphans.ids)
+        every = self.env['account.move'].sudo()
+        for c in collected:
+            every |= c['moves']
+        ids_by_model['account.bank.statement'].update(
+            self._statement_scope(every | orphans, [c['fund'] for c in collected])['statements'].ids)
         blockers = []
         for model, ids in ids_by_model.items():
             if not ids:
@@ -301,7 +335,6 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         all_moves = Move.browse()
         targets = Move.browse()
         plines = env['microfinance.fond.partage.line']
-        entries_all = env['microfinance.bank.statement.entry']
         for c in collected:
             fund = c['fund']
             fund_company = fund._fund_company().name
@@ -332,26 +365,38 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             add(company.name, _('Écritures comptabilisées (supprimées)'), len(mine(posted)), debit(mine(posted)))
             add(company.name, _('dont écritures miroirs des agences'), len(mine(targets).filtered(
                 lambda m: m.microfinance_partage_side == 'agency')))
-        entries_all = self._bank_entries(targets)
-        for entry in entries_all:
-            add(entry.company_id.name, _('Lignes de relevé délettrées (remises à traiter)'), 1, entry.amount)
+        scope = self._statement_scope(targets, [c['fund'] for c in collected])
+        statements, st_lines, entries = scope['statements'], scope['lines'], scope['entries']
+        for stmt in statements:
+            company = stmt.journal_id.company_id.name
+            add(company, _('Relevés bancaires supprimés'), 1, stmt.balance_end_real, stmt.display_name)
+        for company in entries.company_id:
+            mine_e = entries.filtered(lambda e: e.company_id == company)
+            add(company.name, _('Lignes de relevé supprimées'), len(mine_e), sum(mine_e.mapped('amount')))
+        st_moves = st_lines.move_id
+        for company in st_moves.company_id:
+            mine_m = st_moves.filtered(lambda m: m.company_id == company)
+            add(company.name, _('Écritures de relevé supprimées'), len(mine_m), debit(mine_m))
+        statements_report = []
+        for stmt in statements:
+            own = stmt.mf_entry_ids
+            tied = own & scope['linked_entries']
+            statements_report.append('%s (%s) : %d ligne(s), dont %d sans lien avec les fonds%s' % (
+                stmt.display_name, stmt.journal_id.company_id.name, len(own), len(own - tied),
+                '' if stmt in scope['linked'] else ' - relevé sans lien avec les fonds'))
 
         # Soldes avant et effet attendu (comptes touchés par les écritures + compte du fonds).
         pairs = {(line.company_id.id, line.account_id.id) for line in targets.line_ids}
         for c in collected:
             if c['fund'].account_id:
                 pairs.add((c['fund']._fund_company().id, c['fund'].account_id.id))
-        # Les écritures des lignes de relevé défaites sont extournées : leur effet entre dans le contrôle.
-        statement_lines = entries_all.statement_line_id.move_id.line_ids
+        # Les écritures des lignes de relevé supprimées entrent dans le contrôle.
+        statement_lines = st_moves.line_ids
         pairs |= {(line.company_id.id, line.account_id.id) for line in statement_lines}
         before = self._balances(pairs)
         impact = defaultdict(float)
-        for line in posted.line_ids | statement_lines:
+        for line in posted.line_ids | statement_lines.filtered(lambda l: l.parent_state == 'posted'):
             impact[(line.company_id.id, line.account_id.id)] -= line.balance
-
-        # 1. Rapprochements bancaires (avant toute extourne : une ligne lettrée ne peut pas être extournée).
-        if entries_all:
-            entries_all._cancel_treatment_unchecked(_('Purge des fonds'))
 
         # 2. Répartitions de portefeuille (dépendent des allocations d'agence).
         for c in collected:
@@ -366,11 +411,28 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         plines.sudo().write({'hq_move_id': False, 'agency_move_id': False})
         all_moves.write({'microfinance_fond_partage_id': False, 'microfinance_fond_partage_line_id': False})
         created = Move.browse()
-        reconciled = targets.line_ids.filtered(lambda l: l.matched_debit_ids or l.matched_credit_ids)
+        reconciled = (targets | st_moves).line_ids.filtered(lambda l: l.matched_debit_ids or l.matched_credit_ids)
         if reconciled:
             reconciled.remove_move_reconcile()
+        # relevés : lignes comptables (et leurs écritures) d'abord, puis les lignes saisies et le relevé lui-même
+        st_lines.unlink()
+        entries.write({'state': 'todo'})
+        statements.filtered(lambda st: st.mf_state == 'validated').write({'mf_state': 'draft'})
+        statement_ids, entry_ids, st_line_ids, st_move_ids = statements.ids, entries.ids, st_lines.ids, st_moves.ids
+        statements.unlink()
         targets.with_context(force_delete=True).unlink()
+        # Contrôle final : plus rien ne référence un fonds purgé.
+        left = []
+        for model, ids in (('account.move', all_moves.ids + st_move_ids), ('account.bank.statement.line', st_line_ids),
+                           ('microfinance.bank.statement.entry', entry_ids), ('account.bank.statement', statement_ids)):
+            remaining = env[model].sudo().with_context(active_test=False).browse(ids).exists()
+            if remaining:
+                left.append('%s : %s' % (model, ', '.join(map(str, remaining.ids))))
+        if left:
+            raise UserError(_("Contrôle final : des éléments liés aux fonds purgés subsistent (%s). Purge annulée.")
+                            % ' ; '.join(left))
         kept_names, created_names = [], []
+        stats_statements = statements_report
 
         # 4. Partages (parts en cascade), contributions, allocations.
         Partage = env['microfinance.fond.partage'].sudo().with_context(active_test=False, **TECH_CONTEXT)
@@ -440,7 +502,8 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
                 flag = _('Solde non nul')
             balance_rows.append((companies[pair[0]].name, accounts[pair[1]].code, accounts[pair[1]].name, b, e, a, flag))
         return {'counts': counts, 'balances': balance_rows, 'anomalies': anomalies, 'kept': kept_names,
-                'created': created_names, 'funds': fund_labels,
+                'created': created_names, 'funds': fund_labels, 'statements': stats_statements,
+                'n_statements': len(statement_ids), 'n_entries': len(entry_ids), 'n_moves': len(all_moves) + len(st_move_ids),
                 'companies': sorted({row[0] for row in balance_rows} | {row[0] for row in counts if row[0]})}
 
     # ------------------------------------------------------------------ présentation et audit
@@ -481,6 +544,8 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
                 lines += ['  - %s' % a for a in stats['anomalies']]
             else:
                 lines.append(_("Soldes de contrôle conformes à l'effet attendu."))
+            if stats['statements']:
+                lines.append(_("Relevés supprimés : %s") % ' ; '.join(stats['statements']))
             if stats['kept']:
                 lines.append(_("Écritures conservées et déliées : %s") % ', '.join(stats['kept']))
             if stats['created']:
@@ -506,6 +571,10 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             'balances_after': self._fmt_balances(stats['balances'], 5) if stats else '',
             'anomalies': '\n'.join(stats['anomalies']) if stats else '',
             'kept_moves': '\n'.join(stats['kept'] + stats['created']) if stats else '',
+            'statements': '\n'.join(stats['statements']) if stats else '',
+            'n_statements': stats['n_statements'] if stats else 0,
+            'n_entries': stats['n_entries'] if stats else 0,
+            'n_moves': stats['n_moves'] if stats else 0,
             'message': error or '',
         })
 
