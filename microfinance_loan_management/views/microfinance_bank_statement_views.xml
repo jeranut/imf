@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Relevé bancaire papier : saisie rapide des lignes, soldes imprimés, pièce jointe, traitement de chaque ligne.
+         « Entrée » = argent reçu sur le compte, « Sortie » = argent sorti. -->
+    <record id="view_microfinance_bank_statement_tree" model="ir.ui.view">
+        <field name="name">microfinance.bank.statement.tree</field>
+        <field name="model">account.bank.statement</field>
+        <field name="arch" type="xml">
+            <tree string="Relevés bancaires" decoration-muted="mf_state == 'draft'" decoration-danger="mf_gap != 0">
+                <field name="name"/>
+                <field name="journal_id"/>
+                <field name="mf_date_from"/>
+                <field name="mf_date_to"/>
+                <field name="balance_start"/>
+                <field name="balance_end_real" string="Solde final"/>
+                <field name="mf_gap" string="Écart"/>
+                <field name="mf_todo_count" string="À traiter"/>
+                <field name="mf_state" widget="badge" decoration-success="mf_state == 'validated'"/>
+                <field name="currency_id" column_invisible="1"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_bank_statement_form" model="ir.ui.view">
+        <field name="name">microfinance.bank.statement.form</field>
+        <field name="model">account.bank.statement</field>
+        <field name="arch" type="xml">
+            <form string="Relevé bancaire">
+                <header>
+                    <button name="action_mf_validate" type="object" string="Valider le relevé" class="btn-primary"
+                            invisible="mf_state != 'draft'"/>
+                    <button name="action_mf_treat_all" type="object" string="Traiter les lignes prêtes"
+                            invisible="mf_todo_count == 0"/>
+                    <button name="action_mf_open_reopen_wizard" type="object" string="Rouvrir (comptable)"
+                            invisible="mf_state != 'validated'" groups="microfinance_loan_management.group_microfinance_comptable,account.group_account_manager"/>
+                    <field name="mf_state" widget="statusbar" statusbar_visible="draft,validated"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name" placeholder="Référence (automatique)" readonly="1"/></h1></div>
+                    <group>
+                        <group string="Relevé papier">
+                            <field name="journal_id" options="{'no_create': True, 'no_open': True}"
+                                   domain="[('type', '=', 'bank')]" readonly="mf_state == 'validated' or mf_entry_ids"/>
+                            <field name="mf_date_from"/>
+                            <field name="mf_date_to"/>
+                            <field name="attachment_ids" widget="many2many_binary" string="Scan ou photo du relevé"/>
+                        </group>
+                        <group string="Soldes imprimés">
+                            <field name="balance_start" string="Solde initial"/>
+                            <field name="balance_end_real" string="Solde final"/>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="company_id" invisible="1"/>
+                            <field name="mf_last_date" invisible="1"/>
+                            <field name="mf_has_attachment" invisible="1"/>
+                        </group>
+                    </group>
+                    <field name="mf_entry_ids" context="{'default_date': mf_last_date}">
+                        <tree editable="bottom" string="Lignes du relevé" decoration-success="state == 'done'"
+                              decoration-warning="to_check">
+                            <field name="sequence" widget="handle"/>
+                            <field name="date" string="Date"/>
+                            <field name="value_date" string="Valeur" optional="hide"/>
+                            <field name="name"/>
+                            <field name="reference"/>
+                            <field name="amount_in" string="Entrée (+)"/>
+                            <field name="amount_out" string="Sortie (−)"/>
+                            <field name="treatment" readonly="state == 'done'"/>
+                            <field name="candidate_line_ids" column_invisible="1"/>
+                            <field name="to_check" column_invisible="1"/>
+                            <field name="currency_id" column_invisible="1"/>
+                            <field name="target_line_id" string="Ligne à rapprocher / pointer"
+                                   domain="[('id', 'in', candidate_line_ids)]" options="{'no_create': True}"
+                                   readonly="state == 'done' or treatment not in ('reconcile', 'point')"/>
+                            <field name="suggested_line_id" string="Suggestion" optional="show" readonly="1"/>
+                            <field name="account_id" string="Compte (nouvelle opération)"
+                                   readonly="state == 'done' or treatment != 'new'" options="{'no_create': True}"/>
+                            <field name="state" widget="badge" decoration-success="state == 'done'"/>
+                            <button name="action_take_suggestion" type="object" icon="fa-magic" title="Prendre la suggestion"
+                                    invisible="state == 'done' or not suggested_line_id"/>
+                            <button name="action_treat" type="object" icon="fa-check" title="Traiter cette ligne"
+                                    invisible="state == 'done' or not treatment"/>
+                            <button name="action_open_cancel_wizard" type="object" icon="fa-undo" title="Annuler le traitement"
+                                    invisible="state != 'done'"
+                                    groups="microfinance_loan_management.group_microfinance_comptable,account.group_account_manager"/>
+                        </tree>
+                    </field>
+                    <group class="oe_subtotal_footer">
+                        <field name="mf_balance_computed" string="Solde calculé (initial + entrées − sorties)"/>
+                        <field name="mf_gap" string="Écart avec le solde final" decoration-danger="mf_gap != 0"
+                               decoration-success="mf_gap == 0"/>
+                        <field name="mf_todo_count" string="Lignes à traiter"/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_bank_statement_search" model="ir.ui.view">
+        <field name="name">microfinance.bank.statement.search</field>
+        <field name="model">account.bank.statement</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="journal_id"/>
+                <filter name="draft" string="Brouillon" domain="[('mf_state', '=', 'draft')]"/>
+                <filter name="validated" string="Validés" domain="[('mf_state', '=', 'validated')]"/>
+                <filter name="todo" string="Avec lignes à traiter" domain="[('mf_entry_ids.state', '=', 'todo')]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_journal" string="Journal" context="{'group_by': 'journal_id'}"/>
+                    <filter name="group_state" string="État" context="{'group_by': 'mf_state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_bank_statement" model="ir.actions.act_window">
+        <field name="name">Relevés bancaires</field>
+        <field name="res_model">account.bank.statement</field>
+        <field name="view_mode">tree,form</field>
+        <field name="domain">[('mf_state', '!=', False)]</field>
+        <field name="context">{'default_mf_state': 'draft'}</field>
+        <field name="search_view_id" ref="view_microfinance_bank_statement_search"/>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'tree', 'view_id': ref('view_microfinance_bank_statement_tree')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('view_microfinance_bank_statement_form')})]"/>
+    </record>
+
+    <menuitem id="menu_microfinance_bank_statement" name="Relevés bancaires" parent="menu_caisse_root"
+              action="action_microfinance_bank_statement" sequence="30"
+              groups="microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor"/>
+
+    <!-- Assistant : motif d'annulation d'un traitement ou de réouverture d'un relevé -->
+    <record id="view_microfinance_bank_cancel_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.bank.statement.cancel.wizard.form</field>
+        <field name="model">microfinance.bank.statement.cancel.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Motif">
+                <group>
+                    <field name="kind" invisible="1"/>
+                    <field name="entry_id" invisible="1"/>
+                    <field name="statement_id" invisible="1"/>
+                    <field name="reason" placeholder="Pourquoi ? (tracé avec votre nom et la date)"/>
+                </group>
+                <footer>
+                    <button name="action_confirm" type="object" string="Confirmer" class="btn-primary"/>
+                    <button string="Fermer" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Journal : comptes d'attente supplémentaires (ex. chèques émis en attente) -->
+    <record id="view_account_journal_form_mf_pending" model="ir.ui.view">
+        <field name="name">account.journal.form.mf.pending</field>
+        <field name="model">account.journal</field>
+        <field name="inherit_id" ref="account.view_account_journal_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='suspense_account_id']" position="after">
+                <field name="mf_pending_account_ids" widget="many2many_tags" invisible="type != 'bank'"
+                       options="{'no_create': True}"/>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Kanban des journaux : « Saisir un relevé » remplace « Connecter » -->
+    <record id="account_journal_dashboard_kanban_view_mf" model="ir.ui.view">
+        <field name="name">account.journal.dashboard.kanban.mf</field>
+        <field name="model">account.journal</field>
+        <field name="inherit_id" ref="account.account_journal_dashboard_kanban_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//button[@name='action_configure_bank_journal']" position="replace">
+                <button name="action_mf_new_statement" type="object" class="btn btn-primary">Saisir un relevé</button>
+                <div t-if="dashboard.mf_enabled" class="mt-2 small">
+                    <div>Solde du relevé<t t-if="dashboard.mf_last_statement"> (au <t t-esc="dashboard.mf_last_statement"/>)</t> : <strong t-esc="dashboard.mf_statement_balance"/></div>
+                    <div>Solde comptable : <strong t-esc="dashboard.mf_book_balance"/></div>
+                    <div t-att-class="dashboard.mf_gap_nonzero and 'text-danger' or 'text-success'">Écart : <strong t-esc="dashboard.mf_gap"/></div>
+                    <a type="object" name="action_mf_open_statements" t-if="dashboard.mf_todo_count">
+                        <t t-esc="dashboard.mf_todo_count"/> ligne(s) à traiter
+                    </a>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Paramètres : tolérance de rapprochement -->
+    <record id="res_config_settings_view_form_mf_bank" model="ir.ui.view">
+        <field name="name">res.config.settings.form.mf.bank</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="microfinance_loan_management.res_config_settings_view_form_microfinance"/>
+        <field name="arch" type="xml">
+            <xpath expr="//block[@id='microfinance_parent_company_settings']" position="after">
+                <block title="Rapprochement bancaire" id="microfinance_bank_reconcile_settings">
+                    <setting string="Tolérance de rapprochement"
+                        help="Écart maximal accepté entre un virement du relevé et la ligne en attente qu'il solde (arrondi de virement), soldé sur le compte de produit ou de charge du journal. 0 = désactivée : un écart laisse un lettrage partiel.">
+                        <field name="mf_bank_tolerance"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>

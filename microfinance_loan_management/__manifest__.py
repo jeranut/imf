@@ -16,6 +16,7 @@
         'security/groups.xml',
         'security/microfinance_company_rules.xml',
         'security/microfinance_fond_bailleur_rules.xml',
+        'security/microfinance_bank_rules.xml',
         'security/microfinance_portfolio_rules.xml',
         'security/microfinance_officer_isolation_rules.xml',
         'security/ir.model.access.csv',
@@ -76,6 +77,7 @@
         'views/microfinance_caisse_pos_views.xml',
         'views/res_config_settings_views.xml',
         'views/microfinance_menus.xml',
+        'views/microfinance_bank_statement_views.xml',
         # Chargés après microfinance_menus.xml : leurs <menuitem parent="..."> référencent
         # des menus qui y sont définis (menu_microfinance_config_geography pour geo_views,
         # menu_microfinance_analysis pour portfolio_snapshot) — les xmlids de
