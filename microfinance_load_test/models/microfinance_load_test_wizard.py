@@ -27,7 +27,8 @@ class MicrofinanceLoadTestWizard(models.TransientModel):
     def _create_fake_partner(self):
         self.ensure_one()
         timestamp = fields.Datetime.now().strftime('%Y%m%d%H%M%S%f')
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(
+            microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': f'TEST Rakoto {timestamp}',
             'is_company': False,
             'company_id': self.env.company.id,
