@@ -56,8 +56,8 @@ class TestFondPurgeWizard(TestBankStatementPaper):
 
     def setUp(self):
         super().setUp()
-        self.env['ir.config_parameter'].sudo().set_param(self.APPLY, 'True')
-        self.env['ir.config_parameter'].sudo().set_param(self.TEST_ENV, 'False')
+        # aucun paramètre n'est lu par la purge : on retire ceux de la base de test pour le prouver
+        self.env['ir.config_parameter'].sudo().search([('key', 'in', (self.APPLY, self.TEST_ENV))]).unlink()
 
     # ------------------------------------------------------------------ fixtures
     def _credit_scenario(self):
@@ -123,61 +123,60 @@ class TestFondPurgeWizard(TestBankStatementPaper):
     def assertSnapshotEqual(self, before):
         self.assertEqual(self._snapshot(), before, 'Soldes comptables modifiés par la purge')
 
-    def _run(self, funds, execute=True, mode_raz='reset', move_mode='reverse', **options):
+    def _run(self, funds, execute=True, mode_raz='reset', **options):
         # sans orphelines par défaut : les bases de test (copie de MOWGLI) en portent de réelles
         options.setdefault('include_orphans', False)
         wizard = self.Wizard.create(dict({
-            'scope': 'selection', 'fond_ids': [(6, 0, funds.ids)], 'mode_raz': mode_raz, 'move_mode': move_mode},
-            **options))
-        wizard.action_simulate()
+            'scope': 'selection', 'fond_ids': [(6, 0, funds.ids)], 'mode_raz': mode_raz}, **options))
         if execute:
-            self.assertTrue(wizard.simulated_key, wizard.log)
-            wizard.confirm_text = 'PURGER'
             wizard.action_execute()
+        else:
+            wizard.action_simulate()
         return wizard
 
     def _audit(self):
         return self.env['microfinance.fond.purge.log'].sudo().search([], order='id desc', limit=1)
 
-    # ------------------------------------------------------------------ (1) fonds de crédit complet, mode A
-    def test_credit_fund_mode_a_reverses_everything_and_resets_statement_lines(self):
+    def _all_scenario_accounts(self):
+        return (self.hq_liaison, self.ag_liaison, self.ag2_liaison, self.hq_out, self.ag_in, self.fond_account,
+                self.ex_in, self.ex_out, self.ex_produit)
+
+    # ------------------------------------------------------------------ fonds de crédit complet
+    def test_credit_fund_purge_without_parameter_or_simulation(self):
         zero = self._snapshot()
         fond, partage, entry = self._credit_scenario()
         moves = self._fund_moves(fond)
         # contribution + (siège, miroir) x 2 agences + part gardée
         self.assertEqual(len(moves), 6)
         self.assertNotEqual(self._snapshot(), zero)
+        statement = entry.statement_id
         wizard = self._run(fond)
         self.assertNotIn('ERREUR', wizard.log)
         self.assertTrue(wizard.done)
+        self.assertFalse(moves.exists(), "Les écritures liées sont supprimées, miroirs des agences compris.")
         self.assertSnapshotEqual(zero)
-        for account in (self.hq_liaison, self.ag_liaison, self.ag2_liaison, self.hq_out, self.ag_in, self.fond_account,
-                        fond.account_id):
+        for account in self._all_scenario_accounts() + (fond.account_id,):
             self.assertEqual(self._balance(account), 0.0, account.code)
         self.assertEqual(entry.state, 'todo')
         self.assertFalse(entry.statement_line_id)
-        self.assertTrue(entry.statement_id.exists(), "Le relevé n'est jamais supprimé.")
-        # le fonds reste, ses contributions / partages / allocations ont disparu, les écritures sont conservées
+        self.assertTrue(statement.exists() and entry.exists(), "Les relevés sont conservés.")
         self.assertTrue(fond.exists())
-        self.assertFalse(self.env['microfinance.fond.contribution'].sudo().search([('fond_id', '=', fond.id)]))
-        self.assertFalse(self.env['microfinance.fond.partage'].sudo().search([('fond_id', '=', fond.id)]))
-        self.assertFalse(self.env['microfinance.fond.allocation'].sudo().search([('fond_id', '=', fond.id)]))
-        self.assertTrue(moves.exists() == moves)
-        self.assertEqual(set(moves.mapped('state')), {'posted'})
-        self.assertFalse(moves.mapped('microfinance_fond_partage_id'))
-        self.assertEqual(fond.total_contributions, 0.0)
-        self.assertEqual(fond.reste_partageable, 0.0)
+        for model in ('contribution', 'partage', 'allocation'):
+            self.assertFalse(self.env['microfinance.fond.' + model].sudo().search([('fond_id', '=', fond.id)]))
+        self.assertEqual((fond.total_contributions, fond.reste_partageable), (0.0, 0.0))
         log = self._audit()
         self.assertEqual((log.state, log.user_id), ('done', self.admin))
-        self.assertTrue(log.counts and log.balances_before and log.balances_after and log.kept_moves)
+        self.assertTrue(log.counts and log.balances_before and log.balances_after)
         self.assertFalse(log.anomalies)
 
-    def test_simulation_changes_nothing_and_lists_companies_models_and_balances(self):
+    def test_simulation_changes_nothing_and_is_optional(self):
         fond, partage, entry = self._credit_scenario()
         before = self._snapshot()
+        moves = self._fund_moves(fond)
         wizard = self._run(fond, execute=False)
-        self.assertTrue(wizard.can_execute, wizard.log)
+        self.assertNotIn('ERREUR', wizard.log)
         self.assertSnapshotEqual(before)
+        self.assertEqual(self._fund_moves(fond), moves)
         self.assertEqual(entry.state, 'done')
         items = {(line.company_name, line.item): line.count for line in wizard.line_ids}
         self.assertEqual(items[(self.hq.name, 'Contributions')], 1)
@@ -186,9 +185,11 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertTrue(wizard.balance_ids)
         self.assertFalse(wizard.balance_ids.filtered(lambda b: b.flag.startswith('ANOMALIE')))
         self.assertFalse(self.env['microfinance.fond.purge.log'].sudo().search([]))
+        self.assertIn('1 fonds', wizard.summary)
 
-    # ------------------------------------------------------------------ (2) fonds d'exploitation, mode A
-    def test_exploitation_funds_mode_a_zero_balances(self):
+    # ------------------------------------------------------------------ fonds d'exploitation
+    def test_exploitation_funds_purge_zero_balances(self):
+        zero = self._snapshot()
         subvention, avance = self._exploitation_scenario()
         funds = subvention | avance
         moves = self._fund_moves(funds)
@@ -197,49 +198,31 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertEqual(self._balance(avance.account_id), -3000.0)
         wizard = self._run(funds)
         self.assertNotIn('ERREUR', wizard.log)
+        self.assertFalse(moves.exists())
+        self.assertSnapshotEqual(zero)
         for account in (self.ex_in, self.ex_out, self.ex_produit, avance.account_id):
             self.assertEqual(self._balance(account), 0.0, account.code)
         self.assertTrue(funds.exists() == funds)
         self.assertEqual((avance.exploitation_recu, avance.exploitation_du), (0.0, 0.0))
 
-    # ------------------------------------------------------------------ (3) mode B
-    def test_mode_b_deletes_moves_when_test_environment_parameter_is_true(self):
-        self.env['ir.config_parameter'].sudo().set_param(self.TEST_ENV, 'True')
+    def test_credit_and_exploitation_together(self):
         zero = self._snapshot()
         fond, partage, entry = self._credit_scenario()
         subvention, avance = self._exploitation_scenario()
-        funds = fond | subvention | avance
-        moves = self._fund_moves(funds)
-        wizard = self._run(funds, move_mode='delete')
+        wizard = self._run(fond | subvention | avance)
         self.assertNotIn('ERREUR', wizard.log)
-        self.assertFalse(moves.exists())
         self.assertSnapshotEqual(zero)
         self.assertEqual(entry.state, 'todo')
 
-    def test_mode_b_refused_without_test_environment_parameter(self):
-        subvention, avance = self._exploitation_scenario()
-        funds = subvention | avance
-        moves = self._fund_moves(funds)
-        wizard = self._run(funds, execute=False, move_mode='delete')
-        self.assertTrue(wizard.has_blockers)
-        self.assertFalse(wizard.can_execute)
-        self.assertIn(self.TEST_ENV, wizard.log)
-        wizard.confirm_text = 'PURGER'
-        with self.assertRaises(UserError):
-            wizard.action_execute()
-        self.assertTrue(moves.exists() == moves)
-        self.assertEqual(self._balance(self.ex_produit), -7000.0)
-
-    # ------------------------------------------------------------------ (4) reset / suppression du fonds
+    # ------------------------------------------------------------------ reset / suppression du fonds
     def test_reset_keeps_the_fund_and_delete_removes_it_and_archives_its_account(self):
         subvention, avance = self._exploitation_scenario()
         account = avance.account_id
         self.assertTrue(avance.account_auto and account.code.startswith('240'))
         self._run(avance, mode_raz='reset')
         self.assertTrue(avance.exists())
-        self.assertFalse(account.deprecated)
         self.assertEqual(avance.exploitation_recu, 0.0)
-        # un second fonds, supprimé en une seule opération : son compte d'origine est archivé, jamais supprimé
+        self.assertTrue(account.deprecated is False)
         autre = self._expl_fond('avance')
         self._expl_contribution(autre, 900.0, 'VIR-B')
         autre_account, autre_id = autre.account_id, autre.id
@@ -249,12 +232,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
             [('id', '=', autre_id)]))
         self.assertTrue(autre_account.exists(), "Le compte d'origine n'est jamais supprimé.")
         self.assertTrue(autre_account.deprecated)
-        self.assertEqual(self._balance(autre_account), 0.0)
         self.assertTrue(subvention.exists() and avance.exists())
-        # le fonds remis à zéro avant : son compte garde l'historique d'une purge précédente, il n'est pas archivé
-        self._run(avance, mode_raz='delete_fund')
-        self.assertFalse(avance.exists())
-        self.assertFalse(account.deprecated)
 
     def test_non_automatic_account_is_never_archived(self):
         fond = self._expl_fond('avance', account_id=self.fond_account.id)
@@ -263,7 +241,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertFalse(fond.exists())
         self.assertFalse(self.fond_account.deprecated)
 
-    # ------------------------------------------------------------------ (5) dépendance inconnue
+    # ------------------------------------------------------------------ dépendance inconnue
     def test_unknown_foreign_key_stops_before_any_deletion(self):
         subvention, avance = self._exploitation_scenario()
         self.env.cr.execute("CREATE TABLE test_purge_dep (id serial PRIMARY KEY, "
@@ -271,73 +249,19 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.env.cr.execute("INSERT INTO test_purge_dep (fond_id) VALUES (%s)", (avance.id,))
         moves = self._fund_moves(avance)
         wizard = self._run(avance, execute=False)
-        self.assertTrue(wizard.has_blockers)
         self.assertIn('test_purge_dep', wizard.log)
-        wizard.confirm_text = 'PURGER'
-        with self.assertRaises(UserError):
-            wizard.action_execute()
+        with self.assertRaises(UserError) as caught:
+            self._run(avance)
+        self.assertIn('test_purge_dep', str(caught.exception))
         self.assertTrue(moves.exists() == moves)
         self.assertEqual(len(avance.contribution_ids), 2)
 
-    # ------------------------------------------------------------------ (6) garde-fous
-    def test_guards_parameter_phrase_and_simulation(self):
-        subvention, avance = self._exploitation_scenario()
-        moves = self._fund_moves(avance)
-        wizard = self.Wizard.create({'scope': 'selection', 'fond_ids': [(6, 0, avance.ids)]})
-        wizard.confirm_text = 'PURGER'
-        with self.assertRaises(UserError):  # pas de simulation
-            wizard.action_execute()
-        wizard.action_simulate()
-        wizard.confirm_text = 'purger'
-        with self.assertRaises(UserError):  # mot incorrect
-            wizard.action_execute()
-        wizard.confirm_text = False
-        with self.assertRaises(UserError):  # mot absent
-            wizard.action_execute()
-        wizard.confirm_text = 'PURGER'
-        wizard.fond_ids = [(6, 0, (avance | subvention).ids)]
-        self.assertFalse(wizard.can_execute)
-        with self.assertRaises(UserError):  # sélection modifiée depuis la simulation
-            wizard.action_execute()
-        wizard.fond_ids = [(6, 0, avance.ids)]
-        wizard.move_mode = 'reverse'
-        wizard.action_simulate()
-        self.env['ir.config_parameter'].sudo().set_param(self.APPLY, 'False')
-        wizard.confirm_text = 'PURGER'
-        with self.assertRaises(UserError):  # paramètre d'exécution absent
-            wizard.action_execute()
-        self.assertTrue(moves.exists() == moves)
-        self.assertEqual(len(avance.contribution_ids), 2)
-        self.assertFalse(self.env['microfinance.fond.purge.log'].sudo().search([]))
-
-    def test_mirror_moves_are_left_in_place_when_the_option_is_unchecked(self):
-        fond, partage, entry = self._credit_scenario()
-        mirrors = self._fund_moves(fond).filtered(lambda m: m.microfinance_partage_side == 'agency')
-        self.assertEqual(len(mirrors), 2)
-        wizard = self._run(fond, include_mirror=False)
-        self.assertNotIn('ERREUR', wizard.log)
-        self.assertFalse(self.env['account.move'].sudo().search([('reversed_entry_id', 'in', mirrors.ids)]))
-        self.assertEqual(set(mirrors.mapped('state')), {'posted'})
-        self.assertFalse(mirrors.mapped('microfinance_fond_partage_id'))
-        self.assertEqual(self._balance(self.ag_liaison), -300.0)
-        self.assertEqual(self._balance(self.hq_out), 0.0)
-        self.assertEqual(entry.state, 'done')  # le miroir rapproché n'est pas touché
-
-    def test_unchecked_bank_option_blocks_reconciled_lines(self):
-        fond, partage, entry = self._credit_scenario()
-        wizard = self._run(fond, execute=False, undo_bank=False)
-        self.assertTrue(wizard.has_blockers)
-        self.assertIn('rapproch', wizard.log)
-        self.assertEqual(entry.state, 'done')
-
-    # ------------------------------------------------------------------ (7) rollback complet
+    # ------------------------------------------------------------------ rollback complet
     def test_error_in_the_middle_rolls_everything_back(self):
         fond, partage, entry = self._credit_scenario()
         moves = self._fund_moves(fond)
         move_count = self.env['account.move'].sudo().search_count([])
         wizard = self.Wizard.create({'scope': 'selection', 'fond_ids': [(6, 0, fond.ids)]})
-        wizard.action_simulate()
-        wizard.confirm_text = 'PURGER'
         with patch.object(MicrofinanceFondAllocation, 'unlink', side_effect=UserError('Erreur injectée')):
             wizard.action_execute()
         self.assertIn('ERREUR', wizard.log)
@@ -352,7 +276,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertEqual(self._fund_moves(fond), moves)
         self.assertEqual(self._audit().state, 'failed')
 
-    # ------------------------------------------------------------------ (8) droits
+    # ------------------------------------------------------------------ droits
     def test_only_the_technical_administrator_reaches_menu_action_and_model(self):
         manager = self.env['res.users'].with_context(no_reset_password=True).create({
             'name': 'Manager crédit (test)', 'login': 'purge_manager', 'company_id': self.hq.id,
@@ -365,37 +289,40 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertEqual(action.groups_id, self.env.ref('base.group_system'))
         self.assertNotIn(menu.id, self.env['ir.ui.menu'].with_user(manager)._visible_menu_ids())
         self.assertIn(menu.id, self.env['ir.ui.menu'].with_user(self.admin)._visible_menu_ids())
+        # accès direct par URL (#action=...) : l'écran ne peut ni s'ouvrir ni s'exécuter sans le groupe
+        Wizard = self.env['microfinance.fond.purge.wizard'].with_user(manager)
+        self.assertFalse(Wizard.check_access_rights('read', raise_exception=False))
         with self.assertRaises(AccessError):
-            self.env['microfinance.fond.purge.wizard'].with_user(manager).create({'scope': 'both'})
+            Wizard.default_get(['scope'])
+        with self.assertRaises(AccessError):
+            Wizard.create({'scope': 'both'})
         with self.assertRaises(AccessError):
             self.env['microfinance.fond.purge.log'].with_user(manager).search([])
+        wizard = self.Wizard.create({'scope': 'both'})
+        with self.assertRaises(AccessError):
+            wizard.with_user(manager).action_execute()
 
-    # ------------------------------------------------------------------ (9) fonds non sélectionnés intacts
+    # ------------------------------------------------------------------ fonds non sélectionnés intacts
     def test_unselected_funds_and_unrelated_moves_stay_untouched(self):
         subvention, avance = self._exploitation_scenario()
         other_moves = self._fund_moves(subvention)
-        other_balance = self._balance(self.ex_produit)
-        # écriture hors fonds, sur les mêmes comptes de suspens
         free = self.env['account.move'].sudo().with_company(self.hq).create({
             'move_type': 'entry', 'journal_id': self.ex_journal.id, 'date': '2026-10-08', 'ref': 'Hors fonds',
             'line_ids': [(0, 0, {'name': 'x', 'account_id': self.ex_in.id, 'debit': 123.0, 'credit': 0.0}),
                          (0, 0, {'name': 'x', 'account_id': self.ex_produit.id, 'debit': 0.0, 'credit': 123.0})]})
         free.action_post()
-        wizard = self._run(avance, mode_raz='delete_fund', include_orphans=False)
+        before_other = self._balance(self.ex_produit)
+        wizard = self._run(avance, mode_raz='delete_fund')
         self.assertNotIn('ERREUR', wizard.log)
         self.assertTrue(subvention.exists())
-        self.assertEqual(len(subvention.contribution_ids), 1)
         self.assertEqual(subvention.contribution_ids.move_id, other_moves)
         self.assertEqual(other_moves.state, 'posted')
-        self.assertFalse(self.env['account.move'].sudo().search([('reversed_entry_id', 'in', (other_moves | free).ids)]))
         self.assertEqual(free.state, 'posted')
-        self.assertEqual(self._balance(self.ex_produit), other_balance - 123.0)
+        self.assertEqual(self._balance(self.ex_produit), before_other)
 
-    # ------------------------------------------------------------------ (10) écritures orphelines
+    # ------------------------------------------------------------------ écritures orphelines
     def test_orphan_moves_of_fund_journals_are_purged_but_not_those_of_existing_funds(self):
-        self.env['ir.config_parameter'].sudo().set_param(self.TEST_ENV, 'True')
         subvention, avance = self._exploitation_scenario()
-        # fonds supprimé à la main : sa contribution disparaît, son écriture reste (lien SET NULL)
         ancien = self._expl_fond('subvention')
         contrib = self._expl_contribution(ancien, 400.0, 'VIR-OLD')
         orphan = contrib.move_id
@@ -403,15 +330,13 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         ancien.unlink()
         self.assertFalse(orphan.microfinance_fond_contribution_id)
         kept = self._fund_moves(subvention)
-        # sans la case : l'orpheline reste
         wizard = self._run(avance, execute=False, include_orphans=False)
         self.assertFalse(wizard.line_ids.filtered(lambda l: l.item.startswith('Écritures orphelines')))
-        wizard = self._run(avance, move_mode='delete', include_orphans=True)
+        wizard = self._run(avance, include_orphans=True)
         self.assertNotIn('ERREUR', wizard.log)
         self.assertFalse(orphan.exists())
         self.assertTrue(kept.exists() == kept, "L'écriture d'un fonds existant non sélectionné reste intacte.")
         self.assertEqual(self._balance(self.ex_produit), -7000.0)
-        subvention_only = self._run(subvention, move_mode='delete')
-        self.assertNotIn('ERREUR', subvention_only.log)
+        self._run(subvention, include_orphans=True)
         for account in (self.ex_in, self.ex_out, self.ex_produit):
             self.assertEqual(self._balance(account), 0.0, account.code)
