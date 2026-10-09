@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_account_search_mowgli_auto" model="ir.ui.view">
+        <field name="name">account.account.search.mowgli.auto</field>
+        <field name="model">account.account</field>
+        <field name="inherit_id" ref="account.view_account_search"/>
+        <field name="arch" type="xml">
+            <xpath expr="//search" position="inside">
+                <filter name="mowgli_auto_created" string="Créés automatiquement"
+                        domain="[('mowgli_auto_created', '=', True)]"/>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_account_list_mowgli_auto" model="ir.ui.view">
+        <field name="name">account.account.list.mowgli.auto</field>
+        <field name="model">account.account</field>
+        <field name="inherit_id" ref="account.view_account_list"/>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="inside">
+                <field name="mowgli_auto_created" optional="hide"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

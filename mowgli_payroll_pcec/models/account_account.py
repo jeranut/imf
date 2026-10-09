@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from odoo import _, api, models
+from odoo import _, api, fields, models
 
 # Comptes PCEC "sûrs" à aligner sur le libellé officiel (code déjà correct,
 # seul le libellé Odoo diverge). Rien d'autre dans la classe 65 n'est
@@ -17,6 +17,11 @@ PCEC_NEW_ACCOUNT_NAME = 'Cotisations aux organismes sociaux'
 class AccountAccount(models.Model):
     _inherit = 'account.account'
 
+    mowgli_auto_created = fields.Boolean(
+        string="Créé automatiquement", readonly=True, copy=False,
+        help="Compte de paie recréé automatiquement par "
+             "mowgli_payroll_pcec parce qu'il manquait dans cette société.")
+
     def _mowgli_references(self):
         """Liste des références qui interdisent de renommer ce compte :
         lignes d'écriture, règles salariales, journaux (compte par
@@ -30,9 +35,13 @@ class AccountAccount(models.Model):
         if move_line_count:
             refs.append(_("%d ligne(s) d'écriture") % move_line_count)
 
-        rule_count = self.env['hr.salary.rule'].sudo().search_count([
-            '|', ('debit_account_id', '=', self.id),
-            ('credit_account_id', '=', self.id)])
+        # debit/credit_account_id sont company_dependent : valeurs dans
+        # ir_property, pas dans une colonne de hr_salary_rule.
+        properties = self.env['ir.property'].sudo().search([
+            ('fields_id.model', '=', 'hr.salary.rule'),
+            ('fields_id.name', 'in', ['debit_account_id', 'credit_account_id']),
+            ('value_reference', '=', 'account.account,%d' % self.id)])
+        rule_count = len(set(properties.mapped('res_id')))
         if rule_count:
             refs.append(_("%d règle(s) salariale(s)") % rule_count)
 

@@ -6,6 +6,7 @@
          sinon le lien (règle -> compte) créé par
          _mowgli_setup_payroll_rules bloquerait tout renommage ultérieur
          (un compte référencé par une règle salariale n'est plus "sûr"). -->
+    <function model="mowgli.payroll.migration" name="_run"/>
     <function model="account.account" name="_mowgli_setup_pcec_accounts"/>
     <function model="hr.salary.rule" name="_mowgli_setup_payroll_rules"/>
 </odoo>

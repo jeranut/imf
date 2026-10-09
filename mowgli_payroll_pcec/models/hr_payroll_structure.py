@@ -29,18 +29,23 @@ class HrPayrollStructure(models.Model):
     _name = 'hr.payroll.structure'
     _inherit = ['hr.payroll.structure', 'mail.thread']
 
+    # Structure PARTAGÉE entre agences : société facultative et vide.
+    company_id = fields.Many2one(
+        'res.company', string='Société', required=False, default=False,
+        help="Laisser vide : la structure est partagée par toutes les "
+             "agences.")
     mowgli_source_id = fields.Many2one(
-        'hr.payroll.structure', string='Structure source (synchro agences)',
+        'hr.payroll.structure', string='Structure source (OBSOLÈTE)',
         index=True, copy=False, readonly=True,
-        help="Structure maître dont celle-ci est la copie pour une agence "
-             "cible.")
+        help="OBSOLÈTE : ancienne copie de structure par agence, plus "
+             "utilisée (la structure est désormais partagée).")
 
     def action_open_mowgli_sync_wizard(self):
         self.ensure_one()
         self._mowgli_check_manager()
         return {
             'type': 'ir.actions.act_window',
-            'name': _("Synchroniser sur toutes les agences"),
+            'name': _("Compléter les comptes de paie par société"),
             'res_model': 'mowgli.payroll.sync.wizard',
             'view_mode': 'form',
             'target': 'new',
@@ -51,13 +56,16 @@ class HrPayrollStructure(models.Model):
         if not self.env.user.has_group(MANAGER_GROUP):
             raise AccessError(_(
                 "Seuls les utilisateurs du groupe Paie / Manager peuvent "
-                "synchroniser la structure de paie vers les agences."))
+                "compléter les comptes de paie par société."))
 
     def _mowgli_find_account_for_company(self, account, target_company):
         """Retrouve, chez la société cible, le compte de même code que
         `account` (comparaison sur le code, jamais sur l'id). Ne crée et ne
         renomme jamais de compte : si rien ne correspond, renvoie (False,
-        message d'avertissement)."""
+        message d'avertissement).
+
+        OBSOLÈTE : approche « une copie par agence », conservée mais plus
+        appelée."""
         if not account:
             return False, None
         target_account = self.env['account.account'].sudo().search([
@@ -77,7 +85,9 @@ class HrPayrollStructure(models.Model):
         crée un (nom « Salaires », type general, code SAL) seulement s'il
         manque vraiment. Ne modifie jamais un journal existant. Si le code
         SAL est déjà pris par un autre journal, ne l'écrase pas : le
-        signale et laisse payroll_journal_id vide."""
+        signale et laisse payroll_journal_id vide.
+
+        OBSOLÈTE : conservée mais plus appelée."""
         if target_company.payroll_journal_id:
             return {'status': 'already_configured'}
 
@@ -109,7 +119,11 @@ class HrPayrollStructure(models.Model):
         """Propage cette structure (et ses règles) vers `target_company`.
         Idempotent : recherche par mowgli_source_id puis par (code,
         company_id) avant de créer. Ne supprime et ne désactive jamais rien
-        chez la cible ; les règles en trop y sont seulement listées."""
+        chez la cible ; les règles en trop y sont seulement listées.
+
+        OBSOLÈTE : approche « une copie par agence » remplacée par une
+        structure partagée et des comptes par société ; conservée, plus
+        appelée."""
         self.ensure_one()
         self._mowgli_check_manager()
         source = self

@@ -164,37 +164,3 @@ class TestPayrollPcecAccounts(TransactionCase):
         self.assertAlmostEqual(debit_lines.debit, 1000000)
         self.assertEqual(credit_lines.account_id.code, '315000')
         self.assertAlmostEqual(credit_lines.credit, 1000000)
-
-    def test_sync_maps_accounts_by_code_and_journal_toggle(self):
-        self.env['account.account']._mowgli_setup_pcec_accounts()
-        self.env['hr.salary.rule']._mowgli_setup_payroll_rules()
-
-        report = self.structure._mowgli_sync_to_company(self.target)
-        self.assertFalse(report['accounts_missing'])
-        self.assertTrue(report['journal_missing'])
-        self.assertFalse(report.get('journal_action'))
-
-        target_structure = self.env['hr.payroll.structure'].search([
-            ('code', '=', 'BASE'), ('company_id', '=', self.target.id)])
-        target_rules = {r.code: r for r in target_structure.rule_ids}
-        target_652100 = self._account('652100', self.target)
-        target_315000 = self._account('315000', self.target)
-        self.assertEqual(
-            target_rules['BASIC'].debit_account_id, target_652100)
-        self.assertEqual(
-            target_rules['NET'].credit_account_id, target_315000)
-
-        report2 = self.structure._mowgli_sync_to_company(
-            self.target, create_journal=True)
-        self.assertEqual(report2['journal_action']['status'], 'created')
-        self.assertFalse(report2['journal_missing'])
-        self.assertTrue(self.target.payroll_journal_id)
-        self.assertEqual(self.target.payroll_journal_id.code, 'SAL')
-
-        report3 = self.structure._mowgli_sync_to_company(
-            self.target, create_journal=True)
-        self.assertEqual(
-            report3['journal_action']['status'], 'already_configured')
-        journals = self.env['account.journal'].search([
-            ('code', '=', 'SAL'), ('company_id', '=', self.target.id)])
-        self.assertEqual(len(journals), 1)

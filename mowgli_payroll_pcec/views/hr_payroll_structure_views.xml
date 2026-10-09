@@ -9,10 +9,9 @@
             <xpath expr="//group[1]" position="before">
                 <header>
                     <button name="action_open_mowgli_sync_wizard"
-                            string="Synchroniser sur toutes les agences"
+                            string="Compléter les comptes de paie par société"
                             type="object" class="btn-primary"
-                            groups="hr_payroll_community.group_hr_payroll_community_manager"
-                            invisible="mowgli_source_id"/>
+                            groups="hr_payroll_community.group_hr_payroll_community_manager"/>
                 </header>
             </xpath>
             <xpath expr="//group[1]" position="inside">

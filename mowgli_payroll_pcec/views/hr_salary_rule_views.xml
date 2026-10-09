@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_salary_rule_view_form_mowgli_accounts" model="ir.ui.view">
+        <field name="name">hr.salary.rule.view.form.mowgli.accounts</field>
+        <field name="model">hr.salary.rule</field>
+        <field name="inherit_id"
+               ref="hr_payroll_community.hr_salary_rule_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='credit_account_id']" position="after">
+                <separator colspan="4" string="Comptes par société"/>
+                <field name="mowgli_accounts_by_company" colspan="4" nolabel="1"/>
+                <button name="action_mowgli_complete_accounts"
+                        string="Compléter les comptes manquants"
+                        type="object" class="btn-secondary" colspan="4"
+                        groups="hr_payroll_community.group_hr_payroll_community_manager"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

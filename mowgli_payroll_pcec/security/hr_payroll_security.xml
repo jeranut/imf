@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Structure et règles de paie PARTAGÉES : visibles si sans société ou
+         si leur société fait partie de celles de l'utilisateur. L'écriture
+         est réservée au groupe Paie / Manager par les droits d'accès
+         (ir.model.access) de hr_payroll_community. -->
+    <record id="mowgli_hr_salary_rule_shared_rule" model="ir.rule">
+        <field name="name">Règle de paie : partagée ou de mes sociétés</field>
+        <field name="model_id" ref="hr_payroll_community.model_hr_salary_rule"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="mowgli_hr_payroll_structure_shared_rule" model="ir.rule">
+        <field name="name">Structure de paie : partagée ou de mes sociétés</field>
+        <field name="model_id" ref="hr_payroll_community.model_hr_payroll_structure"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+</odoo>
