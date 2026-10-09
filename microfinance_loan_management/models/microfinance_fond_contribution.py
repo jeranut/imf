@@ -63,9 +63,7 @@ class MicrofinanceFondContribution(models.Model):
         copy=False,
         help="Société ayant réellement effectué le mouvement, toujours renseignée (y compris pour "
              "un fonds « Agence unique », où elle sera alors identique à company_id). Figée après "
-             "création. Elle ne détermine ni la société de l'écriture (toujours celle du fonds) ni les droits. "
-             "Fonds d'exploitation : la saisie est réservée au siège, l'agence de saisie est donc toujours la "
-             "société du fonds.",
+             "création.",
     )
     state = fields.Selection([
         ('draft', 'Brouillon'),
