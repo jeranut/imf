@@ -71,4 +71,19 @@
         <field name="domain_force">[('partage_id.company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[]"/>
     </record>
+
+    <!-- Partages de fonds d'exploitation : direction du siège et comptabilité seulement. Finance et Auditeur lisent les
+         partages de crédit (ACL) mais jamais ceux d'exploitation, même par URL directe. -->
+    <record id="microfinance_fond_partage_exploitation_visibility_rule" model="ir.rule">
+        <field name="name">Microfinance partages d'exploitation : direction et comptabilité seulement</field>
+        <field name="model_id" ref="model_microfinance_fond_partage"/>
+        <field name="domain_force">[(1, '=', 1)] if (user.has_group('microfinance_loan_management.group_microfinance_manager') or user.has_group('microfinance_loan_management.group_microfinance_comptable') or user.has_group('account.group_account_manager')) else [('destination', '!=', 'exploitation')]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+    <record id="microfinance_fond_partage_line_exploitation_visibility_rule" model="ir.rule">
+        <field name="name">Microfinance parts d'exploitation : direction et comptabilité seulement</field>
+        <field name="model_id" ref="model_microfinance_fond_partage_line"/>
+        <field name="domain_force">[(1, '=', 1)] if (user.has_group('microfinance_loan_management.group_microfinance_manager') or user.has_group('microfinance_loan_management.group_microfinance_comptable') or user.has_group('account.group_account_manager')) else [('destination', '!=', 'exploitation')]</field>
+        <field name="groups" eval="[]"/>
+    </record>
 </odoo>

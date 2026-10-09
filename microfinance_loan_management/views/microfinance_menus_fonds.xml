@@ -38,6 +38,9 @@
         <field name="sequence">50</field>
         <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_manager'), ref('group_microfinance_finance'), ref('group_microfinance_auditor')])]"/>
     </record>
+    <menuitem id="menu_microfinance_fond_partage_exploitation" name="Partage des fonds d'exploitation"
+              parent="menu_fonds_root" action="action_microfinance_fond_partage_exploitation" sequence="55"
+              groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_comptable,account.group_account_manager"/>
     <record id="menu_microfinance_portfolio_allocation" model="ir.ui.menu">
         <field name="parent_id" ref="menu_fonds_root"/>
         <field name="sequence">60</field>
