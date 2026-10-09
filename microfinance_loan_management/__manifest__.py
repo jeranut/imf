@@ -89,6 +89,7 @@
         'views/microfinance_geo_views.xml',
         'views/microfinance_portfolio_snapshot_views.xml',
         'views/microfinance_portfolio_views.xml',
+        'views/microfinance_menus_fonds.xml',
     ],
     'assets': {
         'web.assets_backend': [

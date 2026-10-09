@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Réorganisation des menus Ampaly (docs_dev/migration_ouverture/MENUS_FONDS.md) : Configuration ne garde que
+         les réglages, catalogues et référentiels. Les opérations sur les fonds vont dans le menu « Fonds », les
+         contrôles de liaison dans Comptabilité > Banque. Fichier chargé en dernier : il ne fait que poser le parent,
+         la séquence et les groupes de menus définis ailleurs (xmlids, actions, vues et modèles inchangés).
+         Les groupes sont posés par (6, 0, …) : un <menuitem groups> ne retire jamais un groupe déjà présent. -->
+
+    <menuitem id="menu_fonds_root" name="Fonds" parent="menu_microfinance_root" sequence="5"
+              groups="microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_auditor,microfinance_loan_management.group_microfinance_comptable,account.group_account_manager"/>
+    <record id="menu_caisse_root" model="ir.ui.menu">
+        <field name="sequence">6</field>
+    </record>
+
+    <!-- Fonds de crédit et opérations associées : Manager crédit, Finance, Auditeur -->
+    <record id="menu_microfinance_fond_credit" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_fonds_root"/>
+        <field name="sequence">10</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_manager'), ref('group_microfinance_finance'), ref('group_microfinance_auditor')])]"/>
+    </record>
+    <record id="menu_microfinance_fond_exploitation" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_fonds_root"/>
+        <field name="sequence">20</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_manager'), ref('group_microfinance_comptable'), ref('account.group_account_manager')])]"/>
+    </record>
+    <record id="menu_microfinance_fond_contribution" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_fonds_root"/>
+        <field name="sequence">30</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_manager'), ref('group_microfinance_finance'), ref('group_microfinance_auditor')])]"/>
+    </record>
+    <record id="menu_microfinance_fond_contribution_exploitation" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_fonds_root"/>
+        <field name="sequence">40</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_manager'), ref('group_microfinance_comptable'), ref('account.group_account_manager')])]"/>
+    </record>
+    <record id="menu_microfinance_fond_partage" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_fonds_root"/>
+        <field name="sequence">50</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_manager'), ref('group_microfinance_finance'), ref('group_microfinance_auditor')])]"/>
+    </record>
+    <record id="menu_microfinance_portfolio_allocation" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_fonds_root"/>
+        <field name="sequence">60</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_manager'), ref('group_microfinance_finance'), ref('group_microfinance_auditor')])]"/>
+    </record>
+    <record id="menu_microfinance_portfolio_allocation_line_history" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_fonds_root"/>
+        <field name="sequence">70</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_manager'), ref('group_microfinance_finance'), ref('group_microfinance_auditor')])]"/>
+    </record>
+
+    <!-- Contrôles comptables : Comptabilité > Banque (mêmes groupes que la section) -->
+    <record id="menu_microfinance_fond_liaison_report" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_microfinance_bank_section"/>
+        <field name="sequence">20</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_finance'), ref('group_microfinance_comptable'), ref('group_microfinance_auditor'), ref('account.group_account_manager')])]"/>
+    </record>
+    <record id="menu_microfinance_fond_liaison_solde" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_microfinance_bank_section"/>
+        <field name="sequence">30</field>
+        <field name="groups_id" eval="[(6, 0, [ref('group_microfinance_finance'), ref('group_microfinance_comptable'), ref('group_microfinance_auditor'), ref('account.group_account_manager')])]"/>
+    </record>
+
+    <!-- Catalogues de l'analyse financière du dossier de crédit : Configuration > Crédit -->
+    <record id="menu_microfinance_financial_designation_income" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_microfinance_config_credit"/>
+        <field name="sequence">7</field>
+    </record>
+    <record id="menu_microfinance_financial_designation_activity_expense" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_microfinance_config_credit"/>
+        <field name="sequence">8</field>
+    </record>
+    <record id="menu_microfinance_financial_designation_family_expense" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_microfinance_config_credit"/>
+        <field name="sequence">9</field>
+    </record>
+    <record id="menu_microfinance_financial_frequency" model="ir.ui.menu">
+        <field name="parent_id" ref="menu_microfinance_config_credit"/>
+        <field name="sequence">10</field>
+    </record>
+</odoo>
