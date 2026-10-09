@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Séparation crédit / exploitation côté serveur : un fonds d'exploitation n'est JAMAIS la source d'un crédit,
-d'un partage, d'une répartition par portefeuille, ni le fonds de crédit par défaut d'une société. Les domaines
+d'un partage de crédit, d'une répartition par portefeuille, ni le fonds de crédit par défaut d'une société. Les domaines
 des champs masquent déjà ces fonds dans l'interface ; ces contraintes bloquent aussi un create()/write()
 direct (import, API)."""
 from odoo import api, models, _
@@ -22,13 +22,10 @@ class MicrofinanceLoan(models.Model):
             _refuse_exploitation(loan.fond_credit_id, _('financer un crédit'))
 
 
-class MicrofinanceFondPartage(models.Model):
-    _inherit = 'microfinance.fond.partage'
-
-    @api.constrains('fond_id')
-    def _check_fond_not_exploitation(self):
-        for partage in self.filtered(lambda p: p.fond_id.destination == 'exploitation'):
-            _refuse_exploitation(partage.fond_id, _('un partage vers les agences'))
+# Partage : un fonds d'exploitation se partage aux agences par le menu « Partage des fonds d'exploitation » (même modèle,
+# destination imposée par le contexte de l'action, journal d'exploitation de la même banque) et ne peut JAMAIS passer par
+# le partage de crédit : voir MicrofinanceFondPartage._check_expected_destination
+# (microfinance_fond_partage_exploitation.py). Il ne crée aucune allocation, donc n'alimente aucun crédit.
 
 
 class MicrofinancePortfolioAllocation(models.Model):

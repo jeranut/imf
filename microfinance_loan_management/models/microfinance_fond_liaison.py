@@ -221,7 +221,7 @@ class MicrofinanceFondPartage(models.Model):
         """Côté agence : Dr 139100 / Cr compte de liaison de l'agence (journal crédit, ou d'exploitation pour un fonds
         d'exploitation, de la banque du fonds)."""
         self.ensure_one()
-        agency = line.company_id
+        agency = line.company_id.sudo()  # une direction multi-agences ne lit pas forcément la société de l'agence
         fund_journal = self.fond_id.fund_journal_id
         exploitation = self.fond_id.destination == 'exploitation'
         journal = self._receiving_journal_for(fund_journal, agency)
