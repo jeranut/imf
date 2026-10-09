@@ -173,3 +173,24 @@ class TestBankStatementAccess(TestFondLiaison):
             self.env['account.bank.statement'].with_user(self.accountant).create({
                 'mf_state': 'draft', 'mf_date_from': '2026-10-01', 'mf_date_to': '2026-10-31', 'balance_end_real': 5.0,
                 'mf_entry_ids': [(0, 0, {'date': '2026-10-05', 'name': 'Dépôt', 'amount_in': 5.0})]})
+
+    def test_form_opened_from_the_kanban_button_has_the_journal_prefilled(self):
+        from odoo.tests.common import Form
+        action = self.fdbm.with_user(self.accountant).action_mf_new_statement()
+        model = self.env['account.bank.statement'].with_user(self.accountant).with_context(
+            action['context'], allowed_company_ids=[self.hq.id])
+        form = Form(model, view='microfinance_loan_management.view_microfinance_bank_statement_form')
+        self.assertEqual(form.journal_id, self.fdbm)
+        form.mf_date_from, form.mf_date_to, form.balance_end_real = '2026-10-01', '2026-10-31', 5.0
+        with form.mf_entry_ids.new() as line:
+            line.name, line.amount_in = 'Dépôt', 5.0
+        self.assertEqual(form.save().mf_entry_ids.company_id, self.hq)
+
+    def test_form_from_the_menu_has_an_editable_required_journal(self):
+        from odoo.tests.common import Form
+        model = self.env['account.bank.statement'].with_user(self.accountant).with_context(
+            allowed_company_ids=[self.hq.id])
+        form = Form(model, view='microfinance_loan_management.view_microfinance_bank_statement_form')
+        self.assertFalse(form.journal_id)
+        form.journal_id = self.fdbm  # modifiable tant qu'il n'y a pas de ligne
+        self.assertEqual(form.journal_id, self.fdbm)

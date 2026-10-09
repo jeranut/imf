@@ -128,6 +128,8 @@ class MicrofinanceBankStatementEntry(models.Model):
             raise UserError(_("Un relevé validé n'est plus modifiable."))
         last_dates = {}
         for stmt in statements.sudo():
+            if not stmt.journal_id and not self.env.su:
+                raise UserError(_("Choisissez le journal bancaire du relevé avant d'enregistrer ses lignes."))
             self.env['account.bank.statement']._mf_check_company_allowed(stmt.journal_id.company_id)
         for vals in vals_list:
             if vals.get('statement_id'):  # société posée à l'insertion, jamais déduite d'un enregistrement non enregistré
