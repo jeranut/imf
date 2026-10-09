@@ -4,6 +4,7 @@
 La classe réutilise les fixtures des tests de liaison / relevés bancaires du module microfinance_loan_management
 (sociétés mère + agences, comptes de liaison, journaux, relevés papier). Les tests hérités sont neutralisés ici :
 ils tournent déjà dans leur module."""
+import json
 from unittest.mock import patch
 
 from odoo.exceptions import AccessError, UserError
@@ -76,6 +77,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         stmt.mf_entry_ids.action_treat()
         self.assertEqual(stmt.mf_entry_ids.state, 'done')
         self.assertTrue(mirror.reconciled)
+        stmt.action_mf_validate()
         return fond, partage, stmt.mf_entry_ids
 
     def _expl_fond(self, nature, **kwargs):
@@ -89,6 +91,28 @@ class TestFondPurgeWizard(TestBankStatementPaper):
                                             type_mouvement=type_mouvement)
         contrib.action_post()
         return contrib
+
+    def _tile(self, journal):
+        """Tuile du tableau de bord de la Comptabilité pour un journal bancaire."""
+        self.env.flush_all()
+        journal.invalidate_recordset()
+        return json.loads(journal.kanban_dashboard)
+
+    def _assert_tile_zero(self, journal):
+        tile = self._tile(journal)
+        zero = journal.currency_id.format(0.0) if journal.currency_id else journal.company_id.currency_id.format(0.0)
+        self.assertEqual(tile['mf_statement_balance'], zero)
+        self.assertFalse(tile['mf_gap_nonzero'])
+        self.assertEqual(tile['mf_todo_count'], 0)
+
+    def _exploitation_statement(self, contrib, amount):
+        line = contrib.move_id.line_ids.filtered(lambda l: l.debit > 0)
+        stmt = self._mf_statement(self.ex_journal, 0.0, amount, [{
+            'name': 'Virement exploitation', 'amount_in': amount, 'treatment': 'reconcile',
+            'target_line_id': line.id}])
+        stmt.mf_entry_ids.action_treat()
+        stmt.action_mf_validate()
+        return stmt
 
     def _exploitation_scenario(self):
         subvention = self._expl_fond('subvention')
@@ -150,6 +174,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertEqual(len(moves), 6)
         self.assertNotEqual(self._snapshot(), zero)
         statement = entry.statement_id
+        self.assertEqual(self._tile(self.ag_journal)['mf_statement_balance'], self.agency.currency_id.format(300.0))
         wizard = self._run(fond)
         self.assertNotIn('ERREUR', wizard.log)
         self.assertTrue(wizard.done)
@@ -157,9 +182,10 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertSnapshotEqual(zero)
         for account in self._all_scenario_accounts() + (fond.account_id,):
             self.assertEqual(self._balance(account), 0.0, account.code)
-        self.assertEqual(entry.state, 'todo')
-        self.assertFalse(entry.statement_line_id)
-        self.assertTrue(statement.exists() and entry.exists(), "Les relevés sont conservés.")
+        self.assertFalse(statement.exists() or entry.exists(), "Plus aucun relevé ne référence les fonds purgés.")
+        self.assertFalse(self.env['account.bank.statement.line'].sudo().search([
+            ('journal_id', 'in', (self.ag_journal | self.ag2_journal | self.fdbm).ids)]))
+        self._assert_tile_zero(self.ag_journal)
         self.assertTrue(fond.exists())
         for model in ('contribution', 'partage', 'allocation'):
             self.assertFalse(self.env['microfinance.fond.' + model].sudo().search([('fond_id', '=', fond.id)]))
@@ -168,6 +194,8 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertEqual((log.state, log.user_id), ('done', self.admin))
         self.assertTrue(log.counts and log.balances_before and log.balances_after)
         self.assertFalse(log.anomalies)
+        self.assertEqual((log.n_statements, log.n_entries), (1, 1))
+        self.assertGreaterEqual(log.n_moves, 8)  # 6 écritures de fonds + écriture du relevé (+ miroir)
 
     def test_simulation_changes_nothing_and_is_optional(self):
         fond, partage, entry = self._credit_scenario()
@@ -182,10 +210,13 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertEqual(items[(self.hq.name, 'Contributions')], 1)
         self.assertEqual(items[(self.agency.name, 'Lignes de relevé délettrées (remises à traiter)')], 1)
         self.assertEqual(items[(self.agency2.name, 'Parts de partage')], 1)
+        self.assertEqual(items[(self.agency.name, 'Relevés bancaires supprimés')], 1)
+        self.assertEqual(items[(self.agency.name, 'Lignes de relevé supprimées')], 1)
+        self.assertTrue(entry.exists() and entry.statement_id.exists())
         self.assertTrue(wizard.balance_ids)
         self.assertFalse(wizard.balance_ids.filtered(lambda b: b.flag.startswith('ANOMALIE')))
         self.assertFalse(self.env['microfinance.fond.purge.log'].sudo().search([]))
-        self.assertIn('1 fonds', wizard.summary)
+        self.assertIn('1 fonds, 1 relevés', wizard.summary)
 
     # ------------------------------------------------------------------ fonds d'exploitation
     def test_exploitation_funds_purge_zero_balances(self):
@@ -194,11 +225,15 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         funds = subvention | avance
         moves = self._fund_moves(funds)
         self.assertEqual(len(moves), 3)
+        stmt = self._exploitation_statement(subvention.contribution_ids, 7000.0)
+        self.assertNotEqual(self._tile(self.ex_journal)['mf_statement_balance'], '')
         self.assertEqual(self._balance(self.ex_produit), -7000.0)
         self.assertEqual(self._balance(avance.account_id), -3000.0)
         wizard = self._run(funds)
         self.assertNotIn('ERREUR', wizard.log)
         self.assertFalse(moves.exists())
+        self.assertFalse(stmt.exists())
+        self._assert_tile_zero(self.ex_journal)
         self.assertSnapshotEqual(zero)
         for account in (self.ex_in, self.ex_out, self.ex_produit, avance.account_id):
             self.assertEqual(self._balance(account), 0.0, account.code)
@@ -212,7 +247,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         wizard = self._run(fond | subvention | avance)
         self.assertNotIn('ERREUR', wizard.log)
         self.assertSnapshotEqual(zero)
-        self.assertEqual(entry.state, 'todo')
+        self.assertFalse(entry.exists())
 
     # ------------------------------------------------------------------ reset / suppression du fonds
     def test_reset_keeps_the_fund_and_delete_removes_it_and_archives_its_account(self):
@@ -311,6 +346,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
             'line_ids': [(0, 0, {'name': 'x', 'account_id': self.ex_in.id, 'debit': 123.0, 'credit': 0.0}),
                          (0, 0, {'name': 'x', 'account_id': self.ex_produit.id, 'debit': 0.0, 'credit': 123.0})]})
         free.action_post()
+        other_stmt = self._exploitation_statement(subvention.contribution_ids, 7000.0)
         before_other = self._balance(self.ex_produit)
         wizard = self._run(avance, mode_raz='delete_fund')
         self.assertNotIn('ERREUR', wizard.log)
@@ -319,6 +355,9 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertEqual(other_moves.state, 'posted')
         self.assertEqual(free.state, 'posted')
         self.assertEqual(self._balance(self.ex_produit), before_other)
+        self.assertTrue(other_stmt.exists())
+        self.assertEqual(other_stmt.mf_entry_ids.state, 'done')
+        self.assertEqual(other_stmt.mf_state, 'validated')
 
     # ------------------------------------------------------------------ écritures orphelines
     def test_orphan_moves_of_fund_journals_are_purged_but_not_those_of_existing_funds(self):
@@ -340,3 +379,36 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self._run(subvention, include_orphans=True)
         for account in (self.ex_in, self.ex_out, self.ex_produit):
             self.assertEqual(self._balance(account), 0.0, account.code)
+
+    # ------------------------------------------------------------------ relevés sans lien avec les fonds
+    def test_unrelated_statement_is_kept_by_default_and_deleted_when_the_box_is_checked(self):
+        zero = self._snapshot()
+        fond, partage, entry = self._credit_scenario()
+        free = self._mf_statement(self.ag_journal, 300.0, 250.0, [{
+            'name': 'Frais bancaires', 'amount_out': 50.0, 'treatment': 'new', 'account_id': self.loss.id}])
+        free.mf_entry_ids.action_treat()
+        free.action_mf_validate()
+        free_move = free.line_ids.move_id
+        self.assertTrue(free_move)
+        wizard = self._run(fond)
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertTrue(free.exists() and free_move.exists(), "Relevé sans lien avec les fonds : conservé par défaut.")
+        self.assertFalse(entry.exists())
+        # le relevé conservé est supprimé quand la case est cochée
+        wizard = self._run(fond, delete_other_statements=True)
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertFalse(free.exists() or free_move.exists())
+        self._assert_tile_zero(self.ag_journal)
+        self.assertSnapshotEqual(zero)
+
+    def test_statement_with_unlinked_lines_is_deleted_and_listed_in_the_audit(self):
+        fond, partage, entry = self._credit_scenario()
+        stmt = entry.statement_id
+        extra = self.env['microfinance.bank.statement.entry'].sudo()
+        # relevé validé : on le rouvre pour y ajouter une ligne sans lien avant la purge
+        stmt.sudo().with_context(mf_allow=True).mf_state = 'draft'
+        extra = extra.create({'statement_id': stmt.id, 'name': 'Ligne libre', 'amount_out': 10.0, 'date': '2026-10-06'})
+        wizard = self._run(fond)
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertFalse(stmt.exists() or extra.exists())
+        self.assertIn('dont 1 sans lien avec les fonds', self._audit().statements)
