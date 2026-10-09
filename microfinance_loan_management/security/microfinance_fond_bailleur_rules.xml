@@ -31,6 +31,22 @@
         <field name="groups" eval="[]"/>
     </record>
 
+    <!-- Fonds d'exploitation : visibles de Manager crédit, Comptable et gestionnaire comptable d'Odoo seulement.
+         Règle globale : Agent crédit (donc Caissier, Agent épargne…), Finance et Auditeur ont une lecture ACL sur les
+         fonds de crédit et ne doivent jamais lire un fonds d'exploitation ni ses contributions, même par URL directe. -->
+    <record id="microfinance_fond_exploitation_visibility_rule" model="ir.rule">
+        <field name="name">Microfinance fonds d'exploitation : direction et comptabilité seulement</field>
+        <field name="model_id" ref="model_microfinance_fond_credit"/>
+        <field name="domain_force">[(1, '=', 1)] if (user.has_group('microfinance_loan_management.group_microfinance_manager') or user.has_group('microfinance_loan_management.group_microfinance_comptable') or user.has_group('account.group_account_manager')) else [('destination', '!=', 'exploitation')]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+    <record id="microfinance_fond_exploitation_contribution_visibility_rule" model="ir.rule">
+        <field name="name">Microfinance contributions d'exploitation : direction et comptabilité seulement</field>
+        <field name="model_id" ref="model_microfinance_fond_contribution"/>
+        <field name="domain_force">[(1, '=', 1)] if (user.has_group('microfinance_loan_management.group_microfinance_manager') or user.has_group('microfinance_loan_management.group_microfinance_comptable') or user.has_group('account.group_account_manager')) else [('fond_id.destination', '!=', 'exploitation')]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
     <!-- microfinance.fond.allocation : cloisonnement strict par agence (pas de clause OR) : chaque
          agence ne voit que sa propre part des fonds partagés. Création/modification réservées au
          partage (contexte technique, cf. models/microfinance_fond_allocation.py). -->
