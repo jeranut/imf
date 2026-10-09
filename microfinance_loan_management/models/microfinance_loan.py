@@ -30,7 +30,7 @@ class MicrofinanceLoan(models.Model):
     product_id = fields.Many2one('microfinance.loan.product', string='Produit', required=True, tracking=True)
     fond_credit_id = fields.Many2one(
         'microfinance.fond.credit', string='Fonds de crédit rotatif', tracking=True,
-        domain="[('active', '=', True), "
+        domain="[('active', '=', True), ('destination', '=', 'credit'), "
                "'|', ('date_cloture', '=', False), ('date_cloture', '>=', context_today().strftime('%Y-%m-%d')), "
                "'|', '&', ('scope', '=', 'single_company'), ('company_id', '=', company_id), "
                "'&', ('scope', '=', 'multi_company'), "
@@ -3151,7 +3151,7 @@ class MicrofinanceLoan(models.Model):
                 loan.has_active_fond = False
                 continue
             loan.has_active_fond = bool(Fond.search_count([
-                ('active', '=', True),
+                ('active', '=', True), ('destination', '=', 'credit'),
                 '|', ('date_cloture', '=', False), ('date_cloture', '>=', today),
                 '|', '&', ('scope', '=', 'single_company'), ('company_id', '=', loan.company_id.id),
                 '&', ('scope', '=', 'multi_company'),
@@ -3194,6 +3194,11 @@ class MicrofinanceLoan(models.Model):
         (non-régression du Lot 2)."""
         for loan in self:
             fond = loan.fond_credit_id
+            if fond.destination == 'exploitation':
+                raise UserError(_(
+                    "Le fonds « %s » est un fonds d'exploitation : il ne peut pas financer un crédit ni être "
+                    "décaissé."
+                ) % fond.name)
             if not fond:
                 if loan.has_active_fond:
                     raise UserError(_(

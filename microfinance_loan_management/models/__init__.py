@@ -38,6 +38,7 @@ from . import microfinance_fond_liaison
 from . import microfinance_fond_origine
 from . import microfinance_fond_vue_agence
 from . import microfinance_fond_exploitation
+from . import microfinance_fond_separation
 from . import microfinance_bank_settings
 from . import microfinance_bank_statement
 from . import microfinance_bank_statement_entry

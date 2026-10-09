@@ -79,7 +79,7 @@ class ResCompany(models.Model):
     )
     microfinance_fond_credit_default_id = fields.Many2one(
         'microfinance.fond.credit', string='Fonds de crédit par défaut',
-        domain="[('active', '=', True), "
+        domain="[('active', '=', True), ('destination', '=', 'credit'), "
                "'|', ('date_cloture', '=', False), ('date_cloture', '>=', context_today().strftime('%Y-%m-%d')), "
                "'|', '&', ('scope', '=', 'single_company'), ('company_id', '=', id), "
                "'&', ('scope', '=', 'multi_company'), "

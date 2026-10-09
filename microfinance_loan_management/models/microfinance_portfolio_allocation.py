@@ -43,7 +43,7 @@ class MicrofinancePortfolioAllocation(models.Model):
     name = fields.Char(string='Référence', default='Nouveau', copy=False, readonly=True, tracking=True)
     fond_id = fields.Many2one(
         'microfinance.fond.credit', string='Fonds de crédit', required=True, tracking=True,
-        ondelete='restrict', domain="[('active', '=', True)]",
+        ondelete='restrict', domain="[('active', '=', True), ('destination', '=', 'credit')]",
     )
     company_id = fields.Many2one(
         'res.company', string='Agence', required=True, readonly=True, copy=False, index=True,

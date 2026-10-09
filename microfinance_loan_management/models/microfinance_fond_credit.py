@@ -355,7 +355,7 @@ class MicrofinanceFondCredit(models.Model):
         Les fonds sont lus avec les droits de l'utilisateur ; seul le montant de l'allocation est lu
         en sudo (l'agence ne voit par ir.rule que sa propre allocation, lecture déterministe)."""
         candidates = self.search([
-            ('active', '=', True),
+            ('active', '=', True), ('destination', '=', 'credit'),
             '|', ('company_id', '=', company_id), ('scope', '=', 'multi_company'),
         ])
         funds = self.browse()
@@ -388,7 +388,8 @@ class MicrofinanceFondCredit(models.Model):
         dashboard obtiendrait un AccessError sur toute cette section dès qu'un fonds partagé
         existe. Ce sudo() ne fuite que des montants agrégés par agence, jamais les
         enregistrements de contribution individuels au frontend."""
-        multi_funds = self.search([('active', '=', True), ('scope', '=', 'multi_company')])
+        multi_funds = self.search([
+            ('active', '=', True), ('scope', '=', 'multi_company'), ('destination', '=', 'credit')])
         result = {
             'visible': bool(multi_funds), 'labels': [], 'contributions': [], 'decaissements': [],
             'allocations': [],
@@ -457,7 +458,7 @@ class MicrofinanceFondCredit(models.Model):
             return {'companies': [], 'funds': []}
 
         funds = self.sudo().search([
-            ('active', '=', True),
+            ('active', '=', True), ('destination', '=', 'credit'),
             '|', ('company_id', 'in', companies.ids), ('scope', '=', 'multi_company'),
         ])
         if not funds:
@@ -505,12 +506,13 @@ class MicrofinanceFondCredit(models.Model):
         n'apparaissent jamais)."""
         funds = self.search([
             ('active', '=', True), ('scope', '=', 'single_company'), ('company_id', '=', company_id),
+            ('destination', '=', 'credit'),
         ])
         labels = funds.mapped('name')
         values = funds.mapped('solde_disponible')
         # Parts de fonds partagés allouées à cette agence (solde propre à l'agence).
         allocations = self.env['microfinance.fond.allocation'].sudo().search([
-            ('company_id', '=', company_id), ('fond_id.active', '=', True),
+            ('company_id', '=', company_id), ('fond_id.active', '=', True), ('fond_id.destination', '=', 'credit'),
         ])
         for allocation in allocations:
             labels.append(allocation.fond_id.name)
