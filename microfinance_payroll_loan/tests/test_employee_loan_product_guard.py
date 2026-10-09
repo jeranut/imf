@@ -76,10 +76,10 @@ class TestMicrofinanceEmployeeLoanProductGuard(MicrofinanceCommon):
         employee.microfinance_partner_id = partner.id
 
         with self.assertRaises(ValidationError):
-            partner.with_context(microfinance_context=True).write({
+            partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
                 'microfinance_selected_product_id': self.product.id,
             })
-        partner.with_context(microfinance_context=True).write({
+        partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
             'microfinance_selected_product_id': monthly_product.id,
         })
         self.assertEqual(partner.microfinance_selected_product_id, monthly_product)

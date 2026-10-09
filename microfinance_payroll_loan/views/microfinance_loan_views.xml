@@ -24,7 +24,7 @@
             <form string="Régulariser la retenue sur salaire">
                 <group>
                     <field name="loan_id" readonly="1"/>
-                    <field name="partner_id" readonly="1"/>
+                    <field name="partner_id" readonly="1" context="{'microfinance_context': True}"/>
                     <field name="employee_id"/>
                 </group>
                 <field name="reason" placeholder="Motif de la régularisation (obligatoire)"/>

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Vérifie que le wizard de synchro agences (mowgli_payroll_pcec, non modifié) propage la
-règle LOAN comme n'importe quelle autre règle de la structure BASE — aucune logique de
-synchro dédiée n'est nécessaire côté microfinance_payroll_loan."""
+"""La règle LOAN est PARTAGÉE (company_id vide) dans la structure BASE ; son
+compte de crédit (315000) est résolu PAR SOCIÉTÉ, sans copie par agence."""
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
 
@@ -9,45 +8,29 @@ from odoo.tests.common import TransactionCase
 @tagged('post_install', '-at_install')
 class TestMicrofinancePayrollSyncLoanRule(TransactionCase):
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.company = cls.env['res.company'].search([('name', '=', 'CEFOR Isotry')], limit=1)
-        cls.structure = cls.env['hr.payroll.structure'].search([('code', '=', 'BASE')], limit=1)
-        cls.target = cls.env['res.company'].search([('name', '=', 'CEFOR Ambanidia')], limit=1)
-
     def setUp(self):
         super().setUp()
-        if not (self.company and self.structure and self.target):
-            self.skipTest(
-                "Données MOWGLI (CEFOR Isotry/Ambanidia, structure BASE) absentes de cette "
-                "base, ou règle LOAN non posée (microfinance_payroll_loan non installé).")
+        self.structure = self.env['hr.payroll.structure'].search(
+            [('code', '=', 'BASE')], limit=1)
         self.loan_rule = self.structure.rule_ids.filtered(lambda r: r.code == 'LOAN')
         if not self.loan_rule:
             self.skipTest("Règle LOAN absente de la structure BASE.")
 
-    def _target_loan_rule(self):
-        target_structure = self.env['hr.payroll.structure'].search([
-            ('code', '=', 'BASE'), ('company_id', '=', self.target.id),
-        ])
-        return target_structure.rule_ids.filtered(lambda r: r.code == 'LOAN')
+    def test_loan_rule_shared_with_account_per_company(self):
+        self.assertFalse(self.loan_rule.company_id)
+        companies = self.env['res.company'].search([('chart_template', '!=', False)])
+        self.assertTrue(companies)
+        for company in companies:
+            account = self.loan_rule.sudo().with_company(company).credit_account_id
+            self.assertEqual(account.code, '315000', company.name)
+            self.assertEqual(account.company_id, company, company.name)
 
-    def test_sync_copies_loan_rule_with_mapped_account(self):
-        report = self.structure._mowgli_sync_to_company(self.target)
-        loan_report = [r for r in report['rules'] if r['code'] == 'LOAN']
-        self.assertTrue(loan_report, "La règle LOAN doit apparaître dans le rapport de synchro.")
-        self.assertEqual(loan_report[0]['status'], 'created')
-
-        target_rule = self._target_loan_rule()
-        self.assertTrue(target_rule)
-        self.assertEqual(target_rule.credit_account_id.code, '315000')
-        self.assertEqual(target_rule.credit_account_id.company_id, self.target)
-        self.assertEqual(target_rule.amount_python_compute, self.loan_rule.amount_python_compute)
-        self.assertEqual(target_rule.sequence, self.loan_rule.sequence)
-
-    def test_sync_replay_is_unchanged(self):
-        self.structure._mowgli_sync_to_company(self.target)
-        report = self.structure._mowgli_sync_to_company(self.target)
-        loan_report = [r for r in report['rules'] if r['code'] == 'LOAN']
-        self.assertTrue(loan_report)
-        self.assertEqual(loan_report[0]['status'], 'unchanged')
+    def test_setup_replay_keeps_accounts_and_company_empty(self):
+        Rule = self.env['hr.salary.rule']
+        company = self.env['res.company'].search([('chart_template', '!=', False)], limit=1)
+        before = self.loan_rule.sudo().with_company(company).credit_account_id
+        Rule._microfinance_payroll_setup_loan_rule()
+        Rule._microfinance_payroll_setup_loan_rule()
+        self.assertEqual(self.loan_rule.sudo().with_company(company).credit_account_id, before)
+        self.assertFalse(self.loan_rule.company_id)
+        self.assertEqual(len(self.structure.rule_ids.filtered(lambda r: r.code == 'LOAN')), 1)

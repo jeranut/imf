@@ -144,3 +144,31 @@ class TestMicrofinancePayrollAdvanceWizard(MicrofinanceCommon):
         wizard = self._open_wizard()
         with self.assertRaises(UserError):
             wizard.action_validate()
+
+    def test_wizard_prefill_form_permet_la_creation(self):
+        self.employee.identification_id = self._unique_test_cin()[:11]
+        action = self._open_wizard().action_validate()
+        self.assertEqual(action['res_model'], 'res.partner')
+        self.assertFalse(action.get('res_id'), "Le CIN invalide doit renvoyer la fiche préremplie.")
+        context = action['context']
+        self.assertTrue(context['allow_microfinance_partner_create'])
+        partner = self.env['res.partner'].with_context(**context).create({
+            'microfinance_id_number_display': self._unique_test_cin(),
+        })
+        self.assertEqual(partner.microfinance_partner_type, 'client')
+        self.assertEqual(partner.name, self.employee.name)
+
+    def test_wizard_ouvre_la_fiche_client_microfinance(self):
+        action = self._open_wizard().action_validate()
+        form_view = self.env.ref('microfinance_loan_management.view_microfinance_client_form_clients_menu')
+        self.assertEqual(action['views'], [(form_view.id, 'form')])
+        self.assertEqual(action['res_id'], self.employee.microfinance_partner_id.id)
+        self.assertTrue(action['context']['microfinance_context'])
+        self.assertNotIn('allow_microfinance_partner_create', action['context'])
+
+    def test_wizard_fiche_preremplie_sur_form_verrouillee(self):
+        self.employee.identification_id = self._unique_test_cin()[:11]
+        action = self._open_wizard().action_validate()
+        form_view = self.env.ref('microfinance_loan_management.view_microfinance_client_form_clients_menu')
+        self.assertEqual(action['views'], [(form_view.id, 'form')],
+                         "La form verrouillée empêche « Nouveau » de réutiliser le flag de création.")

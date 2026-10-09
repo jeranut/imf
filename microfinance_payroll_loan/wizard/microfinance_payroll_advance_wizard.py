@@ -163,7 +163,7 @@ class MicrofinancePayrollAdvanceWizard(models.TransientModel):
             try:
                 with self.env.cr.savepoint():
                     partner = self.env['res.partner'].with_context(
-                        microfinance_context=True).create(vals)
+                        microfinance_context=True, allow_microfinance_partner_create=True).create(vals)
             except (ValidationError, UserError):
                 return self._open_partner_prefill_form(vals)
 
@@ -185,13 +185,7 @@ class MicrofinancePayrollAdvanceWizard(models.TransientModel):
                 user_id=self.officer_id.id,
                 note=self.note or '',
             )
-        return {
-            'type': 'ir.actions.act_window',
-            'res_model': 'res.partner',
-            'view_mode': 'form',
-            'res_id': partner.id,
-            'target': 'current',
-        }
+        return partner.action_open_microfinance_client_form()
 
     def _open_partner_prefill_form(self, vals):
         """Des champs obligatoires du client manquent (ex. situation matrimoniale + conjoint
@@ -202,11 +196,14 @@ class MicrofinancePayrollAdvanceWizard(models.TransientModel):
         self.ensure_one()
         context = {('default_%s' % key): value for key, value in vals.items() if value is not False}
         context['microfinance_context'] = True
+        context['allow_microfinance_partner_create'] = True
         return {
             'type': 'ir.actions.act_window',
             'name': _('Compléter la fiche client avant rattachement'),
             'res_model': 'res.partner',
             'view_mode': 'form',
+            # Form verrouillée (pas de « Nouveau ») : le flag de création ne doit servir qu'à CETTE fiche.
+            'views': [(self.env.ref('microfinance_loan_management.view_microfinance_client_form_clients_menu').id, 'form')],
             'target': 'current',
             'context': context,
         }

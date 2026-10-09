@@ -46,13 +46,14 @@ class HrSalaryRule(models.Model):
         BASE : IRSA=800, NET=900 sur cette instance — pas les 130/200 d'un gabarit générique),
         recalculée dynamiquement pour rester correcte si ces séquences changent.
 
-        Ne crée ni ne renomme aucun compte : si le 315 de la société de la structure BASE
-        n'existe pas, la règle est créée/mise à jour sans compte de crédit (laissé vide,
-        comportement identique à _mowgli_setup_rule_accounts)."""
+        Règle PARTAGÉE (company_id vide). Ne crée ni ne renomme aucun compte : le 315000 de
+        chaque société ayant un plan est résolu par code et renseigné PAR SOCIÉTÉ, sans jamais
+        écraser une valeur déjà saisie (mowgli_payroll_pcec._mowgli_setup_rule_accounts)."""
+        if self._mowgli_migration_pending():
+            return
         structure = self.env['hr.payroll.structure'].search([('code', '=', 'BASE')], limit=1)
         if not structure:
             return
-        company = structure.company_id
         rules_by_code = {rule.code: rule for rule in structure.rule_ids}
         irsa = rules_by_code.get('IRSA')
         net = rules_by_code.get('NET')
@@ -61,11 +62,10 @@ class HrSalaryRule(models.Model):
             # modules) : rien à faire, sera repris au prochain démarrage/mise à jour.
             return
         category = self.env['hr.salary.rule.category'].search([('code', '=', 'DED')], limit=1)
-        account = self.env['account.account'].search([
-            ('code', '=', '315000'), ('company_id', '=', company.id),
-        ], limit=1)
         sequence = (irsa.sequence + net.sequence) // 2
 
+        # Règle PARTAGÉE : company_id jamais écrit. Le compte de crédit (315000)
+        # est renseigné PAR SOCIÉTÉ, sans jamais écraser une valeur saisie.
         vals = {
             'name': 'Remboursement prêt',
             'code': 'LOAN',
@@ -76,8 +76,6 @@ class HrSalaryRule(models.Model):
             'amount_select': 'code',
             'amount_python_compute': LOAN_CODE,
             'appears_on_payslip': True,
-            'company_id': company.id,
-            'credit_account_id': account.id if account else False,
         }
         loan_rule = rules_by_code.get('LOAN')
         if loan_rule:
@@ -85,3 +83,5 @@ class HrSalaryRule(models.Model):
         else:
             loan_rule = self.create(vals)
             structure.write({'rule_ids': [(4, loan_rule.id)]})
+        self._mowgli_setup_rule_accounts(
+            structure, debit_by_code={}, credit_by_code={'LOAN': '315000'})

@@ -17,7 +17,7 @@
                     <p>Plusieurs clients existants correspondent à cet employé (nom/e-mail,
                        sans CIN identique) : choisissez le bon ci-dessous avant de valider.
                        Aucune réutilisation ni création automatique n'est faite dans ce cas.</p>
-                    <field name="selected_partner_id"/>
+                    <field name="selected_partner_id" options="{'no_create': True, 'no_quick_create': True, 'no_create_edit': True}"/>
                 </div>
                 <field name="note" placeholder="Note libre (facultatif)"/>
                 <footer>
