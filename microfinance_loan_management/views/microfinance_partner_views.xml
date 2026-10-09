@@ -143,7 +143,8 @@
                                 'default_microfinance_region_id': microfinance_region_id,
                                 'default_microfinance_district_id': microfinance_district_id,
                                 'microfinance_context': True,
-                            }"/>
+                            }"
+                            options="{'no_quick_create': True}"/>
                         <field name="microfinance_spouse_phone" placeholder="Ex: 034 12 345 67"
                             invisible="microfinance_marital_status == 'single'"
                             required="microfinance_marital_status == 'married'"/>
@@ -211,6 +212,7 @@
                      simple titre en attente d'un chantier séparé. -->
                 <group invisible="not context.get('microfinance_context') or microfinance_partner_type != 'client'">
                     <group string="Crédit">
+                        <field name="microfinance_officer_id" readonly="1"/>
                         <field name="microfinance_progressive_eligible_product_ids" invisible="1"/>
                         <field name="microfinance_product_change_locked" invisible="1"/>
                         <!-- Politique de produit (indépendant/progressif) : réglage global unique
@@ -298,16 +300,64 @@
                 <filter string="Companies" name="type_company" domain="[('is_company', '=', True)]"/>
                 <separator/>
                 <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
+                <separator/>
+                <filter string="Sans portefeuille" name="no_portfolio" domain="[('microfinance_officer_id', '=', False)]"/>
                 <group expand="0" name="group_by" string="Group By">
                     <filter name="salesperson" string="Salesperson" domain="[]" context="{'group_by' : 'user_id'}"/>
                     <filter name="group_company" string="Company" context="{'group_by': 'parent_id'}"/>
                     <filter name="group_country" string="Country" context="{'group_by': 'country_id'}"/>
                 </group>
                 <searchpanel>
+                    <field name="company_id" select="one" string="Agence" icon="fa-building" enable_counters="1"/>
+                    <field name="microfinance_officer_id" select="one" string="Portefeuille" icon="fa-briefcase" enable_counters="1" hierarchize="0"/>
                     <field name="microfinance_marital_status" select="multi" string="État civil" icon="fa-heart" enable_counters="1"/>
                     <field name="microfinance_commune_id" select="multi" string="Commune" icon="fa-map-marker" enable_counters="1"/>
                 </searchpanel>
             </search>
+        </field>
+    </record>
+
+    <!-- Vues dédiées au menu "Clients" : aucune création, import ni duplication (création
+         uniquement depuis "Nouveau client" de Mon portefeuille, cf. get_portfolio_new_client_action).
+         mode="primary" sur les vues de base, qui restent inchangées pour Contacts/EAT/MIIA ;
+         priorité haute pour ne jamais devenir la vue par défaut de res.partner. -->
+    <record id="view_microfinance_client_tree_clients_menu" model="ir.ui.view">
+        <field name="name">res.partner.tree.microfinance.clients.menu</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_tree"/>
+        <field name="mode">primary</field>
+        <field name="priority">100</field>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="attributes">
+                <attribute name="create">false</attribute>
+                <attribute name="import">false</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_microfinance_client_kanban_clients_menu" model="ir.ui.view">
+        <field name="name">res.partner.kanban.microfinance.clients.menu</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.res_partner_kanban_view"/>
+        <field name="mode">primary</field>
+        <field name="priority">100</field>
+        <field name="arch" type="xml">
+            <xpath expr="//kanban" position="attributes">
+                <attribute name="create">false</attribute>
+                <attribute name="import">false</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_microfinance_client_form_clients_menu" model="ir.ui.view">
+        <field name="name">res.partner.form.microfinance.clients.menu</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="mode">primary</field>
+        <field name="priority">100</field>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="attributes">
+                <attribute name="create">false</attribute>
+                <attribute name="duplicate">false</attribute>
+            </xpath>
         </field>
     </record>
 
@@ -318,6 +368,10 @@
         <field name="domain">[('microfinance_partner_type', '=', 'client')]</field>
         <field name="context">{'microfinance_context': True, 'default_microfinance_client_type': 'individual', 'default_microfinance_partner_type': 'client'}</field>
         <field name="search_view_id" ref="view_microfinance_client_search"/>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'tree', 'sequence': 1, 'view_id': ref('view_microfinance_client_tree_clients_menu')}),
+            (0, 0, {'view_mode': 'form', 'sequence': 2, 'view_id': ref('view_microfinance_client_form_clients_menu')}),
+            (0, 0, {'view_mode': 'kanban', 'sequence': 3, 'view_id': ref('view_microfinance_client_kanban_clients_menu')})]"/>
     </record>
 
     <!-- Madagascar par défaut sur res.partner (instance majoritairement basée à Madagascar) -->

@@ -164,6 +164,23 @@
         </field>
     </record>
 
+    <!-- Vue dédiée, sans création ni duplication : formulaire ouvert par l'onglet "Fonds de
+         crédit" du tableau de bord (Mon portefeuille, openFundsRow, lignes "Allocation"/
+         "Annulation allocation") - cf. docs_dev/dashboard_creation_bloquee/. Jamais utilisée
+         par les menus de ce modèle, qui gardent leurs vues génériques (création inchangée). -->
+    <record id="view_microfinance_portfolio_allocation_form_dashboard" model="ir.ui.view">
+        <field name="name">microfinance.portfolio.allocation.form.dashboard.readonly.create</field>
+        <field name="model">microfinance.portfolio.allocation</field>
+        <field name="inherit_id" ref="view_microfinance_portfolio_allocation_form"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="attributes">
+                <attribute name="create">0</attribute>
+                <attribute name="duplicate">0</attribute>
+            </xpath>
+        </field>
+    </record>
+
     <record id="view_microfinance_portfolio_allocation_search" model="ir.ui.view">
         <field name="name">microfinance.portfolio.allocation.search</field>
         <field name="model">microfinance.portfolio.allocation</field>

@@ -27,7 +27,7 @@ class TestApplicationKycSync(MicrofinanceCommon):
             'microfinance_profession': cls.profession.id,
             'microfinance_employer': 'Employeur Conjoint',
         })
-        cls.client_partner = cls.env['res.partner'].with_context(microfinance_context=True).create({
+        cls.client_partner = cls.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test KYC',
             'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin',

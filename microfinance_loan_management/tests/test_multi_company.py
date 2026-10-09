@@ -127,7 +127,7 @@ class TestMultiCompanyIsolation(MicrofinanceCommon):
     # --- Point 3 : company_id requis sur res.partner en contexte microfinance ---
     def test_partner_company_required_in_microfinance_context(self):
         with self.assertRaises(ValidationError):
-            self.env['res.partner'].with_context(microfinance_context=True).create({
+            self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
                 'name': 'Client sans société',
                 'microfinance_client_type': 'individual',
                 'company_id': False,
@@ -140,7 +140,7 @@ class TestMultiCompanyIsolation(MicrofinanceCommon):
         self.assertFalse(partner.company_id)
 
     def test_partner_company_defaults_in_microfinance_context(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client agence par défaut',
             'microfinance_client_type': 'individual',
         })

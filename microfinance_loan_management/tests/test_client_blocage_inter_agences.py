@@ -30,7 +30,7 @@ class TestClientBlocageInterAgences(MicrofinanceNoFundMixin, MicrofinanceCommon)
     def _new_client(self, user, company, cin, name, microfinance_context=True):
         Partner = self.env['res.partner'].with_user(user).with_company(company)
         if microfinance_context:
-            Partner = Partner.with_context(microfinance_context=True)
+            Partner = Partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True)
         return Partner.create({
             'name': name,
             'company_id': company.id,
@@ -86,13 +86,13 @@ class TestClientBlocageInterAgences(MicrofinanceNoFundMixin, MicrofinanceCommon)
         return vals
 
     def test_cin_obligatoire_client_particulier(self):
-        Partner = self.env['res.partner'].with_user(self.user_a).with_context(microfinance_context=True)
+        Partner = self.env['res.partner'].with_user(self.user_a).with_context(microfinance_context=True, allow_microfinance_partner_create=True)
         with self.assertRaisesRegex(ValidationError, 'CIN est obligatoire'):
             Partner.create(self._create_client_vals())
 
     def test_piece_obligatoire_autre_type_de_piece(self):
         # Passeport / autre : le numéro de la pièce est exigé, pas un CIN.
-        Partner = self.env['res.partner'].with_user(self.user_a).with_context(microfinance_context=True)
+        Partner = self.env['res.partner'].with_user(self.user_a).with_context(microfinance_context=True, allow_microfinance_partner_create=True)
         for id_type in ('passport', 'other'):
             with self.subTest(id_type=id_type):
                 with self.assertRaisesRegex(ValidationError, "numéro de la pièce d'identité est obligatoire"):
@@ -106,7 +106,7 @@ class TestClientBlocageInterAgences(MicrofinanceNoFundMixin, MicrofinanceCommon)
         self.assertTrue(Partner.create(self._create_client_vals()))
 
     def test_cin_non_obligatoire_pour_non_client_ou_societe(self):
-        Partner = self.env['res.partner'].with_user(self.user_a).with_context(microfinance_context=True)
+        Partner = self.env['res.partner'].with_user(self.user_a).with_context(microfinance_context=True, allow_microfinance_partner_create=True)
         garant = Partner.create({'name': 'Garant', 'company_id': self.company_a.id})
         societe = Partner.create(self._create_client_vals(
             name='Société cliente', microfinance_client_type='company'))
@@ -114,7 +114,7 @@ class TestClientBlocageInterAgences(MicrofinanceNoFundMixin, MicrofinanceCommon)
 
     def test_creation_client_cin_saisi_via_affichage_bloquee(self):
         self._loan_agence_b()
-        Partner = self.env['res.partner'].with_user(self.user_a).with_context(microfinance_context=True)
+        Partner = self.env['res.partner'].with_user(self.user_a).with_context(microfinance_context=True, allow_microfinance_partner_create=True)
         self._assert_blocage(lambda: Partner.create({
             'name': 'Client A', 'company_id': self.company_a.id, 'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number_display': '123 456 789 012',
@@ -136,7 +136,7 @@ class TestClientBlocageInterAgences(MicrofinanceNoFundMixin, MicrofinanceCommon)
     def test_write_champ_sans_rapport_ne_bloque_pas(self):
         client = self._new_client(self.user_a, self.company_a, CIN_BLOQUE, 'Client A')
         self._loan_agence_b()
-        client.with_user(self.user_a).with_context(microfinance_context=True).write({'name': 'Client A renommé'})
+        client.with_user(self.user_a).with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({'name': 'Client A renommé'})
         self.assertEqual(client.name, 'Client A renommé')
 
     # --- Dossier de crédit, pour un client créé AVANT le prêt de l'autre agence ---
@@ -208,7 +208,7 @@ class TestClientBlocageInterAgences(MicrofinanceNoFundMixin, MicrofinanceCommon)
     CIN_CHIFFRES = '101981092052'
 
     def _partner_model(self, user=None):
-        return self.env['res.partner'].with_user(user or self.user_a).with_context(microfinance_context=True)
+        return self.env['res.partner'].with_user(user or self.user_a).with_context(microfinance_context=True, allow_microfinance_partner_create=True)
 
     def test_cin_avec_espaces_creation_via_affichage(self):
         client = self._partner_model().create(self._create_client_vals(
@@ -224,7 +224,7 @@ class TestClientBlocageInterAgences(MicrofinanceNoFundMixin, MicrofinanceCommon)
     def test_modification_client_existant_type_et_cin_saisis_ensemble(self):
         # Cas du formulaire : fiche existante sans pièce, l'agent choisit CIN et saisit le numéro.
         ancien = self.env['res.partner'].create(self._create_client_vals(name='Ancien client'))
-        ancien.with_user(self.user_a).with_context(microfinance_context=True).write({
+        ancien.with_user(self.user_a).with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
             'microfinance_id_type': 'cin', 'microfinance_id_number_display': self.CIN_ESPACES,
         })
         self.assertEqual(ancien.microfinance_id_number, self.CIN_CHIFFRES)

@@ -308,12 +308,18 @@
                                 </t>
                                 <t t-else="">
                                     <div class="o_microfinance_pos__accounts_section">
-                                        <p class="o_microfinance_pos__accounts_title">Comptes épargne</p>
-                                        <div t-if="!state.client.savings_accounts.length" class="o_microfinance_pos__placeholder_small">Aucun compte épargne actif.</div>
+                                        <p class="o_microfinance_pos__accounts_title">
+                                            Compte épargne
+                                            <t t-if="state.client.savings_holder_account">
+                                                <span t-esc="state.client.savings_holder_account.name"/>
+                                                — <span t-esc="formatMoney(state.client.savings_holder_account.balance_total)"/>
+                                            </t>
+                                        </p>
+                                        <div t-if="!state.client.savings_accounts.length" class="o_microfinance_pos__placeholder_small">Aucun produit d'épargne actif.</div>
                                         <div t-foreach="state.client.savings_accounts" t-as="account" t-key="account.id"
                                              t-attf-class="o_microfinance_pos__account_row {{ activeTabKind === 'savings' &amp;&amp; state.selectedAccountId === account.id ? 'o_microfinance_pos__account_row--selected' : '' }}"
                                              t-on-click="() => activeTabKind === 'savings' ? this.selectAccount(account.id) : null">
-                                            <span t-esc="account.name"/>
+                                            <span><t t-esc="account.name"/> <small class="text-muted" t-esc="account.product"/></span>
                                             <span t-esc="formatMoney(account.balance)"/>
                                         </div>
                                     </div>

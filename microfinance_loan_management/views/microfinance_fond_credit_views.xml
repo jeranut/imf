@@ -82,6 +82,34 @@
             </form>
         </field>
     </record>
+    <!-- Vues dédiées, sans création ni import ni duplication : tuile "Fonds accessibles à
+         l'agence" du tableau de bord (openKpiTile) - cf. docs_dev/dashboard_creation_bloquee/.
+         Jamais utilisées par le menu "Fonds de crédit" (action_microfinance_fond_credit), qui
+         garde ses vues génériques (création inchangée). -->
+    <record id="view_microfinance_fond_credit_tree_dashboard" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.tree.dashboard.readonly.create</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="inherit_id" ref="view_microfinance_fond_credit_tree"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//tree" position="attributes">
+                <attribute name="create">0</attribute>
+                <attribute name="import">0</attribute>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_microfinance_fond_credit_form_dashboard" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.form.dashboard.readonly.create</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="inherit_id" ref="view_microfinance_fond_credit_form"/>
+        <field name="mode">primary</field>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="attributes">
+                <attribute name="create">0</attribute>
+                <attribute name="duplicate">0</attribute>
+            </xpath>
+        </field>
+    </record>
     <record id="view_microfinance_fond_credit_search" model="ir.ui.view">
         <field name="name">microfinance.fond.credit.search</field>
         <field name="model">microfinance.fond.credit</field>

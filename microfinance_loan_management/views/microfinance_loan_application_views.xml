@@ -112,7 +112,7 @@
                     </div>
                     <group invisible="survey_page != 'partner_identification'">
                         <group string="Dossier">
-                            <field name="partner_id"/>
+                            <field name="partner_id" domain="[('microfinance_partner_type', '=', 'client')]" options="{'no_create': True, 'no_quick_create': True, 'no_create_edit': True}" context="{'microfinance_context': True}"/>
                             <field name="loan_product_id"/>
                             <field name="application_date"/>
                             <field name="surveyor_id"/>
@@ -233,7 +233,7 @@
                                  = 'client'. Pas de préremplissage d'adresse (contrairement au conjoint) :
                                  le garant a typiquement une adresse différente du client. -->
                             <field name="guarantor_partner_id" placeholder="Rechercher ou créer le garant..."
-                                context="{'microfinance_context': True}"/>
+                                context="{'microfinance_context': True}" options="{'no_quick_create': True}"/>
                             <field name="guarantor_id_card_number" placeholder="N° CIN" widget="microfinance_grouped_digits"
                                 readonly="state not in ('draft', 'visite')"/>
                             <field name="guarantor_id_card_issue_date" readonly="state not in ('draft', 'visite')"/>

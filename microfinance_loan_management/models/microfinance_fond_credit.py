@@ -345,24 +345,31 @@ class MicrofinanceFondCredit(models.Model):
         standard, sans sudo() : le domaine explicite ci-dessous ET l'ir.rule de partage optionnel
         déjà en place s'appliquent tous les deux, un fonds single_company d'une autre agence
         n'apparaît donc jamais dans ce total."""
-        funds = self.search([
+        funds, total = self._get_agency_accessible_funds(company_id)
+        return {'total': total, 'count': len(funds)}
+
+    @api.model
+    def _get_agency_accessible_funds(self, company_id):
+        """(fonds, part disponible pour l'agence) : fonds actifs de l'agence + fonds partagés, un
+        fonds partagé géré par allocation n'étant retenu que s'il a une allocation pour l'agence.
+        Les fonds sont lus avec les droits de l'utilisateur ; seul le montant de l'allocation est lu
+        en sudo (l'agence ne voit par ir.rule que sa propre allocation, lecture déterministe)."""
+        candidates = self.search([
             ('active', '=', True),
             '|', ('company_id', '=', company_id), ('scope', '=', 'multi_company'),
         ])
+        funds = self.browse()
         total = 0.0
-        count = 0
-        for fund in funds:
+        for fund in candidates:
             if fund.scope == 'multi_company' and fund.allocation_required:
-                # Fonds partagé géré par allocation : seule la part de l'agence compte (sudo :
-                # l'agence ne voit par ir.rule que sa propre allocation, lecture déterministe).
                 allocation = fund.sudo().allocation_ids.filtered(lambda a: a.company_id.id == company_id)
                 if not allocation:
                     continue
                 total += allocation.solde_disponible
             else:
                 total += fund.solde_disponible
-            count += 1
-        return {'total': total, 'count': count}
+            funds |= fund
+        return funds, total
 
     @api.model
     def get_multi_company_usage_chart(self):

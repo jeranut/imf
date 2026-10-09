@@ -62,7 +62,7 @@
     <menuitem id="menu_microfinance_analysis_installments" name="Analyse échéances" parent="menu_microfinance_analysis" action="action_microfinance_installment" sequence="1"/>
     <menuitem id="menu_microfinance_analysis_payments" name="Analyse paiements" parent="menu_microfinance_analysis" action="action_microfinance_payment" sequence="2"/>
     <menuitem id="menu_microfinance_analysis_fond_usage" name="Utilisation des fonds" parent="menu_microfinance_analysis" action="action_microfinance_fond_usage_report" sequence="3"/>
-    <menuitem id="menu_microfinance_analysis_cash_book" name="Flux de caisse" parent="menu_microfinance_analysis" action="base_accounting_kit.action_account_cash_book_view" sequence="4"
+    <menuitem id="menu_microfinance_analysis_cash_book" name="Flux de caisse" parent="menu_microfinance_analysis" action="base_accounting_kit.action_cash_journal_report" sequence="4"
         groups="microfinance_loan_management.group_microfinance_cashier,microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor"/>
     <!-- Élargi à finance (en plus de manager) uniquement pour rendre atteignable le
          sous-groupe « Caisse » ci-dessous, dont l'ACL microfinance.caisse.denomination

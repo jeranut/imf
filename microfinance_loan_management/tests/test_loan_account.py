@@ -11,7 +11,7 @@ class TestLoanAccountCreationOnPartnerCreate(MicrofinanceCommon):
     que le compte épargne principal (cf. correctif numérotation, microfinance.loan.account)."""
 
     def test_client_creation_opens_loan_account(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Compte Crédit', 'microfinance_partner_type': 'client',
             'microfinance_client_type': 'individual',
             'microfinance_id_type': 'cin', 'microfinance_id_number': '600000000001',
@@ -26,13 +26,13 @@ class TestLoanAccountCreationOnPartnerCreate(MicrofinanceCommon):
         self.assertFalse(partner.microfinance_loan_account_ids)
 
     def test_non_client_partner_creation_does_not_open_account(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Contact Non Client Compte Crédit',
         })
         self.assertFalse(partner.microfinance_loan_account_ids)
 
     def test_idempotent_repeated_call_does_not_duplicate(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Idempotence Compte Crédit', 'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': '600000000002',
         })

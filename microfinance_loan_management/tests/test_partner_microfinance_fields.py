@@ -8,7 +8,7 @@ class TestPartnerSpouseRequired(MicrofinanceCommon):
 
     def test_married_without_spouse_info_blocked_in_microfinance_context(self):
         with self.assertRaises(ValidationError):
-            self.env['res.partner'].with_context(microfinance_context=True).create({
+            self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
                 'name': 'Client marié incomplet',
                 'microfinance_client_type': 'individual',
                 'microfinance_marital_status': 'married',
@@ -20,7 +20,7 @@ class TestPartnerSpouseRequired(MicrofinanceCommon):
         # doit le renseigner explicitement, comme le ferait une vraie saisie utilisateur avant
         # l'enregistrement.
         spouse = self.env['res.partner'].create({'name': 'Conjoint Test', 'phone': '0341234567'})
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client marié complet',
             'microfinance_client_type': 'individual',
             'microfinance_marital_status': 'married',
@@ -40,7 +40,7 @@ class TestPartnerSpouseRequired(MicrofinanceCommon):
         self.assertTrue(partner.id)
 
     def test_single_client_no_spouse_required(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client célibataire',
             'microfinance_client_type': 'individual',
             'microfinance_marital_status': 'single',
@@ -117,6 +117,7 @@ class TestPartnerType(MicrofinanceCommon):
         }).partner_id
         client_partner = self.env['res.partner'].with_context(
             microfinance_context=True, default_microfinance_partner_type='client',
+            allow_microfinance_partner_create=True,
         ).create({
             'name': 'Client Test Origine', 'microfinance_client_type': 'individual',
             'microfinance_id_type': 'cin', 'microfinance_id_number': '600000000003',

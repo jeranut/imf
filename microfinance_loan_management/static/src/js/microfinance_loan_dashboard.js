@@ -352,14 +352,12 @@ export class MicrofinanceLoanDashboard extends Component {
         return found ? found.officer_name : "";
     }
 
-    /** "Nouveau client" reste une redirection (création hors dashboard) : seul bouton de la
-     *  barre "Mon portefeuille" à ne pas être devenu un onglet (cf. onPortfolioTabClick
-     *  ci-dessous pour les 6 autres, anciennement des ir.actions.act_window ici même). */
-    openAgentShortcut(kind) {
+    /** "Nouveau client" : seul chemin de création d'un client. L'action (agent, flag de
+     *  création) est construite côté serveur ; aucun id d'agent n'est envoyé d'ici. */
+    async openAgentShortcut(kind) {
         if (kind === "new_client") {
-            this.actionService.doAction("microfinance_loan_management.action_microfinance_client", {
-                viewType: "form",
-            });
+            const action = await this.orm.call("microfinance.loan", "get_portfolio_new_client_action", []);
+            await this.actionService.doAction(action);
         }
     }
 
@@ -499,7 +497,7 @@ export class MicrofinanceLoanDashboard extends Component {
             type: "ir.actions.act_window",
             res_model: row.res_model,
             res_id: row.res_id,
-            views: [[false, "form"]],
+            views: [[this._dashboardFormViewId(row.res_model), "form"]],
             target: "current",
         });
     }
@@ -553,16 +551,23 @@ export class MicrofinanceLoanDashboard extends Component {
 
     /** Ligne cliquable uniquement pour les onglets marqués `clickable` (clients/crédits/visites,
      *  cf. TABS) : remboursements/impayés/échéances restent en lecture seule. */
-    openPortfolioTabRow(row) {
+    async openPortfolioTabRow(row) {
         const tab = this.activePortfolioTab;
         if (!tab || !tab.clickable) {
+            return;
+        }
+        if (tab.model === "res.partner") {
+            const action = await this.orm.call(
+                "res.partner", "action_open_microfinance_client_form", [[row.id]]
+            );
+            await this.actionService.doAction(action);
             return;
         }
         this.actionService.doAction({
             type: "ir.actions.act_window",
             res_model: tab.model,
             res_id: row.id,
-            views: [[false, "form"]],
+            views: [[this._dashboardFormViewId(tab.model), "form"]],
             target: "current",
         });
     }
@@ -584,18 +589,34 @@ export class MicrofinanceLoanDashboard extends Component {
         return value === false || value === undefined || value === null ? "" : value;
     }
 
+    /** Formulaire sans création/duplication pour `model` (dashboard_form_views, cf.
+     *  get_dashboard_data) si connu, sinon vue par défaut (false) en dernier recours. */
+    _dashboardFormViewId(model) {
+        return this.state.data?.dashboard_form_views?.[model] || false;
+    }
+
     openLoanRecord(loanId) {
         this.actionService.doAction({
             type: "ir.actions.act_window",
             res_model: "microfinance.loan",
             res_id: loanId,
-            views: [[false, "form"]],
+            views: [[this._dashboardFormViewId("microfinance.loan"), "form"]],
             target: "current",
         });
     }
 
-    get kpis() {
-        return this.state.data?.kpis || {};
+    get tiles() {
+        return this.state.data?.tiles || [];
+    }
+
+    formatTileValue(tile) {
+        if (tile.type === "money") {
+            return this.formatMoney(tile.value);
+        }
+        if (tile.type === "percent") {
+            return this.formatPercent(tile.value);
+        }
+        return this.formatNumber(tile.value);
     }
 
     get companyInfo() {
@@ -664,18 +685,28 @@ export class MicrofinanceLoanDashboard extends Component {
         return `${(value || 0).toFixed(1)}%`;
     }
 
-    /**
-     * Ouvre la liste filtrée correspondant à une tuile KPI (aucune action n'existait sur ces
-     * tuiles auparavant : navigation ajoutée vers la vue liste déjà existante la plus proche de
-     * chaque indicateur, sans toucher aux valeurs/calculs affichés sur le tableau de bord).
-     */
-    openKpiAction(model, domain, name) {
+    /** Liste ouverte avec EXACTEMENT le domaine qui a servi au calcul de la tuile (renvoyé par
+     *  le serveur), sans filtre par défaut : compteur affiché == lignes de la liste. */
+    openKpiTile(tile) {
+        this._openDomainList(tile.model, tile.domain, tile.label, tile.views);
+    }
+
+    openTodayInstallments() {
+        const link = this.state.data?.today_installments_link;
+        if (link) {
+            this._openDomainList(link.model, link.domain, link.label, link.views);
+        }
+    }
+
+    _openDomainList(model, domain, name, views) {
         this.actionService.doAction({
             type: "ir.actions.act_window",
             res_model: model,
             name,
-            views: [[false, "list"], [false, "form"]],
+            views: views || [[false, "list"], [false, "form"]],
             domain,
+            context: {},
+            target: "current",
         });
     }
 
@@ -693,9 +724,6 @@ export class MicrofinanceLoanDashboard extends Component {
         this.actionService.doAction("microfinance_loan_management.action_microfinance_loan");
     }
 
-    openAllInstallments() {
-        this.actionService.doAction("microfinance_loan_management.action_microfinance_installment");
-    }
 
     destroyCharts() {
         for (const chart of this.charts) {

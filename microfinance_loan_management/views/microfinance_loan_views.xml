@@ -249,7 +249,7 @@
                     </div>
                     <group>
                         <group string="Dossier">
-                            <field name="partner_id"/>
+                            <field name="partner_id" domain="[('microfinance_partner_type', '=', 'client')]" options="{'no_create': True, 'no_quick_create': True, 'no_create_edit': True}" context="{'microfinance_context': True}"/>
                             <!-- readonly dès avis_ca/avis_cdag (et tous les états suivants) sur
                                  product_id/loan_amount/term/installment_amount : verrouillage
                                  des champs "Calcul crédit" après avis rendu (Lot 1, docs_dev/
@@ -274,7 +274,7 @@
                             <field name="repayment_frequency_id" readonly="repayment_frequency_mode == 'fixed'"/>
                             <field name="has_active_fond" invisible="1"/>
                             <field name="fond_credit_id" required="has_active_fond" readonly="disbursement_date != False"/>
-                            <field name="co_borrower_id"/>
+                            <field name="co_borrower_id" domain="[('microfinance_partner_type', '=', 'client')]" options="{'no_create': True, 'no_quick_create': True, 'no_create_edit': True}" context="{'microfinance_context': True}"/>
                         </group>
                         <group string="Suivi">
                             <field name="application_date"/>

@@ -85,5 +85,7 @@ from . import test_disbursement_planned_date
 from . import test_portfolio
 from . import test_portfolio_funds_tab
 from . import test_officer_isolation
+from . import test_clients_portefeuille
+from . import test_dashboard_tiles
 from . import test_fond_origine
 from . import test_fond_vue_agence

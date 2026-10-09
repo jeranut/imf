@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import base64
+import logging
 import math
 from collections import defaultdict
 
@@ -14,6 +15,8 @@ except ImportError:  # pragma: no cover
     # l'utilise pour le libellé en lettres des chèques). Repli défensif : si absent,
     # get_amount_in_words() renvoie une chaîne vide plutôt que de casser le module.
     num2words = None
+
+_logger = logging.getLogger(__name__)
 
 
 class MicrofinanceLoan(models.Model):
@@ -794,40 +797,19 @@ class MicrofinanceLoan(models.Model):
         month_keys = [month.strftime('%Y-%m') for month in months]
         month_labels = [month.strftime('%b %Y') for month in months]
 
-        # sudo() (résidu A4, security/microfinance_officer_isolation_rules.xml) : "Vue d'ensemble"
-        # est un tableau de bord d'AGENCE, volontairement identique pour tous les rôles (agent
-        # inclus) avant comme après l'ajout de la règle d'isolation par agent sur microfinance.
-        # loan/.installment/.payment - sans ce sudo, un agent verrait ici un total rétréci à son
-        # seul portefeuille (régression), alors que company_domain/company_id ci-dessous reste
-        # l'unique filtre voulu pour cette méthode. "Mon portefeuille" (get_agent_portfolio_*,
-        # get_portfolio_tab) n'est PAS concerné : ces méthodes filtrent déjà explicitement par
-        # officer_id via _resolve_agent_request, sans sudo, par choix (décision n°11).
+        # sudo() limité aux graphiques « Analyses » (aucun lien vers une liste) : agrégats d'agence.
+        # Les tuiles « Vue d'ensemble » et « Activité récente » utilisent les droits de
+        # l'utilisateur (décision D3, docs_dev/dashboard_tuiles/), donc dépendent du rôle.
         Loan = env['microfinance.loan'].sudo()
         Installment = env['microfinance.loan.installment'].sudo()
         Payment = env['microfinance.loan.payment'].sudo()
 
         company_domain = [('company_id', '=', company.id)]
-        # 'active' ne prouve plus qu'un crédit a été décaissé (découplage activation /
-        # décaissement, docs_dev/guichet_caisse/AUDIT_decaissement.md) : les agrégats de
-        # portefeuille (encours, impayés, montant décaissé, nombre d'actifs, taux de défaut)
-        # exigent disbursement_date renseigné. defaulted_domain n'a pas besoin du filtre : un
-        # crédit en défaut a forcément été décaissé.
-        disbursed_only = [('disbursement_date', '!=', False)]
-        active_domain = company_domain + [('state', '=', 'active')] + disbursed_only
-        defaulted_domain = company_domain + [('state', '=', 'defaulted')]
-        disbursed_domain = company_domain + [('state', 'in', ('active', 'closed', 'defaulted'))] + disbursed_only
-        portfolio_domain = company_domain + [('state', 'in', ('active', 'defaulted'))] + disbursed_only
-
-        active_loans = Loan.search(active_domain)
-        defaulted_count = Loan.search_count(defaulted_domain)
-        disbursed_loans = Loan.search(disbursed_domain)
-        portfolio_loans = Loan.search(portfolio_domain)
-
-        active_loan_count = len(active_loans)
-        disbursed_amount = sum(disbursed_loans.mapped('loan_amount'))
-        outstanding_amount = sum(portfolio_loans.mapped('balance_total'))
-        overdue_amount = sum(portfolio_loans.mapped('overdue_amount'))
-        default_rate = active_loan_count and (defaulted_count / active_loan_count * 100.0) or 0.0
+        disbursed_domain = company_domain + [('state', 'in', ('active', 'closed', 'defaulted')),
+                                             ('disbursement_date', '!=', False)]
+        portfolio_loans = Loan.search(company_domain + [('state', 'in', ('active', 'defaulted')),
+                                                        ('disbursement_date', '!=', False)])
+        tiles = self._get_overview_tiles()
 
         state_rows = Loan.read_group(company_domain, ['state'], ['state'], lazy=False)
         state_selection = dict(Loan._fields['state'].selection)
@@ -874,7 +856,6 @@ class MicrofinanceLoan(models.Model):
         par_buckets = Loan.get_par_buckets(company.id)
 
         FondCredit = env['microfinance.fond.credit']
-        fond_kpi = FondCredit.get_dashboard_kpi(company.id)
         fond_multi_chart = FondCredit.get_multi_company_usage_chart()
         fond_single_chart = FondCredit.get_single_company_chart(company.id)
         # Portée volontairement plus large que les trois méthodes ci-dessus (toutes scopées à la
@@ -901,7 +882,7 @@ class MicrofinanceLoan(models.Model):
             'cancelled': ('secondary', state_selection.get('cancelled', 'Annulé')),
         }
         recent_loans = []
-        for loan in Loan.get_recent_loans(company.id, limit=5):
+        for loan in self.get_recent_loans(company.id, limit=5):
             badge_class, badge_label = state_badge.get(loan.state, ('secondary', state_selection.get(loan.state, loan.state)))
             recent_loans.append({
                 'id': loan.id,
@@ -914,7 +895,7 @@ class MicrofinanceLoan(models.Model):
                 'badge_label': badge_label,
             })
 
-        today_installments_recordset = Installment.get_due_today(company.id)
+        today_installments_recordset = env['microfinance.loan.installment'].get_due_today(company.id)
         today_installments = [{
             'loan_id': installment.loan_id.id,
             'loan_name': installment.loan_id.name,
@@ -948,6 +929,17 @@ class MicrofinanceLoan(models.Model):
         return {
             'portfolio_officer_id': portfolio_officer_id,
             'portfolio_is_own': portfolio_is_own,
+            # Formulaires sans création/duplication, par modèle : réutilisés par le composant
+            # pour tout enregistrement ouvert directement depuis le tableau de bord
+            # (openLoanRecord, openPortfolioTabRow, openFundsRow) - jamais un formulaire
+            # générique create=true. microfinance.loan réutilise la vue déjà dédiée au menu
+            # "Crédits" lui-même (view_microfinance_loan_form_credits_menu) ; les deux autres
+            # sont dédiées au seul tableau de bord (cf. leurs vues XML, "_form_dashboard").
+            'dashboard_form_views': {
+                'microfinance.loan': env.ref('microfinance_loan_management.view_microfinance_loan_form_credits_menu').id,
+                'microfinance.collection.visit': env.ref('microfinance_loan_management.view_microfinance_visit_form_dashboard').id,
+                'microfinance.portfolio.allocation': env.ref('microfinance_loan_management.view_microfinance_portfolio_allocation_form_dashboard').id,
+            },
             'currency': company.currency_id.symbol or '',
             'company': {
                 'id': company.id,
@@ -955,15 +947,8 @@ class MicrofinanceLoan(models.Model):
                 'has_logo': not company.uses_default_logo,
                 'address_subtitle': company._get_microfinance_dashboard_subtitle(),
             },
-            'kpis': {
-                'active_loan_count': active_loan_count,
-                'disbursed_amount': disbursed_amount,
-                'outstanding_amount': outstanding_amount,
-                'overdue_amount': overdue_amount,
-                'default_rate': default_rate,
-                'fond_bailleur_total': fond_kpi['total'],
-                'fond_bailleur_count': fond_kpi['count'],
-            },
+            'tiles': tiles,
+            'kpis': {tile['key']: tile['value'] for tile in tiles},
             'loans_by_state': loans_by_state,
             'fond_multi_chart': fond_multi_chart,
             'fond_single_chart': fond_single_chart,
@@ -981,7 +966,153 @@ class MicrofinanceLoan(models.Model):
             'recent_loans': recent_loans,
             'today_installments': today_installments,
             'today_installments_count': len(today_installments),
+            'today_installments_link': {
+                'model': 'microfinance.loan.installment',
+                'domain': env['microfinance.loan.installment']._get_due_today_domain(company.id),
+                'label': _('Échéances du jour'),
+                # Vues dédiées sans création/import/duplication (tableau de bord = consultation
+                # uniquement) ; le menu "Échéances" garde ses vues génériques, création inchangée.
+                'views': [
+                    [env.ref('microfinance_loan_management.view_microfinance_installment_tree_dashboard').id, 'list'],
+                    [env.ref('microfinance_loan_management.view_microfinance_installment_form_dashboard').id, 'form'],
+                ],
+            },
         }
+
+    @api.model
+    def _overview_tile(self, key, label, value_type, icon, style, compute, model=False, domain=False,
+                       link_label=False, tooltip=False):
+        """Une tuile « Vue d'ensemble » : le domaine renvoyé est CELUI qui a servi au calcul et que
+        le lien ouvre tel quel. Une erreur de calcul est journalisée et rendue « — », jamais 0."""
+        secondary = False
+        try:
+            with self.env.cr.savepoint():
+                value = compute()
+            if isinstance(value, tuple):
+                value, secondary = value
+            error = False
+        except Exception:
+            _logger.exception("Tableau de bord : calcul de la tuile « %s » impossible", key)
+            value, error = None, _("Calcul impossible, voir le journal du serveur.")
+        return {
+            'key': key, 'label': label, 'type': value_type, 'icon': icon, 'style': style,
+            'value': value, 'error': error, 'secondary': secondary, 'tooltip': tooltip,
+            'model': model if domain is not False else False, 'domain': domain,
+            'link_label': link_label if domain is not False else False,
+        }
+
+    @api.model
+    def _overview_loan_domains(self, company_id):
+        base = [('company_id', '=', company_id)]
+        disbursed = [('disbursement_date', '!=', False)]
+        domains = {
+            'active': base + [('state', '=', 'active')],
+            'pending_disbursement': base + [('state', '=', 'active'), ('disbursement_date', '=', False)],
+            'defaulted': base + [('state', '=', 'defaulted')],
+            'outstanding': base + [('state', 'in', ['active', 'defaulted'])] + disbursed,
+            'defaulted_disbursed': base + [('state', '=', 'defaulted')] + disbursed,
+        }
+        domains['overdue'] = domains['outstanding'] + [('overdue_amount', '>', 0)]
+        return domains
+
+    @api.model
+    def _get_overview_tiles(self):
+        """Tuiles « Vue d'ensemble », avec les droits de l'utilisateur courant (pas de sudo) :
+        compteur affiché == lignes de la liste ouverte par le lien, pour tous les rôles. Une tuile
+        dont le modèle n'est pas lisible par l'utilisateur est absente, jamais affichée à 0."""
+        env = self.env
+        company = env.company
+        tiles = []
+        if env['microfinance.loan'].check_access_rights('read', raise_exception=False):
+            Loan = env['microfinance.loan']
+            domains = self._overview_loan_domains(company.id)
+            loan = 'microfinance.loan'
+
+            def total(domain, field_name):
+                return sum(Loan.search(domain).mapped(field_name))
+
+            def default_rate():
+                outstanding = total(domains['outstanding'], 'balance_total')
+                defaulted = total(domains['defaulted_disbursed'], 'balance_total')
+                return outstanding and defaulted / outstanding * 100.0 or 0.0
+
+            # Vues dédiées sans création/import/duplication (view_microfinance_loan_*_credits_menu,
+            # déjà utilisées par le menu "Crédits" lui-même, cf. microfinance_loan_views.xml) :
+            # les tuiles ouvrent une liste de consultation, jamais les vues génériques create=true
+            # (qui laisseraient créer un crédit depuis le tableau de bord).
+            loan_dashboard_views = [
+                [self.env.ref('microfinance_loan_management.view_microfinance_loan_tree_credits_menu').id, 'list'],
+                [self.env.ref('microfinance_loan_management.view_microfinance_loan_form_credits_menu').id, 'form'],
+            ]
+            loan_tiles = [
+                self._overview_tile(
+                    'active_loan_count', _('Crédits actifs'), 'count', 'fa-users', 'credits',
+                    lambda: Loan.search_count(domains['active']), loan, domains['active'],
+                    _('Voir les crédits actifs')),
+                self._overview_tile(
+                    'pending_disbursement_count', _('Actifs en attente de décaissement'), 'count',
+                    'fa-hourglass-half', 'attente',
+                    lambda: Loan.search_count(domains['pending_disbursement']), loan,
+                    domains['pending_disbursement'], _('Voir les crédits en attente')),
+                self._overview_tile(
+                    'defaulted_loan_count', _('Crédits en défaut'), 'count', 'fa-ban', 'defaut',
+                    lambda: Loan.search_count(domains['defaulted']), loan, domains['defaulted'],
+                    _('Voir les crédits en défaut')),
+                self._overview_tile(
+                    'granted_amount', _('Montant accordé (crédits actifs)'), 'money', 'fa-money',
+                    'decaisse', lambda: total(domains['active'], 'loan_amount'), loan,
+                    domains['active'], _('Voir les crédits actifs')),
+                self._overview_tile(
+                    'outstanding_amount', _('Encours décaissé (actifs + en défaut)'), 'money',
+                    'fa-usd', 'encours', lambda: total(domains['outstanding'], 'balance_total'),
+                    loan, domains['outstanding'], _('Voir les crédits décaissés')),
+                self._overview_tile(
+                    'overdue_amount', _('Impayés (crédits décaissés)'), 'money', 'fa-credit-card',
+                    'impayes', lambda: total(domains['overdue'], 'overdue_amount'), loan,
+                    domains['overdue'], _('Voir les crédits en impayé')),
+            ]
+            for tile in loan_tiles:
+                tile['views'] = loan_dashboard_views
+            tiles += loan_tiles
+            tiles.append(self._overview_tile(
+                'default_rate', _('Taux de défaut'), 'percent', 'fa-exclamation-triangle',
+                'defaut', default_rate,
+                tooltip=_("Encours en défaut ÷ encours décaissé (actifs + défaut), même base que le PAR")))
+        if env['microfinance.fond.credit'].check_access_rights('read', raise_exception=False):
+            FondCredit = env['microfinance.fond.credit']
+            funds_holder = {}
+
+            def fund_count():
+                funds, _solde = FondCredit._get_agency_accessible_funds(company.id)
+                funds_holder['domain'] = [('id', 'in', funds.ids)]
+                # Trois montants calculés (jamais saisis) : alloué, en transit (ligne 139100 non lettrée),
+                # reçu en banque (ligne 139100 lettrée avec un relevé).
+                amounts = FondCredit._get_agency_fund_amounts(company.id, funds)
+                funds_holder['items'] = [
+                    {'label': _('En transit'), 'value': amounts['in_transit']},
+                    {'label': _('Reçu en banque'), 'value': amounts['received']},
+                ]
+                return len(funds), amounts['allocated']
+
+            tile = self._overview_tile(
+                'fund_count', _("Fonds accessibles à l'agence"), 'count', 'fa-university', 'fonds',
+                fund_count)
+            if funds_holder:
+                tile.update({
+                    'model': 'microfinance.fond.credit', 'domain': funds_holder['domain'],
+                    'link_label': _('Voir les fonds'),
+                    'secondary_label': _("dont part allouée à l'agence :"),
+                    'secondary_items': funds_holder.get('items', []),
+                    # Vues dédiées sans création/import/duplication (tableau de bord =
+                    # consultation uniquement) ; le menu "Fonds de crédit" garde ses vues
+                    # génériques, création inchangée.
+                    'views': [
+                        [self.env.ref('microfinance_loan_management.view_microfinance_fond_credit_tree_dashboard').id, 'list'],
+                        [self.env.ref('microfinance_loan_management.view_microfinance_fond_credit_form_dashboard').id, 'form'],
+                    ],
+                })
+            tiles.append(tile)
+        return tiles
 
     @api.model
     def get_recent_loans(self, company_id, limit=5):
@@ -1159,6 +1290,37 @@ class MicrofinanceLoan(models.Model):
             if not portfolio:
                 raise AccessError(_("Cet agent n'appartient pas à votre périmètre."))
         return company_ids, officer_id_filter
+
+    @api.model
+    def get_portfolio_new_client_action(self):
+        """« Nouveau client » de Mon portefeuille : seul chemin légitime de création d'un client.
+        L'agent est toujours l'utilisateur courant, jamais un id fourni par le client JS ; il doit
+        avoir un portefeuille actif dans l'agence active."""
+        user = self.env.user
+        company = self.env.company
+        if not self.env['microfinance.portfolio'].search_count([
+            ('agent_id', '=', user.id), ('company_id', '=', company.id), ('active', '=', True),
+        ]):
+            raise UserError(_(
+                "Vous n'avez pas de portefeuille d'agent de crédit dans l'agence %s : seul l'agent "
+                "de crédit peut créer un client, depuis son propre portefeuille."
+            ) % company.display_name)
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Nouveau client'),
+            'res_model': 'res.partner',
+            'view_mode': 'form',
+            'views': [(self.env.ref('microfinance_loan_management.view_microfinance_client_form_clients_menu').id, 'form')],
+            'target': 'current',
+            'context': {
+                'microfinance_context': True,
+                'allow_microfinance_partner_create': True,
+                'default_microfinance_partner_type': 'client',
+                'default_microfinance_client_type': 'individual',
+                'default_microfinance_officer_id': user.id,
+                'default_company_id': company.id,
+            },
+        }
 
     @api.model
     def _agent_portfolio_domain(self, company_ids, officer_id_filter=None):

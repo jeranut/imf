@@ -2,7 +2,7 @@
 import re
 
 from odoo import api, fields, models, _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError, ValidationError
 
 # Réglage global unique (toutes agences confondues, cf. Microfinance > Configuration >
 # Paramètres) : pas de champ dupliqué par société, ne s'applique qu'aux nouveaux dossiers.
@@ -12,6 +12,9 @@ MICROFINANCE_PRODUCT_POLICY_PARAM = 'microfinance_loan_management.microfinance_p
 # créé ni obtenir de crédit dans une agence tant qu'il en a un dans une autre). 'active' inclut
 # le crédit activé mais pas encore décaissé ; 'approved' et 'written_off' sont exclus.
 ACTIVE_LOAN_STATES = ('active', 'defaulted')
+
+# Sans ce flag, aucun client ne peut être créé (ni un contact promu client) sous microfinance_context.
+MICROFINANCE_PARTNER_CREATE_FLAG = 'allow_microfinance_partner_create'
 
 
 class ResPartner(models.Model):
@@ -49,6 +52,67 @@ class ResPartner(models.Model):
              "les clients microfinance, laissé vide pour les partenaires partagés entre "
              "sociétés (usages hors microfinance de l'instance).",
     )
+
+    # Redéclaré ici (même colonne que microfinance_payroll_loan, qui le déclarait seul) pour que le
+    # panneau « Portefeuille » du menu Clients et le chemin Mon portefeuille n'en dépendent pas.
+    microfinance_officer_id = fields.Many2one(
+        'res.users', string='Agent crédit (portefeuille)', index=True, tracking=True, copy=False,
+        help="Agent de crédit dont ce client dépend. Posé à la création depuis le portefeuille "
+             "de l'agent (ou par le wizard « Avance spéciale ») ; ne change jamais tout seul.",
+    )
+
+    @api.model
+    def _microfinance_is_unauthorized_client_creation(self, vals):
+        context = self.env.context
+        if not context.get('microfinance_context') or context.get(MICROFINANCE_PARTNER_CREATE_FLAG):
+            return False
+        if 'microfinance_partner_type' in vals:
+            return vals['microfinance_partner_type'] == 'client'
+        return context.get('default_microfinance_partner_type') == 'client'
+
+    @api.model
+    def _microfinance_raise_client_creation_forbidden(self):
+        raise UserError(_(
+            "La création d'un client se fait uniquement depuis le portefeuille de l'agent de crédit."))
+
+    @api.model
+    def _microfinance_check_officer_assignable(self, vals):
+        """Même avec le flag, l'agent posé doit avoir un portefeuille actif dans l'agence du
+        client : le flag et le default_* transitent par le contexte, donc forgeables en RPC."""
+        officer_id = vals.get('microfinance_officer_id') or self.env.context.get(
+            'default_microfinance_officer_id')
+        if not officer_id:
+            return
+        company_id = vals.get('company_id') or self.env.company.id
+        if not self.env['microfinance.portfolio'].sudo().search_count([
+            ('agent_id', '=', officer_id), ('company_id', '=', company_id), ('active', '=', True),
+        ]):
+            raise UserError(_(
+                "L'agent de crédit choisi n'a pas de portefeuille actif dans l'agence de ce client."))
+
+    def action_open_microfinance_client_form(self):
+        """Fiche client microfinance (form du menu Clients), pour un client existant : jamais le
+        flag de création dans le contexte."""
+        self.ensure_one()
+        self.check_access_rights('read')
+        self.check_access_rule('read')
+        return {
+            'type': 'ir.actions.act_window',
+            'name': self.display_name,
+            'res_model': 'res.partner',
+            'res_id': self.id,
+            'view_mode': 'form',
+            'views': [(self.env.ref('microfinance_loan_management.view_microfinance_client_form_clients_menu').id, 'form')],
+            'context': {'microfinance_context': True, 'default_microfinance_partner_type': 'client'},
+            'target': 'current',
+        }
+
+    def get_formview_action(self, access_uid=None):
+        # Clic sur un Many2one partner d'une vue microfinance : même fiche que le menu Clients.
+        if self.env.context.get('microfinance_context') and len(self) == 1 \
+                and self.microfinance_partner_type == 'client':
+            return self.action_open_microfinance_client_form()
+        return super().get_formview_action(access_uid=access_uid)
 
     @api.onchange('microfinance_client_type')
     def _onchange_microfinance_client_type(self):
@@ -447,6 +511,10 @@ class ResPartner(models.Model):
             # _assign_microfinance_account_number() ci-dessus, sur la base de la séquence dédiée.
             vals.pop('microfinance_account_number', None)
             self._microfinance_fold_id_number_display(vals, vals.get('microfinance_id_type'))
+            if self._microfinance_is_unauthorized_client_creation(vals):
+                self._microfinance_raise_client_creation_forbidden()
+            if self.env.context.get(MICROFINANCE_PARTNER_CREATE_FLAG):
+                self._microfinance_check_officer_assignable(vals)
             if self.env.context.get('microfinance_context') and vals.get('microfinance_id_type') == 'cin':
                 # Avant super().create() : évite de consommer un numéro de compte permanent
                 # (séquence non transactionnelle) pour un client finalement refusé.
@@ -481,6 +549,9 @@ class ResPartner(models.Model):
                 'Le numéro de compte client est permanent : il ne peut jamais être modifié '
                 'manuellement.'
             ))
+        if vals.get('microfinance_partner_type') == 'client' and self._microfinance_is_unauthorized_client_creation(vals) \
+                and any(partner.microfinance_partner_type != 'client' for partner in self):
+            self._microfinance_raise_client_creation_forbidden()
         if 'microfinance_id_number_display' in vals:
             if 'microfinance_id_type' not in vals and len(set(self.mapped('microfinance_id_type'))) > 1:
                 # Types de pièce différents : la normalisation dépend de chaque fiche.

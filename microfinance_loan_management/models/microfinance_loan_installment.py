@@ -87,12 +87,15 @@ class MicrofinanceLoanInstallment(models.Model):
         "Échéances du jour" du tableau de bord. Bornée par l'index existant sur due_date (pas de
         scan de microfinance.loan), extraite en méthode de modèle pour rester testable
         directement, comme microfinance.loan.get_par_buckets."""
-        today = fields.Date.context_today(self)
-        return self.search([
+        return self.search(self._get_due_today_domain(company_id), order='due_date, loan_id')
+
+    @api.model
+    def _get_due_today_domain(self, company_id):
+        return [
             ('company_id', '=', company_id),
-            ('due_date', '=', today),
+            ('due_date', '=', fields.Date.context_today(self)),
             ('state', '!=', 'paid'),
-        ], order='due_date, loan_id')
+        ]
 
     @api.model
     def get_pending_or_late(self, company_id):

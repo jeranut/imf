@@ -21,7 +21,7 @@
                 <sheet>
                     <group>
                         <field name="name"/>
-                        <field name="partner_id"/>
+                        <field name="partner_id" domain="[('microfinance_partner_type', '=', 'client')]" options="{'no_create': True, 'no_quick_create': True, 'no_create_edit': True}" context="{'microfinance_context': True}"/>
                         <field name="company_id"/>
                     </group>
                     <notebook>

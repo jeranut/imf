@@ -14,7 +14,7 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
     automatique du dossier d'instruction à l'enregistrement (cf. prompt fiche client crédit)."""
 
     def test_selecting_independent_product_creates_draft_application(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Sélection Indépendante',
             'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
@@ -27,7 +27,7 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
         self.assertEqual(application.state, 'draft')
 
     def test_reusing_existing_draft_application_no_duplicate(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Réutilisation',
             'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
@@ -35,7 +35,7 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
         existing = self.env['microfinance.loan.application'].create({
             'partner_id': partner.id, 'loan_product_id': self.product.id, 'company_id': self.env.company.id,
         })
-        partner.with_context(microfinance_context=True).write({'microfinance_selected_product_id': self.product.id})
+        partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({'microfinance_selected_product_id': self.product.id})
         self.assertEqual(partner.microfinance_current_loan_application_id, existing)
         count = self.env['microfinance.loan.application'].search_count([
             ('partner_id', '=', partner.id), ('loan_product_id', '=', self.product.id),
@@ -43,7 +43,7 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
         self.assertEqual(count, 1)
 
     def test_no_product_selected_no_application_created_no_error(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Sans Produit',
             'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
@@ -56,13 +56,13 @@ class TestPartnerCreditSelectionIndependent(MicrofinanceCommon):
         # self.product n'appartient à aucun programme progressif dans cette classe de test :
         # il ne peut donc pas être choisi si la politique globale est réglée sur 'progressive'.
         self._set_product_policy('progressive')
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Incohérence Politique',
             'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
         with self.assertRaises(ValidationError):
-            partner.with_context(microfinance_context=True).write({
+            partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
                 'microfinance_selected_product_id': self.product.id,
             })
 
@@ -108,7 +108,7 @@ class TestPartnerCreditSelectionProgressiveEligibility(MicrofinanceCommon):
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         }
         vals.update(kwargs)
-        return self.env['res.partner'].with_context(microfinance_context=True).create(vals)
+        return self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create(vals)
 
     def _close_step1_loan_without_arrears(self, partner):
         loan = self._create_loan(partner_id=partner.id, product_id=self.product_step1.id)
@@ -149,7 +149,7 @@ class TestPartnerCreditSelectionProgressiveEligibility(MicrofinanceCommon):
     def test_progressive_product_selection_allowed_when_eligible(self):
         self._set_product_policy('progressive')
         partner = self._new_client_partner('Client Test Sélection Progressive')
-        partner.with_context(microfinance_context=True).write({
+        partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
             'microfinance_selected_product_id': self.product_step1.id,
         })
         self.assertEqual(partner.microfinance_selected_product_id, self.product_step1)
@@ -160,7 +160,7 @@ class TestPartnerCreditSelectionProgressiveEligibility(MicrofinanceCommon):
         self._set_product_policy('progressive')
         partner = self._new_client_partner('Client Test Sélection Progressive Refusée')
         with self.assertRaises(ValidationError):
-            partner.with_context(microfinance_context=True).write({
+            partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
                 'microfinance_selected_product_id': self.product.id,
             })
 
@@ -171,7 +171,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
     dossiers/crédits déjà créés lors d'un changement de politique."""
 
     def test_default_policy_is_independent(self):
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Politique Défaut', 'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
@@ -179,7 +179,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
 
     def test_policy_reflects_global_config_parameter(self):
         self._set_product_policy('progressive')
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Politique Globale', 'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
@@ -192,7 +192,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
         company_b = self.env['res.company'].create({
             'name': 'Agence B (test politique produit)', 'agency_code': 'PPB',
         })
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Politique Autre Société',
             'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
@@ -202,7 +202,7 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
 
     def test_policy_change_does_not_affect_existing_application(self):
         # Dossier créé sous la politique 'indépendant' (réglage par défaut).
-        partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Changement Politique',
             'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
@@ -224,12 +224,12 @@ class TestPartnerCreditSelectionProductPolicy(MicrofinanceCommon):
 
         # Un nouveau client, créé après le changement, suit désormais la nouvelle politique :
         # self.product (produit indépendant, hors programme progressif) n'est plus sélectionnable.
-        other_partner = self.env['res.partner'].with_context(microfinance_context=True).create({
+        other_partner = self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Nouvelle Politique', 'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin', 'microfinance_id_number': str(next(_CIN_SEQUENCE)),
         })
         with self.assertRaises(ValidationError):
-            other_partner.with_context(microfinance_context=True).write({
+            other_partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
                 'microfinance_selected_product_id': self.product.id,
             })
 
@@ -272,7 +272,7 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
         return loan
 
     def _new_partner_with_product(self):
-        return self.env['res.partner'].with_context(microfinance_context=True).create({
+        return self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Client Test Verrou',
             'microfinance_partner_type': 'client',
             'microfinance_id_type': 'cin',
@@ -285,7 +285,7 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
         application = partner.microfinance_current_loan_application_id
         application.action_start_visite()
         with self.assertRaises(ValidationError):
-            partner.with_context(microfinance_context=True).write({
+            partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
                 'microfinance_selected_product_id': self.other_product.id,
             })
 
@@ -295,11 +295,11 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
         loan = self._advance_application_to_loan_created(application)
         loan.write({'state': 'active'})
         with self.assertRaises(ValidationError):
-            partner.with_context(microfinance_context=True).write({
+            partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
                 'microfinance_selected_product_id': self.other_product.id,
             })
         loan.write({'state': 'closed'})
-        partner.with_context(microfinance_context=True).write({
+        partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
             'microfinance_selected_product_id': self.other_product.id,
         })
         self.assertEqual(partner.microfinance_selected_product_id, self.other_product)
@@ -309,7 +309,7 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
         application = partner.microfinance_current_loan_application_id
         loan = self._advance_application_to_loan_created(application)
         loan.write({'state': 'cancelled'})
-        partner.with_context(microfinance_context=True).write({
+        partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
             'microfinance_selected_product_id': self.other_product.id,
         })
         self.assertEqual(partner.microfinance_selected_product_id, self.other_product)
@@ -330,7 +330,7 @@ class TestPartnerCreditSelectionProductLock(MicrofinanceCommon):
         application.action_start_contre_visite()
         application.action_mark_fait()
         # Pas d'action de refus équivalente dans le nouveau cycle : cf. TODO ci-dessus.
-        partner.with_context(microfinance_context=True).write({
+        partner.with_context(microfinance_context=True, allow_microfinance_partner_create=True).write({
             'microfinance_selected_product_id': self.other_product.id,
         })
         self.assertEqual(partner.microfinance_selected_product_id, self.other_product)

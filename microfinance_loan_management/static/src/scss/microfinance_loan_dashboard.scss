@@ -318,6 +318,18 @@
         .o_microfinance_kpi__icon { background: #A6DEE1; color: #0B4A4D; }
         .o_microfinance_kpi__link { color: #0E6367; border-top-color: #A6DEE1; }
     }
+    &--attente {
+        background: #F3F4F6;
+        border-color: darken(#F3F4F6, 10%);
+        .o_microfinance_kpi__icon { background: #D1D5DB; color: #374151; }
+        .o_microfinance_kpi__link { color: #4B5563; border-top-color: #D1D5DB; }
+    }
+}
+
+.o_microfinance_kpi_toolbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 8px;
 }
 
 .o_microfinance_panel {

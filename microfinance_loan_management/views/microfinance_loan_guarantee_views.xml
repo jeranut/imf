@@ -8,7 +8,7 @@
                 <field name="loan_id" column_invisible="context.get('default_loan_id')"/>
                 <field name="guarantee_type"/>
                 <field name="description"/>
-                <field name="guarantor_partner_id" invisible="guarantee_type != 'guarantor'"/>
+                <field name="guarantor_partner_id" invisible="guarantee_type != 'guarantor'" options="{'no_quick_create': True}"/>
                 <field name="estimated_value"/>
                 <field name="recognized_value"/>
                 <field name="currency_id" column_invisible="1"/>
@@ -28,7 +28,7 @@
                     <field name="currency_id" invisible="1"/>
                     <field name="guarantee_type"/>
                     <field name="description"/>
-                    <field name="guarantor_partner_id" invisible="guarantee_type != 'guarantor'"/>
+                    <field name="guarantor_partner_id" invisible="guarantee_type != 'guarantor'" options="{'no_quick_create': True}" context="{'microfinance_context': True}"/>
                     <field name="estimated_value"/>
                     <field name="recognized_value" readonly="1"/>
                     <field name="state"/>
