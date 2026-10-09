@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Loan Management',
-    'version': '17.0.1.28.0',
+    'version': '17.0.1.29.0',
     'summary': 'Gestion des crédits clients pour institutions de microfinance',
     'description': 'Produits de crédit, demandes, approbations, échéanciers, remboursements, pénalités, recouvrement et risque.',
     'category': 'Accounting/Finance',
@@ -21,6 +21,7 @@
         'security/microfinance_officer_isolation_rules.xml',
         'security/ir.model.access.csv',
         'data/sequence.xml',
+        'data/fond_exploitation_data.xml',
         'data/financial_report_signs.xml',
         'data/cron.xml',
         'data/menu_order.xml',
@@ -79,6 +80,7 @@
         'views/res_config_settings_views.xml',
         'views/microfinance_menus.xml',
         'views/microfinance_bank_statement_views.xml',
+        'views/microfinance_fond_exploitation_views.xml',
         # Chargés après microfinance_menus.xml : leurs <menuitem parent="..."> référencent
         # des menus qui y sont définis (menu_microfinance_config_geography pour geo_views,
         # menu_microfinance_analysis pour portfolio_snapshot) — les xmlids de

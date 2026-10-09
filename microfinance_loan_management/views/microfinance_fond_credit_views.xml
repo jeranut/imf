@@ -140,7 +140,8 @@
              plus courant à la création depuis ce menu). Le défaut modèle du champ scope reste
              'single_company' (microfinance_fond_credit.py) : un create() direct (import/API,
              ou tout autre point d'entrée sans passer par cette action) n'est pas affecté. -->
-        <field name="context">{'default_scope': 'multi_company'}</field>
+        <field name="domain">[('destination', '=', 'credit')]</field>
+        <field name="context">{'default_scope': 'multi_company', 'default_destination': 'credit'}</field>
     </record>
 
     <!-- Rapport "Utilisation des fonds" : vue liste + pivot sur microfinance.fond.credit
@@ -183,6 +184,7 @@
         <field name="name">Utilisation des fonds</field>
         <field name="res_model">microfinance.fond.credit</field>
         <field name="view_mode">tree,pivot</field>
+        <field name="domain">[('destination', '=', 'credit')]</field>
         <field name="context">{'search_default_active': 1}</field>
         <field name="help" type="html">
             <p>Vue consolidée par fonds/bailleur : contributions, décaissements, remboursements et

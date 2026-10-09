@@ -85,5 +85,6 @@
         <field name="name">Contributions</field>
         <field name="res_model">microfinance.fond.contribution</field>
         <field name="view_mode">tree,form,pivot</field>
+        <field name="domain">[('fond_id.destination', '=', 'credit')]</field>
     </record>
 </odoo>
