@@ -140,7 +140,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             moves |= wiz._orphan_moves()
             scope = wiz._statement_scope(moves, funds)
             wiz.summary = _("%(f)d fonds, %(s)d relevés et %(m)d écritures comptables concernés") % {
-                'f': len(funds), 's': len(scope['statements']), 'm': len(moves) + len(scope['lines'])}
+                'f': len(funds), 's': len(scope['statements']), 'm': len(moves) + len(scope['lines']) + len(scope['reversals'])}
 
     # ------------------------------------------------------------------ périmètre
     def _get_funds(self):
@@ -223,7 +223,11 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             statements |= Statement.search([
                 ('mf_state', '!=', False), ('journal_id.type', '=', 'bank'),
                 ('journal_id.company_id', 'in', companies.ids)])
-        return {'statements': statements, 'lines': st_lines | statements.line_ids,
+        all_lines = st_lines | statements.line_ids
+        # extournes d'écritures de relevé (anciennes annulations de rapprochement) : supprimées avec elles
+        reversals = self.env['account.move'].sudo().with_context(active_test=False).search(
+            [('reversed_entry_id', 'in', all_lines.move_id.ids)])
+        return {'statements': statements, 'lines': all_lines, 'reversals': reversals,
                 'entries': statements.mf_entry_ids, 'linked_entries': linked_entries, 'linked': linked}
 
     # ------------------------------------------------------------------ blocages
@@ -375,7 +379,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         for company in entries.company_id:
             mine_e = entries.filtered(lambda e: e.company_id == company)
             add(company.name, _('Lignes de relevé supprimées'), len(mine_e), sum(mine_e.mapped('amount')))
-        st_moves = st_lines.move_id
+        st_moves = st_lines.move_id | scope['reversals']
         for company in st_moves.company_id:
             mine_m = st_moves.filtered(lambda m: m.company_id == company)
             add(company.name, _('Écritures de relevé supprimées'), len(mine_m), debit(mine_m))
@@ -417,6 +421,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         if reconciled:
             reconciled.remove_move_reconcile()
         # relevés : lignes comptables (et leurs écritures) d'abord, puis les lignes saisies et le relevé lui-même
+        scope['reversals'].with_context(force_delete=True).unlink()
         st_lines.unlink()
         entries.write({'state': 'todo'})
         statements.filtered(lambda st: st.mf_state == 'validated').write({'mf_state': 'draft'})
