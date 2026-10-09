@@ -41,10 +41,6 @@ from . import microfinance_bank_settings
 from . import microfinance_bank_statement
 from . import microfinance_bank_statement_entry
 from . import microfinance_bank_dashboard
-from . import microfinance_bank_settings
-from . import microfinance_bank_statement
-from . import microfinance_bank_statement_entry
-from . import microfinance_bank_settings
 from . import microfinance_portfolio
 from . import microfinance_portfolio_allocation
 from . import microfinance_caisse_fiche_journee
