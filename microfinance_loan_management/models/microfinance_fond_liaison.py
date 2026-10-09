@@ -203,27 +203,46 @@ class MicrofinanceFondPartage(models.Model):
             ('microfinance_usage', '=', 'credit'), ('microfinance_bank_id', '=', fund_journal.microfinance_bank_id.id),
             ('company_id', '=', company.id), ('type', '=', 'bank'), ('active', '=', True)], limit=1)
 
+    def _operating_journal_for(self, fund_journal, company):
+        """Journal d'exploitation (usage « Exploitation ») de la même banque que le journal du fonds, dans `company`."""
+        return self.env['account.journal'].sudo().search([
+            ('microfinance_usage', '=', 'operating'), ('microfinance_bank_id', '=', fund_journal.microfinance_bank_id.id),
+            ('company_id', '=', company.id), ('type', '=', 'bank'), ('active', '=', True)], limit=1)
+
+    def _receiving_journal_for(self, fund_journal, company):
+        """Journal qui reçoit la part d'une agence : crédit pour un fonds de crédit, exploitation pour un fonds
+        d'exploitation, toujours de la même banque que le fonds."""
+        if self.fond_id.destination == 'exploitation':
+            return self._operating_journal_for(fund_journal, company)
+        return self._credit_journal_for(fund_journal, company)
+
     # ------------------------------------------------------------------ génération
     def _create_agency_move(self, line):
-        """Côté agence : Dr 139100 / Cr compte de liaison de l'agence (journal crédit de la banque du fonds)."""
+        """Côté agence : Dr 139100 / Cr compte de liaison de l'agence (journal crédit, ou d'exploitation pour un fonds
+        d'exploitation, de la banque du fonds)."""
         self.ensure_one()
         agency = line.company_id
         fund_journal = self.fond_id.fund_journal_id
-        journal = self._credit_journal_for(fund_journal, agency)
+        exploitation = self.fond_id.destination == 'exploitation'
+        journal = self._receiving_journal_for(fund_journal, agency)
         if not journal:
-            raise UserError(_("L'agence « %(agence)s » n'a pas de journal crédit pour la banque du fonds (%(banque)s).")
-                            % {'agence': agency.name, 'banque': fund_journal.microfinance_bank_id.name})
+            raise UserError(_(
+                "L'agence « %(agence)s » n'a pas de journal d'exploitation pour la banque du fonds (%(banque)s).")
+                % {'agence': agency.name, 'banque': fund_journal.microfinance_bank_id.name} if exploitation else _(
+                "L'agence « %(agence)s » n'a pas de journal crédit pour la banque du fonds (%(banque)s).")
+                % {'agence': agency.name, 'banque': fund_journal.microfinance_bank_id.name})
         inbound = self._payment_account(journal, 'inbound')
         liaison = agency.microfinance_liaison_agency_account_id
         if not inbound or not liaison:
             raise UserError(_("L'agence « %s » n'a pas de compte de paiement en suspens (139100) ou de compte de liaison configuré.") % agency.name)
-        move = self._create_move(agency, self._move_vals(
-            line, journal, _('Fonds %s reçu') % self.fond_id.code, inbound, liaison, 'agency'))
+        label = (_('Fonds %(code)s reçu de %(siege)s') % {'code': self.fond_id.code, 'siege': self.company_id.name}
+                 if exploitation else _('Fonds %s reçu') % self.fond_id.code)
+        move = self._create_move(agency, self._move_vals(line, journal, label, inbound, liaison, 'agency'))
         line.agency_move_id = move
         return move
 
     def _generate_liaison_moves(self):
-        for partage in self:
+        for partage in self.filtered(lambda p: p.fond_id.destination != 'exploitation'):
             fond = partage.fond_id
             if not fond.passer_gl:
                 partage.message_post(body=_("Aucune écriture comptable : le fonds ne passe pas au grand livre."))
@@ -289,7 +308,12 @@ class MicrofinanceFondPartage(models.Model):
         validated = self.filtered(lambda p: p.state == 'validated')
         validated._check_liaison_not_reconciled()
         res = super().action_cancel()
-        for partage in validated.filtered(lambda p: p.state == 'cancelled'):
+        validated.filtered(lambda p: p.state == 'cancelled')._reverse_liaison_moves()
+        return res
+
+    def _reverse_liaison_moves(self):
+        """Extourne, dans leur société, les écritures de liaison des deux côtés (une seule extourne par écriture)."""
+        for partage in self:
             for move in partage._liaison_moves().sudo():
                 if self.env['account.move'].sudo().search_count([('reversed_entry_id', '=', move.id)]):
                     continue
@@ -300,7 +324,6 @@ class MicrofinanceFondPartage(models.Model):
                     'microfinance_fond_partage_line_id': move.microfinance_fond_partage_line_id.id,
                     'microfinance_partage_side': move.microfinance_partage_side,
                 }], cancel=True)
-        return res
 
 
 class MicrofinanceFondLiaisonReport(models.Model):
