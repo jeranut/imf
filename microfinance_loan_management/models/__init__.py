@@ -57,3 +57,5 @@ from . import ir_attachment
 from . import account_payment_register
 from . import account_journal
 from . import account_financial_report_mf
+from . import account_general_ledger_report
+from . import report_general_ledger_mf

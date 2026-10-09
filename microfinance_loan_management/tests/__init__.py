@@ -94,3 +94,4 @@ from . import test_bank_statement_access
 from . import test_bilan_resultat
 from . import test_fond_exploitation
 from . import test_menus_fonds
+from . import test_general_ledger

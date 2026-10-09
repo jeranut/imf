@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <!-- PDF du Grand livre interactif : mêmes filtres que l'écran, toutes les lignes (hors pagination de l'écran). -->
+    <template id="report_general_ledger_mf">
+        <t t-call="web.html_container">
+            <t t-call="web.internal_layout">
+                <div class="page">
+                    <h2 t-esc="title"/>
+                    <div class="row mt32 mb32">
+                        <div class="col-4"><strong>Agence :</strong><p t-esc="company.name"/></div>
+                        <div class="col-4"><strong>Période :</strong><p>Du <span t-esc="date_from"/> au <span t-esc="date_to"/></p></div>
+                        <div class="col-4">
+                            <strong>Journaux :</strong><p t-esc="journals_label"/>
+                            <strong>Pièces :</strong><p t-esc="target_move_label"/>
+                        </div>
+                    </div>
+                    <t t-foreach="report_data['accounts']" t-as="account" t-key="account['id']">
+                        <h5 t-esc="'%s %s' % (account['code'], account['name'])"/>
+                        <table class="table table-sm table-reports">
+                            <thead>
+                                <tr><th>Date</th><th>Pièce</th><th>Journal</th><th>Tiers</th><th>Libellé</th>
+                                    <th class="text-end">Débit</th><th class="text-end">Crédit</th><th class="text-end">Solde</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr class="fw-bold"><td colspan="7">Solde initial</td><td class="text-end" t-esc="'%.2f' % account['opening']"/></tr>
+                                <tr t-foreach="account['rows']" t-as="line" t-key="line['line_id']">
+                                    <td t-esc="line['date']"/><td t-esc="line['piece']"/><td t-esc="line['journal']"/>
+                                    <td t-esc="line['partner_name']"/><td t-esc="line['label']"/>
+                                    <td class="text-end" t-esc="'%.2f' % line['debit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % line['credit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % line['balance']"/>
+                                </tr>
+                                <tr class="fw-bold">
+                                    <td colspan="5">Total <span t-esc="account['code']"/></td>
+                                    <td class="text-end" t-esc="'%.2f' % account['debit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % account['credit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % account['closing']"/>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </t>
+                    <p class="fw-bold">Total général — Débit <span t-esc="'%.2f' % report_data['totals']['debit']"/>
+                        — Crédit <span t-esc="'%.2f' % report_data['totals']['credit']"/></p>
+                </div>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_general_ledger_mf" model="ir.actions.report">
+        <field name="name">Grand livre</field>
+        <field name="model">res.company</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_general_ledger_mf</field>
+        <field name="report_file">microfinance_loan_management.report_general_ledger_mf</field>
+        <field name="attachment_use">False</field>
+    </record>
+</odoo>
