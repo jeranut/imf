@@ -240,6 +240,29 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertTrue(funds.exists() == funds)
         self.assertEqual((avance.exploitation_recu, avance.exploitation_du), (0.0, 0.0))
 
+    def test_exploitation_partage_is_purged_with_its_two_moves_and_its_link(self):
+        """Partage d'un fonds d'exploitation à une agence : la purge supprime le partage, sa part, l'écriture du siège et
+        le miroir de l'agence, et remet les soldes comme avant."""
+        zero = self._snapshot()
+        ag_bank = self._acc(self.agency, 'T131OPA', 'asset_cash', False)
+        self._journal(self.agency, 'BMOPA', ag_bank, inbound=self.ag_in, usage='operating')
+        fond = self._expl_fond('subvention')
+        self._expl_contribution(fond, 10000.0, 'VIR-P')
+        partage = self.env['microfinance.fond.partage'].with_context(partage_destination='exploitation').create({
+            'fond_id': fond.id, 'line_ids': [(0, 0, {'company_id': self.agency.id, 'amount': 4000.0})]})
+        partage.action_validate()
+        line = partage.line_ids.filtered(lambda l: l.amount)
+        moves = self._fund_moves(fond)
+        self.assertEqual(len(moves), 3)   # contribution + écriture du siège + miroir de l'agence
+        self.assertTrue(line.hq_move_id and line.agency_move_id)
+        wizard = self._run(fond)
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertFalse(moves.exists())
+        self.assertFalse(partage.exists() or line.exists())
+        self.assertFalse(self.env['account.move'].sudo().search([('microfinance_fond_partage_id', '=', partage.id)]))
+        self.assertSnapshotEqual(zero)
+        self.assertEqual((fond.total_contributions, fond.reste_partageable), (0.0, 0.0))
+
     def test_credit_and_exploitation_together(self):
         zero = self._snapshot()
         fond, partage, entry = self._credit_scenario()
