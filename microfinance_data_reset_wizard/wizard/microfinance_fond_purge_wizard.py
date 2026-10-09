@@ -467,7 +467,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             fund = Fond.browse(c['fund'].id)
             if self.mode_raz == 'reset':
                 if fund.destination != 'exploitation' and fund.scope == 'multi_company':
-                    fund.write({'allocation_required': bool(parent)})
+                    fund.with_context(**TECH_CONTEXT).write({'allocation_required': bool(parent)})
                 continue
             account = fund.account_id if fund.account_auto else env['account.account']
             company = fund._fund_company()

@@ -29,7 +29,12 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         # a déjà une société mère configurée (MOWGLI), la garde « mère uniquement » les refuserait.
         with patch.object(ResCompany, '_get_microfinance_parent', lambda self: self.browse()):
             super().setUpClass()
-        cls.admin = cls.env.ref('base.user_admin')
+        # Administrateur technique dont la société courante est une AGENCE (pas la mère) : la purge doit passer quand
+        # même, les gardes « mère uniquement » ne s'appliquent pas à cet outil d'administration.
+        cls.admin = cls.env['res.users'].with_context(no_reset_password=True).create({
+            'name': 'Admin technique purge (test)', 'login': 'purge_admin', 'company_id': cls.agency.id,
+            'company_ids': [(6, 0, [cls.hq.id, cls.agency.id, cls.agency2.id])],
+            'groups_id': [(6, 0, [cls.env.ref('base.group_user').id, cls.env.ref('base.group_system').id])]})
         cls.Wizard = cls.env['microfinance.fond.purge.wizard'].with_user(cls.admin)
         # agence 2 complètement configurée (côté agence non configuré dans la fixture de base)
         cls.ag2_in = cls._acc(cls.agency2, 'T139100C', 'asset_current', True)
