@@ -92,3 +92,4 @@ from . import test_fond_vue_agence
 from . import test_bank_statement_paper
 from . import test_bank_statement_access
 from . import test_bilan_resultat
+from . import test_fond_exploitation
