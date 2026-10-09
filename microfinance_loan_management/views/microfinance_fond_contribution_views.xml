@@ -28,7 +28,8 @@
                 <sheet>
                     <group>
                         <group string="Mouvement">
-                            <field name="fond_id" string="Fonds de crédit"/>
+                            <field name="fond_id" string="Fonds de crédit"
+                                   domain="[('destination', '=', 'credit'), '|', ('company_id', '=', False), ('company_id', 'in', allowed_company_ids)]"/>
                             <field name="date" string="Date"/>
                             <field name="type_mouvement" string="Type de mouvement"/>
                             <field name="amount" string="Montant"/>
@@ -86,5 +87,6 @@
         <field name="res_model">microfinance.fond.contribution</field>
         <field name="view_mode">tree,form,pivot</field>
         <field name="domain">[('fond_id.destination', '=', 'credit')]</field>
+        <field name="context">{'contribution_destination': 'credit'}</field>
     </record>
 </odoo>
