@@ -42,12 +42,22 @@ class AccountBankStatement(models.Model):
             dates = stmt.mf_entry_ids.mapped('date')
             stmt.mf_last_date = max([d for d in dates if d], default=stmt.mf_date_from)
 
-    @api.depends('balance_start', 'balance_end_real', 'mf_entry_ids.amount', 'mf_entry_ids.state', 'attachment_ids')
+    def _mf_currency(self):
+        """Devise du relevé : celle du journal, sinon celle de sa société, sinon celle de la société courante (formulaire
+        « Nouveau » avant le choix du journal). Jamais vide."""
+        self.ensure_one()
+        journal = self.journal_id
+        return journal.currency_id or journal.company_id.currency_id or self.env.company.currency_id
+
+    @api.depends('journal_id', 'balance_start', 'balance_end_real', 'mf_entry_ids.amount', 'mf_entry_ids.state',
+                 'attachment_ids')
     def _compute_mf_balance(self):
         for stmt in self:
-            currency = stmt.currency_id or stmt.company_id.currency_id
             stmt.mf_balance_computed = stmt.balance_start + sum(stmt.mf_entry_ids.mapped('amount'))
-            stmt.mf_gap = currency.round(stmt.balance_end_real - stmt.mf_balance_computed)
+            # Sans journal (relevé « Nouveau » à l'ouverture du formulaire) : pas d'écart calculable, donc 0 sans
+            # arrondir ; l'arrondi lit la précision de la devise du journal une fois celui-ci choisi.
+            stmt.mf_gap = (stmt._mf_currency().round(stmt.balance_end_real - stmt.mf_balance_computed)
+                           if stmt.journal_id else 0.0)
             stmt.mf_todo_count = len(stmt.mf_entry_ids.filtered(lambda e: e.state == 'todo'))
             stmt.mf_has_attachment = bool(stmt.attachment_ids)
 
@@ -70,20 +80,24 @@ class AccountBankStatement(models.Model):
     def _mf_previous(self):
         """Dernier relevé validé du même journal qui se termine avant le début de celui-ci."""
         self.ensure_one()
-        return self.sudo().search([
-            ('journal_id', '=', self.journal_id.id), ('mf_state', '=', 'validated'), ('id', '!=', self._origin.id or self.id),
-            ('mf_date_to', '<', self.mf_date_from)], order='mf_date_to desc, id desc', limit=1)
+        domain = [('journal_id', '=', self.journal_id.id), ('mf_state', '=', 'validated'),
+                  ('mf_date_to', '<', self.mf_date_from)]
+        if self._origin.id:  # relevé « Nouveau » (NewId) : rien à exclure
+            domain.append(('id', '!=', self._origin.id))
+        return self.sudo().search(domain, order='mf_date_to desc, id desc', limit=1)
 
     def _mf_next(self):
         self.ensure_one()
-        return self.sudo().search([
-            ('journal_id', '=', self.journal_id.id), ('mf_state', '=', 'validated'), ('id', '!=', self.id),
-            ('mf_date_from', '>', self.mf_date_to)], order='mf_date_from asc, id asc', limit=1)
+        domain = [('journal_id', '=', self.journal_id.id), ('mf_state', '=', 'validated'),
+                  ('mf_date_from', '>', self.mf_date_to)]
+        if self._origin.id:
+            domain.append(('id', '!=', self._origin.id))
+        return self.sudo().search(domain, order='mf_date_from asc, id asc', limit=1)
 
     # ------------------------------------------------------------------ contrôles et validation
     def _mf_check_before_validation(self):
         self.ensure_one()
-        currency = self.currency_id or self.company_id.currency_id
+        currency = self._mf_currency()
         if self.journal_id.type != 'bank':
             raise UserError(_("Un relevé bancaire se saisit sur un journal de type banque."))
         if not self.mf_date_from or not self.mf_date_to or self.mf_date_from > self.mf_date_to:

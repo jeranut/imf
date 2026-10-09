@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from odoo.exceptions import AccessError, UserError
+from odoo.tests import Form
 
 from .test_fond_liaison import TestFondLiaison
 from .test_fond_origine import TestFondOrigine
@@ -281,3 +282,50 @@ class TestBankStatementPaper(TestFondLiaison):
         self.assertTrue(data['mf_enabled'])
         self.assertEqual(data['mf_todo_count'], 1)
         self.assertIn('mf_gap', data)
+
+    # ouverture d'un NOUVEAU relevé : ce que fait le client web (default_get + onchange avec la spec de la vue)
+    FORM_VIEW = 'microfinance_loan_management.view_microfinance_bank_statement_form'
+
+    def test_new_statement_without_journal_does_not_crash(self):
+        Statement = self.env['account.bank.statement']
+        blank = Statement.new({})
+        self.assertEqual((blank.mf_balance_computed, blank.mf_gap, blank.mf_todo_count), (0.0, 0.0, 0))
+        form = Form(Statement.with_context(default_mf_state='draft'), view=self.FORM_VIEW)
+        self.assertFalse(form.journal_id)
+        self.assertEqual(form.mf_gap, 0.0)
+
+    def test_new_statement_form_then_journal_then_a_line(self):
+        form = Form(self.env['account.bank.statement'].with_context(default_mf_state='draft'), view=self.FORM_VIEW)
+        form.journal_id = self.ag_journal
+        form.mf_date_from = self.D_FROM
+        form.mf_date_to = self.D_TO
+        form.balance_start = 0.0
+        form.balance_end_real = 300.0
+        self.assertEqual(form.mf_gap, 300.0)
+        with form.mf_entry_ids.new() as line:
+            line.name = 'Virement BMOI'
+            line.amount_in = 300.0
+        self.assertEqual((form.mf_balance_computed, form.mf_gap), (300.0, 0.0))
+        statement = form.save()
+        self.assertEqual(statement.mf_entry_ids.date, statement.mf_date_from)
+        self.assertEqual(statement.mf_gap, 0.0)
+
+    def test_new_statement_opened_from_the_journal_kanban(self):
+        action = self.ag_journal.action_mf_new_statement()
+        form = Form(self.env['account.bank.statement'].with_context(**action['context']), view=self.FORM_VIEW)
+        self.assertEqual(form.journal_id, self.ag_journal)
+        self.assertEqual(form.mf_state, 'draft')
+        form.mf_date_from = self.D_FROM
+        form.mf_date_to = self.D_TO
+        form.balance_end_real = 0.0
+        self.assertEqual(form.mf_gap, 0.0)
+        self.assertEqual(self.env['account.bank.statement'].with_context(**action['context']).new({})._mf_currency(),
+                         self.ag_journal.company_id.currency_id)
+
+    def test_new_statement_prefills_initial_balance_from_the_previous_one(self):
+        first = self._mf_statement(self.ag_journal, 0.0, 200.0, [{'name': 'Dépôt', 'amount_in': 200.0}])
+        first.action_mf_validate()
+        form = Form(self.env['account.bank.statement'].with_context(default_mf_state='draft'), view=self.FORM_VIEW)
+        form.journal_id = self.ag_journal
+        form.mf_date_from = '2026-11-01'
+        self.assertEqual(form.balance_start, 200.0)

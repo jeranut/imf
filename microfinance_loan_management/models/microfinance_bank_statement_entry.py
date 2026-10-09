@@ -89,7 +89,7 @@ class MicrofinanceBankStatementEntry(models.Model):
         Jamais appliquée sans clic de l'utilisateur."""
         self.ensure_one()
         tolerance = self.company_id.mf_bank_tolerance or 0.0
-        currency = self.currency_id or self.company_id.currency_id
+        currency = self.statement_id._mf_currency()
         best, best_score = lines.browse(), None
         for line in lines:
             gap = abs(self.amount - line.balance)
@@ -190,7 +190,7 @@ class MicrofinanceBankStatementEntry(models.Model):
             raise UserError(_("Choisissez la ligne en attente à rapprocher pour « %s ».") % self.name)
         if not entry.env['account.move.line'].search_count(entry._candidate_domain() + [('id', '=', target.id)]):
             raise UserError(_("La ligne choisie n'est pas rapprochable avec cette ligne de relevé (compte, sens, société ou déjà lettrée)."))
-        currency = entry.currency_id or entry.company_id.currency_id
+        currency = entry.statement_id._mf_currency()
         tolerance = entry.company_id.mf_bank_tolerance or 0.0
         gap = currency.round(entry.amount - target.balance)
         st_line_vals = entry._statement_line_vals({'counterpart_account_id': target.account_id.id})
@@ -217,7 +217,7 @@ class MicrofinanceBankStatementEntry(models.Model):
         self.ensure_one()
         entry = self._env_company()
         target = entry.target_line_id
-        currency = entry.currency_id or entry.company_id.currency_id
+        currency = entry.statement_id._mf_currency()
         if not target:
             raise UserError(_("Choisissez l'écriture bancaire à pointer pour « %s ».") % self.name)
         if not entry.env['account.move.line'].search_count(entry._candidate_domain() + [('id', '=', target.id)]):
