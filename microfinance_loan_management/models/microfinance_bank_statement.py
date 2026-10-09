@@ -184,6 +184,8 @@ class AccountBankStatement(models.Model):
     def create(self, vals_list):
         journals = self.env['account.journal'].sudo()
         for vals in vals_list:
+            if vals.get('mf_entry_ids') and not vals.get('journal_id') and not self.env.su:
+                raise UserError(_("Choisissez le journal bancaire du relevé avant d'enregistrer ses lignes."))
             if vals.get('journal_id'):
                 self._mf_check_company_allowed(journals.browse(vals['journal_id']).company_id)
         return super().create(vals_list)

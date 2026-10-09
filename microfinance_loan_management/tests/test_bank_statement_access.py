@@ -152,3 +152,24 @@ class TestBankStatementAccess(TestFondLiaison):
             as_chief.write({'name': 'pirate'})
         self.assertFalse(self.env['microfinance.bank.statement.entry'].with_user(self.chief).search(
             [('id', '=', entry.id)]))
+
+    def test_form_keeps_the_journal_when_lines_make_it_readonly(self):
+        """Le journal devient en lecture seule dès qu'il y a des lignes : sans force_save le client web ne l'envoie pas,
+        le relevé naît sans journal (donc sans société) et la règle multi-sociétés refuse la ligne."""
+        from odoo.tests.common import Form
+        model = self.env['account.bank.statement'].with_user(self.accountant).with_context(
+            allowed_company_ids=[self.hq.id])
+        form = Form(model, view='microfinance_loan_management.view_microfinance_bank_statement_form')
+        form.journal_id = self.fdbm
+        form.mf_date_from, form.mf_date_to, form.balance_end_real = '2026-10-01', '2026-10-31', 5.0
+        with form.mf_entry_ids.new() as line:
+            line.name, line.amount_in = 'Dépôt', 5.0
+        stmt = form.save()
+        self.assertEqual(stmt.journal_id, self.fdbm)
+        self.assertEqual(stmt.mf_entry_ids.company_id, self.hq)
+
+    def test_statement_with_lines_but_no_journal_gives_a_clear_message(self):
+        with self.assertRaises(UserError):
+            self.env['account.bank.statement'].with_user(self.accountant).create({
+                'mf_state': 'draft', 'mf_date_from': '2026-10-01', 'mf_date_to': '2026-10-31', 'balance_end_real': 5.0,
+                'mf_entry_ids': [(0, 0, {'date': '2026-10-05', 'name': 'Dépôt', 'amount_in': 5.0})]})
