@@ -218,6 +218,8 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             companies = moves.company_id | st_lines.company_id | linked.journal_id.company_id
             for fund in funds:
                 companies |= fund._fund_company()
+            if not companies:  # plus aucun fonds : sociétés choisies, sinon toutes
+                companies = self.sudo().company_ids or self.env['res.company'].sudo().search([])
             statements |= Statement.search([
                 ('mf_state', '!=', False), ('journal_id.type', '=', 'bank'),
                 ('journal_id.company_id', 'in', companies.ids)])
@@ -276,7 +278,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
     def _blockers(self, funds, collected):
         self.ensure_one()
         blockers = []
-        if not funds:
+        if not funds and not self.delete_other_statements:
             blockers.append(_("Aucun fonds dans le périmètre."))
             return blockers
         blockers += self._unknown_dependencies(collected)
