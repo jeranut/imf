@@ -49,6 +49,46 @@
         </field>
     </record>
 
+    <!-- Fonds : part de l'agence (alloué / en transit / reçu en banque) ; les totaux consolidés restent pour la
+         société mère. Le cloisonnement est fait à la lecture (microfinance_fond_vue_agence.py), pas ici. -->
+    <record id="view_microfinance_fond_credit_form_vue_agence" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.form.vue.agence</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_fond_credit_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[field[@name='total_contributions']]" position="before">
+                <group string="Part de l'agence" invisible="not allocation_required">
+                    <field name="agency_allocated" string="Alloué"/>
+                    <field name="agency_in_transit" string="En transit"/>
+                    <field name="agency_received" string="Reçu en banque"/>
+                    <field name="agency_not_received" string="Non reçu (écriture agence à générer)"/>
+                </group>
+                <field name="can_manage_funds" invisible="1"/>
+                <field name="allocation_required" invisible="1"/>
+            </xpath>
+            <xpath expr="//group[field[@name='total_contributions']]" position="attributes">
+                <attribute name="string">Solde (part de l'agence)</attribute>
+            </xpath>
+            <xpath expr="//field[@name='allocation_ids']/tree" position="inside">
+                <field name="amount_in_transit" string="En transit"/>
+                <field name="amount_received" string="Reçu en banque"/>
+                <field name="amount_not_received" string="Non reçu"/>
+            </xpath>
+        </field>
+    </record>
+    <record id="view_microfinance_fond_credit_tree_vue_agence" model="ir.ui.view">
+        <field name="name">microfinance.fond.credit.tree.vue.agence</field>
+        <field name="model">microfinance.fond.credit</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_fond_credit_tree"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='solde_disponible']" position="after">
+                <field name="agency_allocated" string="Alloué (ma part)" optional="show"/>
+                <field name="agency_in_transit" string="En transit" optional="show"/>
+                <field name="agency_received" string="Reçu en banque" optional="show"/>
+            </xpath>
+        </field>
+    </record>
+
     <!-- Société : comptes de liaison -->
     <record id="view_company_form_microfinance_liaison" model="ir.ui.view">
         <field name="name">res.company.form.microfinance.liaison</field>

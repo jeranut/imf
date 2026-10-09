@@ -20,6 +20,10 @@
                             help="Seule cette société peut configurer les bailleurs de fonds et les fonds de crédit, saisir les contributions et partager un fonds entre les agences (elle-même incluse). Sans société mère, aucune restriction n'est appliquée.">
                             <field name="microfinance_parent_company_id" options="{'no_create': True, 'no_open': True}"/>
                         </setting>
+                        <setting string="Décaisser seulement sur les fonds reçus en banque"
+                            help="Désactivé par défaut : le contrôle de disponibilité d'un fonds partagé porte sur la part allouée à l'agence. Activé (société courante), il porte sur le montant reçu en banque, c'est-à-dire la ligne en suspens lettrée avec un relevé.">
+                            <field name="microfinance_fond_require_received"/>
+                        </setting>
                     </block>
                     <block title="Trésorerie d'exploitation" id="microfinance_operating_journal_settings"
                         groups="account.group_account_manager,base.group_system">
