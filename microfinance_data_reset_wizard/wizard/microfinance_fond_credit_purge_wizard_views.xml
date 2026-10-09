@@ -64,10 +64,8 @@
         <field name="target">new</field>
     </record>
 
-    <menuitem id="menu_microfinance_fond_credit_purge_wizard"
-              name="Purge des fonds de crédit"
-              parent="menu_microfinance_data_reset_wizard_root"
-              action="action_microfinance_fond_credit_purge_wizard"
-              groups="microfinance_loan_management.group_microfinance_manager"/>
+    <!-- Ancien menu « Purge des fonds de crédit » retiré : remplacé par « Purge des fonds »
+         (wizard/microfinance_fond_purge_wizard_views.xml). L'ancien assistant reste disponible côté modèle. -->
+
 
 </odoo>

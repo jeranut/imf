@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_microfinance_fond_purge_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.fond.purge.wizard.form</field>
+        <field name="model">microfinance.fond.purge.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Purge des fonds">
+                <field name="test_env_enabled" invisible="1"/>
+                <field name="can_execute" invisible="1"/>
+                <field name="current_key" invisible="1"/>
+                <field name="simulated_key" invisible="1"/>
+                <field name="has_blockers" invisible="1"/>
+                <field name="done" invisible="1"/>
+
+                <div class="alert alert-danger" role="alert">
+                    <strong>Action irréversible.</strong> Remet à zéro ou supprime les fonds de crédit et d'exploitation
+                    choisis, avec leurs contributions, partages, allocations et écritures comptables liées.
+                    Une simulation de la même sélection est obligatoire avant l'exécution. Faites un backup complet
+                    avant toute exécution réelle, qui exige le paramètre système
+                    <code>microfinance.fond_credit_purge_apply</code> = <code>True</code>.
+                </div>
+                <div class="alert alert-warning" role="alert" invisible="test_env_enabled">
+                    Option B (supprimer les écritures de test) indisponible : le paramètre système
+                    <code>microfinance.raz_environnement_test</code> doit valoir <code>True</code>.
+                </div>
+
+                <group string="Périmètre">
+                    <field name="scope" widget="radio"/>
+                    <field name="fond_ids" widget="many2many_tags" invisible="scope != 'selection'"
+                           options="{'no_create': True}"/>
+                    <field name="company_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                </group>
+                <group string="Mode">
+                    <field name="mode_raz" widget="radio"/>
+                    <field name="move_mode" widget="radio"/>
+                    <field name="include_mirror"/>
+                    <field name="undo_bank"/>
+                </group>
+
+                <field name="log" nolabel="1" readonly="1" invisible="not log"
+                       style="font-family: monospace; white-space: pre-wrap;"/>
+
+                <group string="Simulation : ce qui sera touché" invisible="not line_ids">
+                    <field name="line_ids" nolabel="1" colspan="2">
+                        <tree create="0" delete="0" edit="0">
+                            <field name="company_name"/>
+                            <field name="item"/>
+                            <field name="count"/>
+                            <field name="amount"/>
+                            <field name="note"/>
+                        </tree>
+                    </field>
+                </group>
+                <group string="Soldes des comptes de bilan concernés" invisible="not balance_ids">
+                    <field name="balance_ids" nolabel="1" colspan="2">
+                        <tree create="0" delete="0" edit="0" decoration-danger="flag and flag.startswith('ANOMALIE')"
+                              decoration-warning="flag == 'Solde non nul'">
+                            <field name="company_name"/>
+                            <field name="account_code"/>
+                            <field name="account_name"/>
+                            <field name="before"/>
+                            <field name="impact"/>
+                            <field name="after"/>
+                            <field name="flag"/>
+                        </tree>
+                    </field>
+                </group>
+
+                <group invisible="not can_execute">
+                    <field name="confirm_text" placeholder="PURGER"/>
+                </group>
+
+                <footer>
+                    <button name="action_simulate" type="object" string="Simulation" class="btn-primary"
+                            invisible="done"/>
+                    <button name="action_execute" type="object" string="Exécuter" class="btn-danger"
+                            invisible="not can_execute or done"
+                            confirm="Cette action va remettre à zéro ou supprimer les fonds sélectionnés. Confirmer ?"/>
+                    <button name="action_reset" type="object" string="Réinitialiser" class="btn-secondary"/>
+                    <button string="Fermer" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_fond_purge_wizard" model="ir.actions.act_window">
+        <field name="name">Purge des fonds</field>
+        <field name="res_model">microfinance.fond.purge.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+    </record>
+
+    <record id="view_microfinance_fond_purge_log_tree" model="ir.ui.view">
+        <field name="name">microfinance.fond.purge.log.tree</field>
+        <field name="model">microfinance.fond.purge.log</field>
+        <field name="arch" type="xml">
+            <tree create="0" delete="0" edit="0" decoration-danger="state == 'failed'">
+                <field name="date"/>
+                <field name="name"/>
+                <field name="user_name"/>
+                <field name="scope"/>
+                <field name="mode_raz"/>
+                <field name="move_mode"/>
+                <field name="companies"/>
+                <field name="state"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_fond_purge_log_form" model="ir.ui.view">
+        <field name="name">microfinance.fond.purge.log.form</field>
+        <field name="model">microfinance.fond.purge.log</field>
+        <field name="arch" type="xml">
+            <form create="0" delete="0" edit="0">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="name"/>
+                            <field name="date"/>
+                            <field name="user_name"/>
+                            <field name="state"/>
+                        </group>
+                        <group>
+                            <field name="scope"/>
+                            <field name="mode_raz"/>
+                            <field name="move_mode"/>
+                            <field name="options"/>
+                            <field name="companies"/>
+                        </group>
+                    </group>
+                    <group string="Fonds"><field name="funds" nolabel="1"/></group>
+                    <group string="Comptage par société et par modèle"><field name="counts" nolabel="1"/></group>
+                    <group string="Soldes avant"><field name="balances_before" nolabel="1"/></group>
+                    <group string="Soldes après"><field name="balances_after" nolabel="1"/></group>
+                    <group string="Anomalies"><field name="anomalies" nolabel="1"/></group>
+                    <group string="Écritures conservées et extournes créées"><field name="kept_moves" nolabel="1"/></group>
+                    <group string="Message"><field name="message" nolabel="1"/></group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_fond_purge_log" model="ir.actions.act_window">
+        <field name="name">Journal des purges de fonds</field>
+        <field name="res_model">microfinance.fond.purge.log</field>
+        <field name="view_mode">tree,form</field>
+        <field name="groups_id" eval="[(6, 0, [ref('base.group_system')])]"/>
+    </record>
+
+    <menuitem id="menu_microfinance_fond_purge_wizard"
+              name="Purge des fonds"
+              parent="menu_microfinance_data_reset_wizard_root"
+              action="action_microfinance_fond_purge_wizard"
+              groups="base.group_system"/>
+
+    <menuitem id="menu_microfinance_fond_purge_log"
+              name="Journal des purges de fonds"
+              parent="menu_microfinance_data_reset_wizard_root"
+              action="action_microfinance_fond_purge_log"
+              groups="base.group_system"/>
+
+</odoo>

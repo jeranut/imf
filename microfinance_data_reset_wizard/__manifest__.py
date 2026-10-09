@@ -70,6 +70,7 @@ module microfinance_loan_management.
         'security/ir.model.access.csv',
         'wizard/microfinance_data_reset_wizard_views.xml',
         'wizard/microfinance_fond_credit_purge_wizard_views.xml',
+        'wizard/microfinance_fond_purge_wizard_views.xml',
     ],
     'assets': {
         'web.assets_backend': [
