@@ -36,6 +36,7 @@
                     <field name="move_mode" widget="radio"/>
                     <field name="include_mirror"/>
                     <field name="undo_bank"/>
+                    <field name="include_orphans"/>
                 </group>
 
                 <field name="log" nolabel="1" readonly="1" invisible="not log"

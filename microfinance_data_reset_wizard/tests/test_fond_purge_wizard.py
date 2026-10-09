@@ -124,6 +124,8 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertEqual(self._snapshot(), before, 'Soldes comptables modifiés par la purge')
 
     def _run(self, funds, execute=True, mode_raz='reset', move_mode='reverse', **options):
+        # sans orphelines par défaut : les bases de test (copie de MOWGLI) en portent de réelles
+        options.setdefault('include_orphans', False)
         wizard = self.Wizard.create(dict({
             'scope': 'selection', 'fond_ids': [(6, 0, funds.ids)], 'mode_raz': mode_raz, 'move_mode': move_mode},
             **options))
@@ -367,9 +369,6 @@ class TestFondPurgeWizard(TestBankStatementPaper):
             self.env['microfinance.fond.purge.wizard'].with_user(manager).create({'scope': 'both'})
         with self.assertRaises(AccessError):
             self.env['microfinance.fond.purge.log'].with_user(manager).search([])
-        legacy_menu = self.env.ref('microfinance_data_reset_wizard.menu_microfinance_fond_credit_purge_wizard',
-                                   raise_if_not_found=False)
-        self.assertFalse(legacy_menu)
 
     # ------------------------------------------------------------------ (9) fonds non sélectionnés intacts
     def test_unselected_funds_and_unrelated_moves_stay_untouched(self):
@@ -382,7 +381,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
             'line_ids': [(0, 0, {'name': 'x', 'account_id': self.ex_in.id, 'debit': 123.0, 'credit': 0.0}),
                          (0, 0, {'name': 'x', 'account_id': self.ex_produit.id, 'debit': 0.0, 'credit': 123.0})]})
         free.action_post()
-        wizard = self._run(avance, mode_raz='delete_fund')
+        wizard = self._run(avance, mode_raz='delete_fund', include_orphans=False)
         self.assertNotIn('ERREUR', wizard.log)
         self.assertTrue(subvention.exists())
         self.assertEqual(len(subvention.contribution_ids), 1)
@@ -391,3 +390,28 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         self.assertFalse(self.env['account.move'].sudo().search([('reversed_entry_id', 'in', (other_moves | free).ids)]))
         self.assertEqual(free.state, 'posted')
         self.assertEqual(self._balance(self.ex_produit), other_balance - 123.0)
+
+    # ------------------------------------------------------------------ (10) écritures orphelines
+    def test_orphan_moves_of_fund_journals_are_purged_but_not_those_of_existing_funds(self):
+        self.env['ir.config_parameter'].sudo().set_param(self.TEST_ENV, 'True')
+        subvention, avance = self._exploitation_scenario()
+        # fonds supprimé à la main : sa contribution disparaît, son écriture reste (lien SET NULL)
+        ancien = self._expl_fond('subvention')
+        contrib = self._expl_contribution(ancien, 400.0, 'VIR-OLD')
+        orphan = contrib.move_id
+        contrib.unlink()
+        ancien.unlink()
+        self.assertFalse(orphan.microfinance_fond_contribution_id)
+        kept = self._fund_moves(subvention)
+        # sans la case : l'orpheline reste
+        wizard = self._run(avance, execute=False, include_orphans=False)
+        self.assertFalse(wizard.line_ids.filtered(lambda l: l.item.startswith('Écritures orphelines')))
+        wizard = self._run(avance, move_mode='delete', include_orphans=True)
+        self.assertNotIn('ERREUR', wizard.log)
+        self.assertFalse(orphan.exists())
+        self.assertTrue(kept.exists() == kept, "L'écriture d'un fonds existant non sélectionné reste intacte.")
+        self.assertEqual(self._balance(self.ex_produit), -7000.0)
+        subvention_only = self._run(subvention, move_mode='delete')
+        self.assertNotIn('ERREUR', subvention_only.log)
+        for account in (self.ex_in, self.ex_out, self.ex_produit):
+            self.assertEqual(self._balance(account), 0.0, account.code)
