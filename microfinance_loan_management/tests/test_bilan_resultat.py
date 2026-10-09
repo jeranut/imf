@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+from unittest.mock import patch
+
 from odoo.addons.base_accounting_kit.controllers.financial_report_controller import FinancialReportController
 
 from ..controllers.financial_report import MfFinancialReportController
 from ..models.microfinance_fond_partage import largest_remainder
+from ..models.res_company import ResCompany
 from .test_fond_liaison import TestFondLiaison
 
 KIT = 'base_accounting_kit.'
@@ -10,6 +13,12 @@ KIT = 'base_accounting_kit.'
 
 class TestBilanResultat(TestFondLiaison):
     """Parts de partage entières, passif positif dans le Bilan, Compte de résultat par identifiant (et non par nom)."""
+
+    @classmethod
+    def setUpClass(cls):
+        # base déjà configurée avec une société mère (MOWGLI) : les fixtures de départ la refuseraient
+        with patch.object(ResCompany, '_get_microfinance_parent', lambda self: self.browse()):
+            super().setUpClass()
 
     def _report_data(self, xmlid, company, lang='en_US'):
         report = self.env.ref(KIT + xmlid)
