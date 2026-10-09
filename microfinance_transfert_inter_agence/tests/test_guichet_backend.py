@@ -20,7 +20,7 @@ class TestGuichetBackend(MicrofinanceCommon):
         cls.company_b = cls.env['res.company'].create({
             'name': 'Agence B transfert (test backend)', 'agency_code': 'QT',
         })
-        cls.client_b = cls.env['res.partner'].with_context(microfinance_context=True).create({
+        cls.client_b = cls.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'Rabe Cross-Agence', 'microfinance_partner_type': 'client',
             'company_id': cls.company_b.id,
         })

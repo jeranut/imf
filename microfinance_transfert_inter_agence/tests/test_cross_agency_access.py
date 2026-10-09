@@ -59,7 +59,7 @@ class TestTransfertCrossAgencyAccess(MicrofinanceCommon):
             'account_interets_recus_groupe_id': int_b.id,
             'account_penalites_id': pen_b.id,
         })
-        cls.client_b = cls.env['res.partner'].with_context(microfinance_context=True).create({
+        cls.client_b = cls.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create({
             'name': 'RAKOTO Cross-Agence', 'microfinance_partner_type': 'client',
             'company_id': cls.company_b.id,
         })
