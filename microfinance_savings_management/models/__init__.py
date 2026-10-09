@@ -2,6 +2,7 @@
 from . import res_company
 from . import account_chart_template
 from . import microfinance_savings_product
+from . import microfinance_savings_holder_account
 from . import microfinance_savings_account
 from . import microfinance_savings_transaction
 from . import microfinance_caisse_mouvement

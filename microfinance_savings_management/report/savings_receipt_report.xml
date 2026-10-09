@@ -21,8 +21,12 @@
                             Émis par <span t-field="o.company_id.name"/>
                         </p>
                         <table class="table table-sm" style="margin-top: 20px;">
-                            <tr>
+                            <tr t-if="o.account_id.account_id">
                                 <td><strong>Compte épargne</strong></td>
+                                <td><span t-field="o.account_id.account_id.name"/></td>
+                            </tr>
+                            <tr>
+                                <td><strong>Produit souscrit</strong></td>
                                 <td><span t-field="o.account_id.name"/></td>
                             </tr>
                             <tr>

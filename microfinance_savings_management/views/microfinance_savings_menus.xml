@@ -1,10 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <menuitem id="menu_microfinance_savings_accounts"
+    <menuitem id="menu_microfinance_savings_holder_accounts"
               name="Comptes épargne"
+              parent="microfinance_loan_management.menu_epargne_root"
+              action="action_microfinance_savings_holder_account"
+              sequence="4"/>
+    <menuitem id="menu_microfinance_savings_accounts"
+              name="Produits d'épargne"
               parent="microfinance_loan_management.menu_epargne_root"
               action="action_microfinance_savings_account"
               sequence="5"/>
+    <menuitem id="menu_microfinance_savings_sync_check"
+              name="Contrôle crédit / épargne"
+              parent="microfinance_loan_management.menu_epargne_root"
+              action="action_microfinance_savings_sync_check"
+              groups="microfinance_loan_management.group_microfinance_manager,microfinance_savings_management.group_savings_manager"
+              sequence="20"/>
     <menuitem id="menu_microfinance_savings_transactions"
               name="Transactions épargne"
               parent="microfinance_loan_management.menu_epargne_root"
@@ -16,7 +27,7 @@
               action="action_microfinance_savings_balance_report"
               sequence="3"/>
     <menuitem id="menu_microfinance_savings_products"
-              name="Produits d'épargne"
+              name="Catalogue des produits d'épargne"
               parent="microfinance_loan_management.menu_microfinance_config_savings"
               action="action_microfinance_savings_product"
               sequence="1"/>

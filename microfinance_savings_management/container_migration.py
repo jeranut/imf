@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Migration du correctif du 2026-09-24 (abroge l'« Option A » du 21/09, docs_dev/epargne_auto/
+"""OBSOLÈTE depuis la scission compte / produit (17.0.1.7.0, docs_dev/epargne_split/) : conservé
+uniquement pour les migrations 17.0.1.4.0 / 17.0.1.5.0 d'une base en retard de version.
+
+Migration du correctif du 2026-09-24 (abroge l'« Option A » du 21/09, docs_dev/epargne_auto/
 AUDIT_doublons_creation_client.md §11-13) : le conteneur épargne reprend la règle AGENCE/I/N (N =
 numéro de compte permanent du client, PLUS AGENCE/IC/<numéro du compte crédit>), et il n'y a plus
 de « compte principal » créé séparément à l'enregistrement du client.
@@ -93,6 +96,15 @@ OLD_TYPE_I_SEQUENCE_CODE = 'microfinance.savings.account.I'
 SHARED_ACCOUNT_NUMBER_SEQUENCE_CODE = 'microfinance.partner.account'
 
 
+def _container_target_name(company, partner):
+    """Ancien nom de conteneur AGENCE/I/N (N = suffixe du numéro permanent du client). Copie locale
+    de l'ancienne méthode du modèle, retirée par la scission compte / produit (17.0.1.7.0)."""
+    number = partner.microfinance_account_number
+    if not number or '/' not in number:
+        return False
+    return '%s/I/%s' % (company.agency_code, number.rsplit('/', 1)[1])
+
+
 def is_dry_run(env):
     """Lit le paramètre système ; le crée à « True » s'il est absent (dry-run par défaut).
     Toute valeur autre qu'un « faux » explicite reste en dry-run."""
@@ -184,7 +196,7 @@ def rename_misnumbered_containers(env, dry_run=None, log_dir=None):
     for container in containers:
         company = container.company_id
         partner = container.partner_id
-        target = Account._get_container_target_name(company, partner)
+        target = _container_target_name(company, partner)
         row = {
             'id': container.id, 'ancien_nom': container.name, 'nouveau_nom': target or '',
             'credit_lie': partner.microfinance_account_number or '', 'societe': company.name,

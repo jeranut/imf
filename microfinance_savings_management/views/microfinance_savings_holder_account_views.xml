@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Comptes épargne : jamais créés à la main (création par code, avec le compte crédit). -->
+    <record id="view_microfinance_savings_holder_account_tree" model="ir.ui.view">
+        <field name="name">microfinance.savings.holder.account.tree</field>
+        <field name="model">microfinance.savings.holder.account</field>
+        <field name="arch" type="xml">
+            <tree create="false" import="false" delete="false"
+                  decoration-muted="state == 'closed'" decoration-warning="state == 'dormant'" decoration-success="state == 'active'">
+                <field name="name"/>
+                <field name="partner_id"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="product_count"/>
+                <field name="currency_id" column_invisible="1"/>
+                <field name="balance_total" sum="Total"/>
+                <field name="state" widget="badge"/>
+                <field name="legacy_number" optional="hide"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="view_microfinance_savings_holder_account_kanban" model="ir.ui.view">
+        <field name="name">microfinance.savings.holder.account.kanban</field>
+        <field name="model">microfinance.savings.holder.account</field>
+        <field name="arch" type="xml">
+            <kanban create="false" import="false">
+                <field name="currency_id"/>
+                <templates>
+                    <t t-name="kanban-box">
+                        <div class="oe_kanban_global_click">
+                            <strong><field name="name"/></strong>
+                            <div><field name="partner_id"/></div>
+                            <div><field name="product_count"/> produit(s) — <field name="balance_total" widget="monetary"/></div>
+                            <div><field name="state" widget="badge"/></div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="view_microfinance_savings_holder_account_form" model="ir.ui.view">
+        <field name="name">microfinance.savings.holder.account.form</field>
+        <field name="model">microfinance.savings.holder.account</field>
+        <field name="arch" type="xml">
+            <form string="Compte épargne" create="false" duplicate="false" delete="false">
+                <header>
+                    <field name="state" widget="statusbar" statusbar_visible="open,active,dormant,closed"/>
+                </header>
+                <sheet>
+                    <div class="oe_title"><h1><field name="name"/></h1></div>
+                    <group>
+                        <group>
+                            <field name="partner_id" context="{'microfinance_context': True}"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="loan_account_id"/>
+                        </group>
+                        <group>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="product_count"/>
+                            <field name="active_product_count"/>
+                            <field name="balance_total"/>
+                            <field name="legacy_number" invisible="not legacy_number"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Produits d'épargne" name="products">
+                            <field name="product_ids" readonly="1">
+                                <tree>
+                                    <field name="name"/>
+                                    <field name="product_id"/>
+                                    <field name="opening_date"/>
+                                    <field name="maturity_date"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                    <field name="balance" sum="Total"/>
+                                    <field name="state" widget="badge"/>
+                                </tree>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_microfinance_savings_holder_account_search" model="ir.ui.view">
+        <field name="name">microfinance.savings.holder.account.search</field>
+        <field name="model">microfinance.savings.holder.account</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name" filter_domain="['|', ('name', 'ilike', self), ('legacy_number', 'ilike', self)]"/>
+                <field name="partner_id"/>
+                <filter name="active_state" string="Actifs" domain="[('state', '=', 'active')]"/>
+                <filter name="no_product" string="Sans produit" domain="[('product_count', '=', 0)]"/>
+                <searchpanel>
+                    <field name="company_id" select="one" string="Agence" icon="fa-building" enable_counters="1"/>
+                    <field name="state" select="multi" string="État" icon="fa-flag" enable_counters="1"/>
+                </searchpanel>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_microfinance_savings_holder_account" model="ir.actions.act_window">
+        <field name="name">Comptes épargne</field>
+        <field name="res_model">microfinance.savings.holder.account</field>
+        <field name="view_mode">tree,kanban,form</field>
+        <field name="search_view_id" ref="view_microfinance_savings_holder_account_search"/>
+        <field name="context">{'microfinance_context': True}</field>
+    </record>
+
+    <!-- Contrôle d'intégrité compte crédit / compte épargne (manager) : liste les écarts sans corriger. -->
+    <record id="view_microfinance_savings_sync_issue_tree" model="ir.ui.view">
+        <field name="name">microfinance.savings.sync.issue.tree</field>
+        <field name="model">microfinance.savings.sync.issue</field>
+        <field name="arch" type="xml">
+            <tree create="false" edit="false" delete="false">
+                <field name="kind"/>
+                <field name="partner_id"/>
+                <field name="company_id"/>
+                <field name="loan_account_name"/>
+                <field name="holder_account_name"/>
+            </tree>
+        </field>
+    </record>
+
+    <record id="action_microfinance_savings_sync_check" model="ir.actions.server">
+        <field name="name">Contrôle crédit / épargne</field>
+        <field name="model_id" ref="model_microfinance_savings_sync_issue"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_refresh()</field>
+    </record>
+</odoo>

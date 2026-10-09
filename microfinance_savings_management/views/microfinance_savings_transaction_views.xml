@@ -52,7 +52,7 @@
                     <group>
                         <group>
                             <field name="account_id"/>
-                            <field name="partner_id" readonly="1"/>
+                            <field name="partner_id" readonly="1" context="{'microfinance_context': True}"/>
                             <field name="transaction_type"/>
                             <!-- readonly dès qu'une écriture existe (move_id), pas state=='posted' :
                                  un chèque rejeté repasse state à 'cancelled' tout en conservant

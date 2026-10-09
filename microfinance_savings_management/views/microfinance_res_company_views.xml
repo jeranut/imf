@@ -8,6 +8,8 @@
             <xpath expr="//field[@name='name']" position="after">
                 <field name="savings_product_code_locked" invisible="1"/>
                 <field name="savings_product_code_prefix" readonly="savings_product_code_locked"/>
+                <field name="savings_holder_account_prefix_locked" invisible="1"/>
+                <field name="savings_holder_account_prefix" readonly="savings_holder_account_prefix_locked"/>
             </xpath>
             <!-- Champ déplacé dans un groupe labellisé (au lieu d'un champ nu après le nom de
                  société, sans étiquette ni bordure visible) : invisible en pratique dans ce

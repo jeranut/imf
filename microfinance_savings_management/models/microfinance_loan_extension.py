@@ -15,7 +15,8 @@ class MicrofinanceLoan(models.Model):
     )
     savings_account_id = fields.Many2one(
         'microfinance.savings.account', string="Compte épargne (prélèvement)",
-        domain="[('partner_id', '=', partner_id)]", tracking=True,
+        domain="[('partner_id', '=', partner_id), ('company_id', '=', company_id), ('state', '=', 'active'), ('account_id', '!=', False)]",
+        tracking=True,
         help='Compte source du prélèvement automatique et/ou compte dans lequel est vérifiée la '
              "cible d'épargne progressive.",
     )
@@ -71,14 +72,27 @@ class MicrofinanceLoan(models.Model):
             loan.savings_account_count = len(loan.partner_id.microfinance_savings_account_ids)
 
     def action_view_savings_accounts(self):
+        """Bouton « Épargne » du crédit : même mécanisme d'attribution que le smart button
+        res.partner (docs_dev/attribution_epargne_client/) - vues dédiées explicites (plus le
+        repli implicite sur les vues génériques create=true) et flag d'attribution, en plus du
+        préremplissage de microfinance_loan_id déjà existant (épargne obligatoire liée à ce
+        crédit)."""
         self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': _('Épargne'),
             'res_model': 'microfinance.savings.account',
             'view_mode': 'tree,form',
-            'domain': [('partner_id', '=', self.partner_id.id)],
-            'context': {'default_partner_id': self.partner_id.id, 'default_microfinance_loan_id': self.id},
+            'views': [
+                (self.env.ref('microfinance_savings_management.view_microfinance_savings_account_tree').id, 'tree'),
+                (self.env.ref('microfinance_savings_management.view_microfinance_savings_account_form_attribution').id, 'form'),
+            ],
+            'domain': [('partner_id', '=', self.partner_id.id), ('account_id', '!=', False)],
+            'context': {
+                'default_partner_id': self.partner_id.id, 'default_company_id': self.company_id.id,
+                'default_microfinance_loan_id': self.id,
+                'microfinance_savings_attribution': True,
+            },
         }
 
     def _get_repayment_surplus_savings_account(self):
@@ -97,7 +111,7 @@ class MicrofinanceLoan(models.Model):
              C'est le côté renseigné dans les données réelles observées.
 
         On prend le premier des deux qui est renseigné, dans cet ordre (le choix explicite
-        de l'agent l'emporte). Comptes conteneurs et non actifs exclus. Aucune contrainte
+        de l'agent l'emporte). Produits non actifs exclus. Aucune contrainte
         n'impose l'unicité d'un compte « Crédit lié » par crédit : en cas de pluralité, le
         plus ancien (ordre par id) est retenu.
 
@@ -105,12 +119,12 @@ class MicrofinanceLoan(models.Model):
         """
         self.ensure_one()
         explicit = self.savings_account_id
-        if explicit and explicit.state == 'active' and not explicit.is_container:
+        if explicit and explicit.state == 'active' and explicit.product_id:
             return explicit
         return self.env['microfinance.savings.account'].search([
             ('microfinance_loan_id', '=', self.id),
             ('state', '=', 'active'),
-            ('is_container', '=', False),
+            ('product_id', '!=', False),
         ], order='id', limit=1)
 
     @api.depends('loan_amount', 'product_id.savings_requirement_type', 'product_id.savings_target_ratio')

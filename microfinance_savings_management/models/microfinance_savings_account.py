@@ -1,59 +1,36 @@
 # -*- coding: utf-8 -*-
-import logging
-
 from dateutil.relativedelta import relativedelta
 
-from odoo import api, fields, models, tools, _
+from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
-_logger = logging.getLogger(__name__)
-
-# Le conteneur épargne partage désormais l'espace de noms AGENCE/I/N avec les comptes épargne
-# réels de type volontaire, mais avec le MÊME N que le conteneur crédit (microfinance.loan.account,
-# lui-même = res.partner.microfinance_account_number) - jamais une séquence propre. Créé en
-# premier, à l'enregistrement du client (cf. res_partner.py._get_or_create_microfinance_savings_
-# container, appelée depuis create()), ce qui réserve mécaniquement ce nom - correctif du
-# 2026-09-24, abroge l'« Option A » (conteneur AGENCE/IC/<...>, docs_dev/epargne_auto/
-# AUDIT_doublons_creation_client.md §11-12).
-#
-# Option B (§15 du même rapport) : le dry-run sur MOWGLI a montré que réserver le N du client
-# SANS aligner la séquence des comptes réels de type I laisse un risque de collision durable
-# (compteur COMPTES et séquence .I dérivant indépendamment l'un de l'autre au fil du temps -
-# écart mesuré de 105 sur l'agence IS). _get_savings_sequence_code ci-dessous fusionne donc les
-# deux compteurs : un compte réel de type I tire désormais son numéro de LA MÊME séquence
-# ir.sequence que le numéro de compte permanent du client (code 'microfinance.partner.account',
-# microfinance_loan_management/models/res_partner.py) - aucun fichier du module crédit modifié,
-# la fusion se fait uniquement en réutilisant le même code de séquence depuis ce module-ci. G et
-# T (garantie, dépôt à terme) restent sur leur séquence propre : aucun conteneur ne les utilise.
-CONTAINER_UNIQUE_INDEX = 'microfinance_savings_account_container_uniq_idx'
-SHARED_ACCOUNT_NUMBER_SEQUENCE_CODE = 'microfinance.partner.account'
+# Produit d'épargne souscrit (libellé UI). Le compte du client est microfinance.savings.holder.account
+# (docs_dev/epargne_split/) : tout produit y est rattaché (account_id) et numéroté
+# <numéro du compte>-<rang sur 2 chiffres>, le rang n'étant jamais réutilisé.
 
 
 class MicrofinanceSavingsAccount(models.Model):
     _name = 'microfinance.savings.account'
-    _description = "Compte d'épargne microfinance"
+    _description = "Produit d'épargne souscrit"
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'id desc'
 
     name = fields.Char(string='Référence', default='Nouveau', copy=False, readonly=True, tracking=True)
+    legacy_number = fields.Char(
+        string='Ancien numéro', readonly=True, copy=False, index=True,
+        help="Référence d'avant la scission compte / produit (ex. AD/I/000012), conservée pour "
+             "retrouver les écritures et documents antérieurs.")
+    account_id = fields.Many2one(
+        'microfinance.savings.holder.account', string='Compte épargne', index=True, ondelete='restrict',
+        tracking=True, copy=False,
+        help="Compte épargne du titulaire dans l'agence, résolu (ou créé) automatiquement à la "
+             "souscription ; ne change plus ensuite.")
+    rank = fields.Integer(string='Rang', readonly=True, copy=False,
+                          help="Rang du produit dans son compte, jamais réutilisé.")
     partner_id = fields.Many2one('res.partner', string='Titulaire', required=True, tracking=True)
-    # Conteneur épargne (docs_dev/epargne_auto/AUDIT_doublons_creation_client.md) : un
-    # enregistrement strictement vide (pas de produit, jamais de solde/transaction), symétrique
-    # de microfinance.loan.account côté crédit - un SEUL par client et par société, créé en
-    # même temps que le conteneur crédit, à l'enregistrement du client
-    # (res_partner.py._get_or_create_microfinance_savings_container, appelée depuis create()) -
-    # plus jamais au 1er crédit. product_id n'est donc pas `required=True` au niveau champ (un
-    # conteneur n'en a pas) : la contrainte devient conditionnelle, cf.
-    # _check_product_required_unless_container ci-dessous.
-    is_container = fields.Boolean(
-        string='Conteneur (sans produit)', default=False, copy=False, readonly=True,
-        help="Coché uniquement pour l'enregistrement conteneur créé automatiquement à "
-             "l'enregistrement du client (référence AGENCE/I/N, où N est le même numéro que le "
-             "compte crédit du client) - jamais de produit, de solde, ni de transaction. C'est "
-             "le seul compte épargne créé automatiquement pour un client : tout autre compte "
-             "épargne réel du client (is_container=False) est créé manuellement, sur sa propre "
-             "numérotation AGENCE/I/NNNNNN partagée entre clients.",
-    )
+    # Transition (scission 17.0.1.7.0) : colonne conservée pour la migration des anciens conteneurs,
+    # plus utilisée par le code ni affichée ; retirée après le passage 2.
+    is_container = fields.Boolean(string='Ancien conteneur', default=False, copy=False, readonly=True)
     product_id = fields.Many2one('microfinance.savings.product', string="Produit d'épargne", tracking=True)
     company_id = fields.Many2one('res.company', string='Société', default=lambda self: self.env.company, required=True, tracking=True)
     currency_id = fields.Many2one('res.currency', related='company_id.currency_id', readonly=True)
@@ -86,139 +63,84 @@ class MicrofinanceSavingsAccount(models.Model):
     ], string='Motif de clôture')
     closure_reason_note = fields.Text(string='Note de clôture')
 
-    # Code de type de compte (convention LPF AGENCE/TYPE/SÉRIE) : dérivé de la catégorie du
-    # produit (product_type), jamais du titulaire — un compte classique reçoit I quel que soit
-    # le client (individuel ou entreprise), une épargne de garantie liée à un crédit reçoit G,
-    # un dépôt à terme reçoit T. Avant ce correctif, la lettre dépendait du type de client
-    # (individuel/groupe/entreprise) : un compte classique et un compte de garantie du même
-    # client individuel étaient alors indiscernables (tous deux 'I'), et 'G' n'était jamais
-    # atteignable (microfinance_client_type n'a plus la valeur 'group' depuis la suppression de
-    # ce type de client). Décision validée par Micka : la lettre E disparaît (plus de distinction
-    # par titulaire dans le numéro de compte).
-    _PRODUCT_TYPE_CODE = {'voluntary': 'I', 'compulsory': 'G', 'term_deposit': 'T'}
+    _sql_constraints = [
+        ('account_rank_unique', 'unique(account_id, rank)', "Ce rang existe déjà dans ce compte épargne."),
+    ]
 
-    def _get_account_type_code(self, product):
-        return self._PRODUCT_TYPE_CODE.get(product.product_type, 'I')
-
-    def init(self):
-        """Un seul conteneur épargne par client et par société (index unique PARTIEL : les
-        comptes réels, eux, peuvent légitimement être multiples pour un même client). Posé
-        seulement si la base ne contient aucun doublon de conteneur : sinon on journalise les
-        cas et on ne pose rien - un CREATE UNIQUE INDEX échouerait et bloquerait la mise à
-        jour du module. Sans état dans le filtre : un conteneur ne peut être ni activé ni
-        clôturé (cf. action_activate / action_close), l'état ne peut donc pas l'écarter."""
-        super().init()
-        cr = self.env.cr
-        if tools.index_exists(cr, CONTAINER_UNIQUE_INDEX):
+    @api.constrains('account_id', 'product_id', 'state')
+    def _check_no_duplicate_product_per_account(self):
+        """Un même produit d'épargne ne peut pas être souscrit deux fois en même temps sur le
+        même compte (titulaire) : un produit fermé (clôturé) ne compte plus, un client peut donc
+        se réabonner à un même produit après clôture du précédent. Migration (réattachement des
+        anciens conteneurs) exemptée : des doublons hérités de l'ancien format ne doivent pas
+        faire échouer un write() de rattachement, déjà safepointé ligne par ligne côté script."""
+        if self.env.context.get('savings_split_migration'):
             return
-        cr.execute("""
-            SELECT partner_id, company_id, array_agg(id ORDER BY id)
-              FROM microfinance_savings_account
-             WHERE is_container
-             GROUP BY partner_id, company_id
-            HAVING count(*) > 1
-        """)
-        duplicates = cr.fetchall()
-        if duplicates:
-            _logger.warning(
-                "Index unique des conteneurs épargne NON posé : %d client(s)/société(s) ont "
-                "plusieurs conteneurs (partner_id, company_id, ids) : %s. À fusionner avant de "
-                "relancer la mise à jour du module.", len(duplicates), duplicates)
-            return
-        cr.execute(
-            "CREATE UNIQUE INDEX %s ON microfinance_savings_account (partner_id, company_id) "
-            "WHERE is_container" % CONTAINER_UNIQUE_INDEX)
+        for account in self:
+            if not account.account_id or not account.product_id or account.state == 'closed':
+                continue
+            duplicate = self.search([
+                ('id', '!=', account.id),
+                ('account_id', '=', account.account_id.id),
+                ('product_id', '=', account.product_id.id),
+                ('state', '!=', 'closed'),
+            ], limit=1)
+            if duplicate:
+                raise ValidationError(_(
+                    "%(partner)s a déjà un produit « %(product)s » ouvert (%(existing)s) sur ce "
+                    "compte épargne : impossible d'en attribuer un second tant que le premier "
+                    "n'est pas clôturé."
+                ) % {
+                    'partner': account.partner_id.display_name,
+                    'product': account.product_id.display_name,
+                    'existing': duplicate.display_name,
+                })
 
     @api.model_create_multi
     def create(self, vals_list):
+        # Garde d'attribution (docs_dev/attribution_epargne_client/) : le menu « Produits
+        # d'épargne » pose ce contexte (consultation seule, cf. son action) ; seuls les points
+        # d'entrée légitimes (smart button client, bouton Épargne du crédit) posent en plus le
+        # flag d'attribution. Portée volontairement limitée à ce seul contexte : migration,
+        # tests, load_test, guichet, wizards ne posent jamais savings_menu_readonly et ne sont
+        # donc jamais affectés (cf. docs_dev/attribution_epargne_client/STATUS.md, étape 0).
+        if self.env.context.get('savings_menu_readonly') and not self.env.context.get('microfinance_savings_attribution'):
+            raise UserError(_(
+                "L'attribution d'un produit d'épargne se fait depuis la fiche client "
+                "(bouton Épargne)."))
+        Holder = self.env['microfinance.savings.holder.account']
+        # Défauts du contexte (bouton « Épargne » du crédit) appliqués avant de résoudre le compte.
+        vals_list = [self._add_missing_default_values(vals) for vals in vals_list]
         for vals in vals_list:
+            partner = self.env['res.partner'].browse(vals.get('partner_id'))
+            company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
+            # Cohérence agence (point 6) : un agent n'attribue un produit qu'à un client de sa
+            # propre agence. microfinance.savings.holder_account._check_coherence() refuse déjà
+            # structurellement un compte dont l'agence diffère de celle du titulaire (même
+            # ValidationError, déjà couverte par test_product_of_other_agency_client_rejected) ;
+            # ce contrôle-ci donne un message métier plus clair, AVANT d'atteindre cette
+            # contrainte générique, dans le cas le plus courant (agence active différente de
+            # celle du client).
+            if partner.company_id and company != partner.company_id:
+                raise ValidationError(_(
+                    "Impossible d'attribuer un produit d'épargne à %(partner)s pour l'agence "
+                    "%(company)s : ce client appartient à l'agence %(partner_company)s."
+                ) % {
+                    'partner': partner.display_name, 'company': company.display_name,
+                    'partner_company': partner.company_id.display_name,
+                })
+            holder = Holder.browse(vals['account_id']) if vals.get('account_id') else Holder._get_or_create_for(partner, company)
+            vals['account_id'] = holder.id
+            vals['rank'] = holder.sudo()._reserve_rank()
             if vals.get('name', 'Nouveau') == 'Nouveau':
-                # agency_code est obligatoire sur res.company (NOT NULL) : toute société valide
-                # en possède un, pas besoin de re-vérifier ici.
-                company = self.env['res.company'].browse(vals.get('company_id') or self.env.company.id)
-                if vals.get('is_container'):
-                    partner = self.env['res.partner'].browse(vals.get('partner_id'))
-                    vals['name'] = self._get_savings_container_name(company, partner)
-                else:
-                    product = self.env['microfinance.savings.product'].browse(vals.get('product_id'))
-                    type_code = self._get_account_type_code(product)
-                    vals['name'] = self._get_savings_account_name(company, type_code)
-            if vals.get('is_container') and not vals.get('state'):
-                # Un conteneur n'est jamais "en attente d'activation" : il n'y a rien à activer
-                # (pas de produit, pas de montant minimum d'ouverture - action_activate() le
-                # refuse d'ailleurs explicitement, cf. ci-dessous). Posé ici plutôt que sur le
-                # seul appelant connu (res_partner.py._get_or_create_microfinance_savings_
-                # container) pour garantir l'invariant quel que soit le point de création
-                # (tests, scripts, futurs appelants).
-                vals['state'] = 'active'
+                vals['name'] = '%s-%02d' % (holder.name, vals['rank'])
         return super().create(vals_list)
 
-    def _get_container_target_name(self, company, partner):
-        """Nom cible du conteneur épargne : ``<code agence>/I/<N>``, où N est le suffixe de
-        ``res.partner.microfinance_account_number`` - le MÊME N que le conteneur crédit
-        (microfinance.loan.account, dont le nom est directement copié de ce champ). Ne consomme
-        AUCUNE séquence propre : le nom est purement dérivé du numéro de compte permanent du
-        client, déjà attribué à ce stade (res_partner.py._assign_microfinance_account_number,
-        appelée avant la création du conteneur épargne dans le create() de res.partner).
-
-        Renvoie False si le client n'a pas encore de numéro de compte permanent pour cette
-        société (ne devrait pas arriver dans le flux normal : réservé aux appels directs hors
-        create(), ex. migration sur une donnée incomplète)."""
-        if not partner.microfinance_account_number or '/' not in partner.microfinance_account_number:
-            return False
-        return '%s/I/%s' % (company.agency_code, partner.microfinance_account_number.rsplit('/', 1)[1])
-
-    def _get_savings_container_name(self, company, partner):
-        """Conteneur épargne : AGENCE/I/N, N = numéro de compte permanent du client (cf.
-        _get_container_target_name). Aucun repli silencieux ni suffixe automatique : si le nom
-        cible existe déjà ou ne peut pas être dérivé, on lève une erreur explicite plutôt que de
-        désynchroniser le conteneur du compte crédit - même principe que pour le compte crédit
-        lui-même (microfinance.loan.account._get_loan_account_name)."""
-        name = self._get_container_target_name(company, partner)
-        if not name:
-            raise ValidationError(_(
-                "Impossible de nommer le conteneur épargne de %(partner)s (société %(company)s) : "
-                "aucun numéro de compte permanent disponible pour cette société - le compte "
-                "crédit conteneur doit être créé avant le conteneur épargne."
-            ) % {'partner': partner.display_name, 'company': company.display_name})
-        # sudo() limité à ce comptage : l'unicité du nom ne doit pas dépendre des règles
-        # d'accès de l'utilisateur courant (le nom porte le code agence, mais un compte d'une
-        # autre société pourrait être masqué).
-        if self.sudo().search_count([('name', '=', name)]):
-            raise ValidationError(_(
-                "Le nom de conteneur épargne « %(name)s » existe déjà : impossible de créer le "
-                "conteneur de %(partner)s sans risquer une désynchronisation avec son compte "
-                "crédit. Vérifiez les comptes épargne existants avant de relancer."
-            ) % {'name': name, 'partner': partner.display_name})
-        return name
-
-    def _get_savings_account_name(self, company, type_code):
-        """Tout compte épargne réel - le premier d'un type donné pour un client comme les
-        suivants - tire son numéro de la séquence partagée par type (AGENCE/TYPE/NNNNNN,
-        indépendante par type_code, partagée entre tous les clients de l'agence), plus jamais du
-        numéro de compte permanent du client : ce numéro est réservé au conteneur épargne
-        (AGENCE/I/N, cf. _get_savings_container_name), créé EN PREMIER à l'enregistrement du
-        client. _get_next_available_savings_account_name (ci-dessous) saute tout nom déjà pris,
-        donc un compte réel de type I ne peut jamais revenir sur le nom du conteneur d'un client
-        (le sien ou celui d'un autre) - les trous que cela crée dans la séquence .I sont
-        acceptés (cf. docs_dev/epargne_auto/AUDIT_doublons_creation_client.md)."""
-        return self._get_next_available_savings_account_name(company, type_code)
-
-    def _get_savings_sequence_code(self, type_code):
-        """Code de séquence ir.sequence pour un type de compte réel. Type 'I' (volontaire) :
-        fusionné avec le compteur du numéro de compte permanent du client (cf. commentaire
-        d'en-tête, Option B) - c'est le même espace de noms que le conteneur épargne
-        (AGENCE/I/N). G et T gardent leur séquence dédiée, indépendante par société."""
-        if type_code == 'I':
-            return SHARED_ACCOUNT_NUMBER_SEQUENCE_CODE
-        return 'microfinance.savings.account.%s' % type_code
-
-    def _get_next_available_savings_account_name(self, company, type_code):
-        while True:
-            number = company._get_or_create_numbering_sequence(self._get_savings_sequence_code(type_code))
-            candidate = '%s/%s/%s' % (company.agency_code, type_code, number)
-            if not self.search_count([('name', '=', candidate)]):
-                return candidate
+    def write(self, vals):
+        if 'account_id' in vals and not self.env.context.get('savings_split_migration'):
+            if any(product.account_id and product.account_id.id != vals['account_id'] for product in self):
+                raise UserError(_("Le compte épargne d'un produit ne peut plus être changé après sa création."))
+        return super().write(vals)
 
     @api.depends('transaction_ids.amount', 'transaction_ids.transaction_type', 'transaction_ids.state')
     def _compute_balance(self):
@@ -262,12 +184,10 @@ class MicrofinanceSavingsAccount(models.Model):
         for account in self:
             account.loan_count = len(account.partner_id.microfinance_loan_ids)
 
-    @api.depends('partner_id')
+    @api.depends('account_id.loan_account_id')
     def _compute_loan_account_id(self):
         for account in self:
-            account.loan_account_id = self.env['microfinance.loan.account'].search(
-                [('partner_id', '=', account.partner_id.id)], limit=1
-            ) if account.partner_id else False
+            account.loan_account_id = account.account_id.loan_account_id
 
     def action_view_loan_account(self):
         self.ensure_one()
@@ -296,10 +216,8 @@ class MicrofinanceSavingsAccount(models.Model):
                              bypass_withdrawal_limit=False, bypass_cash_balance=False,
                              related_loan_payment_id=False, date=None, payment_method='cash'):
         self.ensure_one()
-        if self.is_container:
-            raise UserError(_(
-                "Un conteneur épargne (%s) ne peut recevoir aucune transaction."
-            ) % self.name)
+        if not self.product_id:
+            raise UserError(_("%s n'est pas un produit d'épargne : aucune transaction possible.") % self.name)
         transaction = self.env['microfinance.savings.transaction'].create({
             'account_id': self.id,
             'transaction_type': transaction_type,
@@ -333,24 +251,22 @@ class MicrofinanceSavingsAccount(models.Model):
                     'account_partner': account.partner_id.name,
                 })
 
-    @api.constrains('is_container', 'product_id')
-    def _check_product_required_unless_container(self):
-        # product_id n'est plus required=True au niveau champ (cf. commentaire sur le champ) -
-        # cette contrainte reproduit l'ancienne garantie pour tout compte réel, tout en
-        # l'exemptant explicitement pour un conteneur.
-        for account in self:
-            if not account.is_container and not account.product_id:
+    @api.constrains('product_id', 'account_id', 'partner_id', 'company_id')
+    def _check_product_and_account(self):
+        for product in self:
+            if not product.product_id:
+                raise ValidationError(_("Le produit d'épargne est obligatoire."))
+            account = product.account_id
+            if not account:
+                raise ValidationError(_("Un produit d'épargne doit être rattaché à un compte épargne."))
+            if account.partner_id != product.partner_id or account.company_id != product.company_id:
                 raise ValidationError(_(
-                    "Le produit d'épargne est obligatoire, sauf pour un enregistrement conteneur."
-                ))
+                    "Le produit %(name)s doit avoir le même titulaire et la même agence que son compte "
+                    "épargne %(account)s."
+                ) % {'name': product.name, 'account': account.name})
 
     def action_activate(self):
         for account in self:
-            if account.is_container:
-                raise UserError(_(
-                    "Un conteneur épargne (%s) ne peut pas être activé - ce n'est pas un compte "
-                    "réel, seuls les comptes rattachés en dessous le sont."
-                ) % account.name)
             if account.state != 'draft':
                 raise UserError(_('Seul un compte en brouillon peut être activé.'))
             if account.product_id.min_opening_amount and account.balance < account.product_id.min_opening_amount:
@@ -362,11 +278,6 @@ class MicrofinanceSavingsAccount(models.Model):
 
     def action_close(self, reason_type=None, reason_note=None):
         for account in self:
-            if account.is_container:
-                raise UserError(_(
-                    "Un conteneur épargne (%s) ne peut pas être clôturé - ce n'est pas un compte "
-                    "réel, seuls les comptes rattachés en dessous le sont."
-                ) % account.name)
             if account.state == 'closed':
                 continue
             if (account.microfinance_loan_id and account.microfinance_loan_id.state == 'active'
@@ -490,11 +401,7 @@ class MicrofinanceSavingsAccount(models.Model):
 
     @api.model
     def cron_detect_dormant_accounts(self):
-        # is_container exclu explicitement : un conteneur est désormais actif en permanence
-        # (cf. create() ci-dessus) mais n'a ni transaction ni date d'ouverture, donc is_dormant
-        # reste False en pratique - exclusion posée quand même en défense en profondeur, pour ne
-        # pas dépendre silencieusement de cette absence de date.
-        active_accounts = self.search([('state', '=', 'active'), ('is_container', '=', False)])
+        active_accounts = self.search([('state', '=', 'active'), ('product_id', '!=', False)])
         dormant = active_accounts.filtered(lambda a: a.is_dormant)
         if dormant:
             dormant.write({'state': 'dormant'})

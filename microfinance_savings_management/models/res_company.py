@@ -21,6 +21,15 @@ class ResCompany(models.Model):
         string='Préfixe épargne verrouillé', compute='_compute_savings_product_code_locked',
         help="Vrai dès qu'au moins un produit d'épargne existe pour cette société.",
     )
+    savings_holder_account_prefix = fields.Char(
+        string='Préfixe compte épargne', default='CE',
+        help="Préfixe des comptes épargne de cette agence : <préfixe>/<numéro du compte crédit>, "
+             "ex. CE/AD/000003. Verrouillé dès qu'un compte épargne existe dans l'agence, pour que "
+             "tous les comptes gardent le même format.",
+    )
+    savings_holder_account_prefix_locked = fields.Boolean(
+        string='Préfixe compte épargne verrouillé', compute='_compute_savings_holder_account_prefix_locked',
+    )
     microfinance_savings_default_product_id = fields.Many2one(
         'microfinance.savings.product', string="Produit d'épargne par défaut",
         domain="[('company_id', '=', id), ('product_type', '=', 'voluntary')]",
@@ -39,7 +48,22 @@ class ResCompany(models.Model):
         for company in self:
             company.savings_product_code_locked = bool(Product.search_count([('company_id', '=', company.id)]))
 
+    def _compute_savings_holder_account_prefix_locked(self):
+        Holder = self.env['microfinance.savings.holder.account'].sudo()
+        for company in self:
+            company.savings_holder_account_prefix_locked = bool(
+                company.id and Holder.search_count([('company_id', '=', company.id)]))
+
     def write(self, vals):
+        if 'savings_holder_account_prefix' in vals:
+            Holder = self.env['microfinance.savings.holder.account'].sudo()
+            for company in self:
+                if (vals['savings_holder_account_prefix'] != company.savings_holder_account_prefix
+                        and Holder.search_count([('company_id', '=', company.id)])):
+                    raise UserError(_(
+                        "Le préfixe des comptes épargne de %s ne peut plus être modifié : des comptes "
+                        "épargne existent déjà dans cette agence."
+                    ) % company.display_name)
         if 'savings_product_code_prefix' in vals:
             Product = self.env['microfinance.savings.product']
             locked = self.filtered(lambda c: Product.search_count([('company_id', '=', c.id)]))

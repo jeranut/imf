@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Savings Management',
-    'version': '17.0.1.6.0',
+    'version': '17.0.1.7.0',
     'summary': "Comptes et produits d'épargne, prélèvement automatique sur crédit",
     'description': "Produits d'épargne, comptes, transactions, capitalisation des intérêts, "
                    "prélèvement automatique sur échéance de crédit impayée, éligibilité progressive "
@@ -20,7 +20,9 @@
         'report/savings_receipt_report.xml',
         'views/microfinance_res_company_views.xml',
         'views/microfinance_savings_product_views.xml',
+        'views/microfinance_savings_holder_account_views.xml',
         'views/microfinance_savings_account_views.xml',
+        'wizard/microfinance_savings_renumber_wizard_views.xml',
         'views/microfinance_loan_account_views.xml',
         'views/microfinance_savings_transaction_views.xml',
         'views/microfinance_loan_product_views_inherit.xml',
@@ -34,7 +36,6 @@
     ],
     'assets': {
         'web.assets_backend': [
-            'microfinance_savings_management/static/src/xml/microfinance_savings_dashboard.xml',
             'microfinance_savings_management/static/src/scss/microfinance_savings_dashboard.scss',
         ],
     },

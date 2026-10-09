@@ -14,7 +14,7 @@ class MicrofinanceSavingsTransaction(models.Model):
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'id desc'
 
-    account_id = fields.Many2one('microfinance.savings.account', string='Compte épargne', required=True, ondelete='restrict', tracking=True)
+    account_id = fields.Many2one('microfinance.savings.account', string="Produit d'épargne", required=True, ondelete='restrict', tracking=True)
     transaction_type = fields.Selection([
         ('deposit', 'Dépôt'),
         ('withdrawal', 'Retrait'),
@@ -85,6 +85,7 @@ class MicrofinanceSavingsTransaction(models.Model):
              "négatif. Dérogation distincte des autres contrôles de retrait.",
     )
     partner_id = fields.Many2one(related='account_id.partner_id', store=True, readonly=True)
+    holder_account_id = fields.Many2one(related='account_id.account_id', string='Compte épargne', store=True, readonly=True)
     company_id = fields.Many2one(related='account_id.company_id', store=True, readonly=True)
     currency_id = fields.Many2one(related='account_id.currency_id', readonly=True)
     product_id = fields.Many2one(related='account_id.product_id', readonly=True)

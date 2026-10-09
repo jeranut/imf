@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_savings_renumber_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.savings.renumber.wizard.form</field>
+        <field name="model">microfinance.savings.renumber.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Renumérotation des produits d'épargne">
+                <p class="text-muted">
+                    Renomme chaque produit d'épargne au format &lt;numéro du compte&gt;-&lt;rang&gt;
+                    (ex. CE/AD/000003-01). L'ancien nom est conservé dans « Ancien numéro » ; les
+                    écritures comptables existantes ne sont jamais modifiées.
+                </p>
+                <group>
+                    <field name="dry_run"/>
+                    <field name="company_ids" widget="many2many_tags"/>
+                    <field name="done" invisible="1"/>
+                </group>
+                <group invisible="not done">
+                    <field name="result_count"/>
+                    <field name="result_path"/>
+                </group>
+                <footer>
+                    <button name="action_run" type="object" class="btn-primary" string="Lancer"/>
+                    <button special="cancel" string="Fermer"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+    <record id="action_microfinance_savings_renumber_wizard" model="ir.actions.act_window">
+        <field name="name">Renumérotation des produits d'épargne</field>
+        <field name="res_model">microfinance.savings.renumber.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+    <menuitem id="menu_microfinance_savings_renumber"
+              name="Renumérotation des produits"
+              parent="microfinance_loan_management.menu_epargne_root"
+              action="action_microfinance_savings_renumber_wizard"
+              groups="microfinance_savings_management.group_savings_manager"
+              sequence="21"/>
+</odoo>

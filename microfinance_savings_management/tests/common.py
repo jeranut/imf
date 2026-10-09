@@ -43,6 +43,13 @@ class SavingsCommon(MicrofinanceCommon):
             'deposit_journal_id': cls.savings_deposit_journal.id,
             'withdrawal_journal_id': cls.savings_withdrawal_journal.id,
         })
+        # Un 2e/3e produit distinct : nécessaire depuis que microfinance.savings.account interdit
+        # deux produits IDENTIQUES ouverts simultanément sur un même compte (docs_dev/
+        # attribution_epargne_client/) - les tests qui empilent plusieurs produits sur un même
+        # titulaire pour autre chose que cette règle (rang, balance, ordre des transactions)
+        # doivent varier le produit plutôt que de réutiliser savings_product tel quel.
+        cls.savings_product_2 = cls.savings_product.copy({'name': 'Épargne Test 2', 'code': 'SAVTEST2'})
+        cls.savings_product_3 = cls.savings_product.copy({'name': 'Épargne Test 3', 'code': 'SAVTEST3'})
 
     def _create_account(self, **kwargs):
         vals = {'partner_id': self.partner.id, 'product_id': self.savings_product.id}
@@ -68,4 +75,4 @@ class SavingsCommon(MicrofinanceCommon):
             'microfinance_id_type': 'cin', 'microfinance_id_number': cin,
         }
         vals.update(kwargs)
-        return self.env['res.partner'].with_context(microfinance_context=True).create(vals)
+        return self.env['res.partner'].with_context(microfinance_context=True, allow_microfinance_partner_create=True).create(vals)

@@ -12,8 +12,15 @@
     </record>
 
     <record id="microfinance_savings_account_company_rule" model="ir.rule">
-        <field name="name">Microfinance compte épargne : cloisonnement par société</field>
+        <field name="name">Microfinance produit d'épargne : cloisonnement par société</field>
         <field name="model_id" ref="model_microfinance_savings_account"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+
+    <record id="microfinance_savings_holder_account_company_rule" model="ir.rule">
+        <field name="name">Microfinance compte épargne (client) : cloisonnement par société</field>
+        <field name="model_id" ref="model_microfinance_savings_holder_account"/>
         <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         <field name="groups" eval="[]"/>
     </record>

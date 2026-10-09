@@ -50,4 +50,14 @@
         <field name="numbercall">-1</field>
         <field name="active">True</field>
     </record>
+    <record id="ir_cron_microfinance_savings_credit_sync_check" model="ir.cron">
+        <field name="name">Épargne : contrôle de synchronisation compte crédit / compte épargne</field>
+        <field name="model_id" ref="model_microfinance_savings_holder_account"/>
+        <field name="state">code</field>
+        <field name="code">model.cron_check_credit_savings_sync()</field>
+        <field name="interval_number">1</field>
+        <field name="interval_type">days</field>
+        <field name="numbercall">-1</field>
+        <field name="active">True</field>
+    </record>
 </odoo>

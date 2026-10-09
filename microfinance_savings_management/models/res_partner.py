@@ -1,14 +1,19 @@
 # -*- coding: utf-8 -*-
-import psycopg2
-
 from odoo import _, api, fields, models
+from odoo.exceptions import UserError
+
+# États de crédit qui bloquent un changement d'agence ou l'archivage du client.
+LOAN_STATES_OPEN = ('approved', 'active', 'defaulted')
 
 
 class ResPartner(models.Model):
     _inherit = 'res.partner'
 
     microfinance_savings_account_ids = fields.One2many(
-        'microfinance.savings.account', 'partner_id', string='Comptes épargne')
+        'microfinance.savings.account', 'partner_id', string="Produits d'épargne",
+        domain=[('account_id', '!=', False)])
+    microfinance_savings_holder_account_ids = fields.One2many(
+        'microfinance.savings.holder.account', 'partner_id', string='Comptes épargne')
     microfinance_savings_count = fields.Integer(compute='_compute_microfinance_savings_count')
 
     @api.depends('microfinance_savings_account_ids')
@@ -18,21 +23,9 @@ class ResPartner(models.Model):
 
     @api.model_create_multi
     def create(self, vals_list):
-        # Ouverture du conteneur épargne (couple avec le conteneur crédit, même N) dès la
-        # création du contact client — SEUL compte épargne créé automatiquement (correctif du
-        # 2026-09-24, docs_dev/epargne_auto/AUDIT_doublons_creation_client.md §13 : abroge
-        # l'« Option A » du 21/09 où un « compte principal » réel coexistait avec un conteneur
-        # créé plus tard, au 1er crédit — cf. microfinance_loan_extension.py, où cette création
-        # a été retirée). Un client déjà en base avant ce correctif et qui n'a pas encore de
-        # conteneur n'en obtient pas automatiquement rétroactivement : cf. migration dédiée
-        # (container_migration.py).
-        # super().create() remonte jusqu'à res_partner.py (microfinance_loan_management), qui
-        # attribue microfinance_account_number ET crée le conteneur crédit (microfinance.loan.
-        # account) avant de revenir ici — condition nécessaire pour que le conteneur épargne
-        # puisse reprendre le même N (cf. microfinance_savings_account.py._get_container_target_
-        # name). Ordre garanti par les dépendances de module (microfinance_savings_management
-        # dépend de microfinance_loan_management, donc chargé après : son create() encadre celui
-        # de loan_management, qui s'exécute avant que ce code ne reprenne la main).
+        # super() (microfinance_loan_management) attribue le numéro permanent et crée le compte
+        # crédit ; le compte épargne est créé juste après, dans la même transaction : une erreur
+        # ici annule aussi le client et son compte crédit.
         partners = super().create(vals_list)
         if self.env.context.get('microfinance_context'):
             for partner in partners:
@@ -41,49 +34,65 @@ class ResPartner(models.Model):
         return partners
 
     def _get_or_create_microfinance_savings_container(self):
-        """Ouvre (ou réutilise) l'UNIQUE conteneur épargne de ce client pour sa société - appelée
-        depuis create() ci-dessus, à l'enregistrement du client, symétrique de res.partner.
-        _get_or_create_microfinance_loan_account() (microfinance_loan_management) côté crédit,
-        avec lequel il partage son N. RÈGLE : un conteneur par client ET par société (pas par
-        crédit ni par produit) - même cardinalité que le compte crédit
-        (unique(partner_id, company_id)).
-
-        C'est désormais le SEUL compte épargne créé automatiquement : il n'y a plus de « compte
-        principal » distinct (abrogé, cf. create() ci-dessus). Tout compte épargne réel
-        supplémentaire reste une création manuelle (bouton « Épargne » du crédit, menu Épargne).
-
-        Idempotent à deux niveaux : recherche préalable (sudo() limité à cette recherche, pour
-        ne pas dépendre des règles d'accès) puis index unique partiel en base
-        (microfinance_savings_account_container_uniq_idx) qui couvre deux créations concurrentes."""
+        """Compte épargne du client dans son agence (créé avec le compte crédit s'il manque)."""
         self.ensure_one()
-        company = self.company_id or self.env.company
-        Account = self.env['microfinance.savings.account']
-        domain = [('partner_id', '=', self.id), ('company_id', '=', company.id), ('is_container', '=', True)]
-        existing = Account.sudo().search(domain, limit=1)
-        if existing:
-            return Account.browse(existing.id)
-        try:
-            with self.env.cr.savepoint():
-                return Account.create({
-                    'partner_id': self.id, 'company_id': company.id, 'is_container': True,
-                })
-        except psycopg2.IntegrityError:
-            # Course avec une création concurrente : l'index unique a refusé la nôtre, on
-            # réutilise celle qui a gagné.
-            existing = Account.sudo().search(domain, limit=1)
-            if existing:
-                return Account.browse(existing.id)
-            raise
+        return self.env['microfinance.savings.holder.account']._get_or_create_for(
+            self, self.company_id or self.env.company)
+
+    def write(self, vals):
+        if {'company_id', 'active'} & set(vals):
+            self._check_microfinance_accounts_lifecycle(vals)
+        return super().write(vals)
+
+    def _check_microfinance_accounts_lifecycle(self, vals):
+        """Compte crédit et compte épargne suivent le client : on refuse un changement d'agence
+        (leur N appartient à l'agence d'origine) et un archivage tant qu'il reste de l'activité."""
+        Holder = self.env['microfinance.savings.holder.account'].sudo()
+        LoanAccount = self.env['microfinance.loan.account'].sudo()
+        Loan = self.env['microfinance.loan'].sudo()
+        for partner in self:
+            holders = Holder.search([('partner_id', '=', partner.id)])
+            loan_accounts = LoanAccount.search([('partner_id', '=', partner.id)])
+            if 'company_id' in vals and vals['company_id'] != partner.company_id.id and partner.company_id \
+                    and (holders or loan_accounts):
+                raise UserError(_(
+                    "Impossible de changer l'agence de %(partner)s : son compte crédit et son compte "
+                    "épargne appartiennent à l'agence %(company)s (même numéro). Un transfert de client "
+                    "entre agences doit passer par une procédure dédiée."
+                ) % {'partner': partner.display_name, 'company': partner.company_id.display_name})
+            if 'active' in vals and not vals['active'] and partner.active:
+                open_products = holders.mapped('product_ids').filtered(lambda p: p.state in ('active', 'dormant'))
+                if any(abs(h.balance_total) > 0.005 for h in holders) or open_products or Loan.search_count([
+                        ('partner_id', '=', partner.id), ('state', 'in', LOAN_STATES_OPEN)]):
+                    raise UserError(_(
+                        "Impossible d'archiver %s : son compte épargne a un solde ou un produit actif, "
+                        "ou il a un crédit en cours."
+                    ) % partner.display_name)
 
     def action_view_microfinance_savings(self):
+        """Smart button « Épargne » : seule entrée d'attribution d'un produit d'épargne
+        (docs_dev/attribution_epargne_client/) - ouvre directement les PRODUITS du client (plus
+        le compte/titulaire, consultable séparément via le menu « Comptes épargne »), avec
+        `microfinance_savings_count` (ci-dessus) comme compteur : même domaine que cette liste.
+        Titulaire et agence préremplis et lecture seule (view_microfinance_savings_account_
+        form_attribution) : l'agent ne choisit que le produit d'épargne à attribuer."""
         self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
-            'name': 'Épargne',
+            'name': _("Produits d'épargne"),
             'res_model': 'microfinance.savings.account',
             'view_mode': 'tree,form',
-            'domain': [('partner_id', '=', self.id)],
-            'context': {'default_partner_id': self.id},
+            'views': [
+                (self.env.ref('microfinance_savings_management.view_microfinance_savings_account_tree').id, 'tree'),
+                (self.env.ref('microfinance_savings_management.view_microfinance_savings_account_form_attribution').id, 'form'),
+            ],
+            'domain': [('partner_id', '=', self.id), ('account_id', '!=', False)],
+            'context': {
+                'microfinance_context': True,
+                'default_partner_id': self.id,
+                'default_company_id': self.company_id.id,
+                'microfinance_savings_attribution': True,
+            },
         }
 
     # --- Backend interface caisse (Lot 3) ---
@@ -106,6 +115,8 @@ class ResPartner(models.Model):
             'id': partner.id,
             'name': partner.name,
             'account_number': partner.microfinance_account_number,
+            'savings_account_name': partner.microfinance_savings_holder_account_ids.filtered(
+                lambda h: h.company_id.id == company_id)[:1].name or False,
         } for partner in partners]
 
     @api.model
@@ -146,9 +157,8 @@ class ResPartner(models.Model):
         guichet (approuvé en attente de décaissement, actif ou en défaut pour remboursement) —
         formaté directement pour consommation par le composant Owl.js du guichet (Lot 4)."""
         partner = self.browse(partner_id)
-        savings_accounts = partner.microfinance_savings_account_ids.filtered(
-            lambda a: a.company_id.id == company_id and a.state == 'active'
-        )
+        holder = partner.microfinance_savings_holder_account_ids.filtered(lambda h: h.company_id.id == company_id)[:1]
+        savings_accounts = holder.product_ids.filtered(lambda a: a.state == 'active')
         loans = partner.microfinance_loan_ids.filtered(
             lambda l: l.company_id.id == company_id and l.state in ('approved', 'active', 'defaulted')
         )
@@ -171,9 +181,13 @@ class ResPartner(models.Model):
                 'fee_amount_due': loan.fee_amount_due,
             })
         return {
+            'savings_holder_account': {
+                'id': holder.id, 'name': holder.name, 'balance_total': holder.balance_total,
+            } if holder else False,
             'savings_accounts': [{
                 'id': account.id,
                 'name': account.name,
+                'account_name': holder.name,
                 'product': account.product_id.name,
                 'balance': account.balance,
             } for account in savings_accounts],

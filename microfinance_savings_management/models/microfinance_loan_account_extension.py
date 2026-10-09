@@ -5,25 +5,30 @@ from odoo import _, api, fields, models
 class MicrofinanceLoanAccount(models.Model):
     _inherit = 'microfinance.loan.account'
 
-    savings_account_count = fields.Integer(compute='_compute_savings_account_count')
+    savings_holder_account_id = fields.Many2one(
+        'microfinance.savings.holder.account', string='Compte épargne',
+        compute='_compute_savings_holder_account_id')
+    savings_account_count = fields.Integer(string="Produits d'épargne", compute='_compute_savings_holder_account_id')
 
-    @api.depends('partner_id')
-    def _compute_savings_account_count(self):
+    @api.depends('partner_id', 'company_id')
+    def _compute_savings_holder_account_id(self):
+        Holder = self.env['microfinance.savings.holder.account']
         for account in self:
-            account.savings_account_count = self.env['microfinance.savings.account'].search_count(
-                [('partner_id', '=', account.partner_id.id)]
-            ) if account.partner_id else 0
+            holder = Holder.search([
+                ('partner_id', '=', account.partner_id.id), ('company_id', '=', account.company_id.id),
+            ], limit=1) if account.partner_id else Holder
+            account.savings_holder_account_id = holder
+            account.savings_account_count = holder.product_count
 
     def action_view_savings_accounts(self):
         self.ensure_one()
-        accounts = self.env['microfinance.savings.account'].search([('partner_id', '=', self.partner_id.id)])
-        action = {
+        holder = self.savings_holder_account_id
+        if not holder:
+            return False
+        return {
             'type': 'ir.actions.act_window',
-            'name': _('Comptes épargne'),
-            'res_model': 'microfinance.savings.account',
+            'name': _('Compte épargne'),
+            'res_model': 'microfinance.savings.holder.account',
+            'view_mode': 'form',
+            'res_id': holder.id,
         }
-        if len(accounts) == 1:
-            action.update({'view_mode': 'form', 'res_id': accounts.id})
-        else:
-            action.update({'view_mode': 'tree,form', 'domain': [('id', 'in', accounts.ids)]})
-        return action

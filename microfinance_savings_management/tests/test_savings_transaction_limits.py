@@ -34,7 +34,7 @@ class TestSavingsTransactionDateOrder(SavingsCommon):
         # datée d'aujourd'hui ; la première transaction d'account_b, datée d'il y a 30 jours,
         # doit passer car elle n'a encore aucune transaction antérieure sur SON compte.
         account_a = self._create_active_account(opening_amount=200.0)
-        account_b = self._create_account()
+        account_b = self._create_account(product_id=self.savings_product_2.id)
         txn = account_b._create_transaction('deposit', 10.0, date=fields.Date.today() - timedelta(days=30))
         account_b.action_activate()
         self.assertEqual(txn.state, 'posted')
