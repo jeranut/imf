@@ -91,6 +91,15 @@ class MicrofinanceFondCredit(models.Model):
             'company_id': company.id,
         })
 
+    @api.model
+    def _vals_need_origin_account(self, vals):
+        """Point d'extension : vrai si un fonds créé avec ces valeurs porte un compte passif dédié."""
+        return True
+
+    def _needs_origin_account(self):
+        self.ensure_one()
+        return True
+
     def _account_has_entries(self):
         self.ensure_one()
         if not self.account_id:
@@ -103,7 +112,7 @@ class MicrofinanceFondCredit(models.Model):
 
     def _ensure_origin_account(self):
         """Crée le compte dédié des fonds qui passent au grand livre sans compte (idempotent)."""
-        for fond in self.filtered(lambda f: f.passer_gl and not f.account_id):
+        for fond in self.filtered(lambda f: f.passer_gl and not f.account_id and f._needs_origin_account()):
             account = self._create_origin_account(fond._fund_company(), fond.origine, fond.code)
             fond.write({'account_id': account.id, 'account_auto': True})
 
@@ -112,7 +121,7 @@ class MicrofinanceFondCredit(models.Model):
         for vals in vals_list:
             if vals.get('code', 'Nouveau') in (False, '', 'Nouveau'):
                 vals['code'] = self.env['ir.sequence'].next_by_code('microfinance.fond.credit') or 'Nouveau'
-            if vals.get('passer_gl', True) and not vals.get('account_id'):
+            if vals.get('passer_gl', True) and not vals.get('account_id') and self._vals_need_origin_account(vals):
                 account = self._create_origin_account(
                     self._company_for_vals(vals), vals.get('origine') or 'prive', vals['code'])
                 vals['account_id'] = account.id

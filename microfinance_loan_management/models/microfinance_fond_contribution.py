@@ -28,6 +28,10 @@ class MicrofinanceFondContribution(models.Model):
         ('virement', 'Virement'),
     ], string='Mode de paiement', required=True, tracking=True,
         help="Un fonds ne se reçoit (et ne se rembourse) que par la banque : virement ou chèque.")
+    reference_paiement = fields.Char(
+        string='Référence du virement / n° de chèque', tracking=True, copy=False,
+        help="Reprise dans le libellé de l'écriture : sert au rapprochement avec la ligne du relevé "
+             "bancaire. Obligatoire pour un fonds d'exploitation.")
     journal_id = fields.Many2one(
         'account.journal', string='Journal de fonds', compute='_compute_journal_id', store=True,
         readonly=True, check_company=False,
@@ -155,18 +159,32 @@ class MicrofinanceFondContribution(models.Model):
             ) % {'actuel': self.journal_id.display_name or _('aucun'), 'attendu': journal.display_name})
         if journal.company_id != company:
             raise UserError(_('Le journal de fonds doit appartenir à la société du fonds (%s).') % company.name)
-        direction = 'inbound' if self.type_mouvement == 'depot' else 'outbound'
+        direction = 'inbound' if self.type_mouvement == 'depot' else 'outbound'  # retrait et remboursement : sortant
         if not self.env['microfinance.fond.partage']._payment_account(journal, direction):
             raise UserError(_(
                 "Le journal de fonds « %(journal)s » n'a pas de compte de paiement en suspens (%(sens)s)."
             ) % {'journal': journal.display_name, 'sens': _('entrant') if direction == 'inbound' else _('sortant')})
+        counterpart = self._get_counterpart_account()
+        if counterpart.company_id != company:
+            raise UserError(_('Le compte du fonds « %s » doit appartenir à la société du fonds (%s).') % (fond.name, company.name))
+
+    def _get_counterpart_account(self):
+        """Compte de contrepartie de la contribution : compte dédié du fonds (dette envers le bailleur). Les
+        fonds d'exploitation de nature subvention le remplacent par le compte de produit de la société."""
+        self.ensure_one()
+        fond = self.fond_id
         if not fond.account_id:
             raise UserError(_(
                 'Le fonds "%s" n\'a pas de compte dédié : renseignez son origine (privé ou public) puis '
                 'enregistrez-le pour créer son compte avant de valider une contribution.'
             ) % fond.name)
-        if fond.account_id.company_id != company:
-            raise UserError(_('Le compte du fonds « %s » doit appartenir à la société du fonds (%s).') % (fond.name, company.name))
+        return fond.account_id
+
+    def _movement_label(self):
+        self.ensure_one()
+        code = self.fond_id.code
+        label = _('Dépôt bailleur %s') % code if self.type_mouvement == 'depot' else _('Retrait bailleur %s') % code
+        return ' - '.join(filter(None, [label, self.reference_paiement]))
 
     def _prepare_contribution_move(self):
         """Un dépôt bailleur débite le compte de paiement en suspens entrant du journal de fonds (139100) et
@@ -176,17 +194,18 @@ class MicrofinanceFondContribution(models.Model):
         fond = self.fond_id
         journal = self.journal_id
         Partage = self.env['microfinance.fond.partage']
-        label = _('Dépôt bailleur %s') % fond.code if self.type_mouvement == 'depot' else _('Retrait bailleur %s') % fond.code
+        label = self._movement_label()
+        counterpart = self._get_counterpart_account()
         if self.type_mouvement == 'depot':
             suspense = Partage._payment_account(journal, 'inbound')
             line_ids = [
                 (0, 0, {'name': label, 'account_id': suspense.id, 'debit': self.amount, 'credit': 0.0}),
-                (0, 0, {'name': label, 'account_id': fond.account_id.id, 'debit': 0.0, 'credit': self.amount}),
+                (0, 0, {'name': label, 'account_id': counterpart.id, 'debit': 0.0, 'credit': self.amount}),
             ]
         else:
             suspense = Partage._payment_account(journal, 'outbound')
             line_ids = [
-                (0, 0, {'name': label, 'account_id': fond.account_id.id, 'debit': self.amount, 'credit': 0.0}),
+                (0, 0, {'name': label, 'account_id': counterpart.id, 'debit': self.amount, 'credit': 0.0}),
                 (0, 0, {'name': label, 'account_id': suspense.id, 'debit': 0.0, 'credit': self.amount}),
             ]
         return {
