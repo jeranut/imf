@@ -3064,7 +3064,7 @@ class MicrofinanceLoan(models.Model):
                         'Le fonds « %(fond)s » n\'a aucune allocation pour l\'agence « %(agence)s ». '
                         'La société mère doit d\'abord le partager avec cette agence.'
                     ) % {'fond': fond.name, 'agence': loan.company_id.name})
-                solde_avant_ce_credit = allocation.solde_disponible + loan._get_principal_outstanding()
+                solde_avant_ce_credit = allocation._available_for_disbursement() + loan._get_principal_outstanding()
             else:
                 solde_avant_ce_credit = fond.solde_disponible + loan._get_principal_outstanding()
             if solde_avant_ce_credit <= 0:
