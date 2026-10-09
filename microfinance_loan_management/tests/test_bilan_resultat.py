@@ -11,7 +11,7 @@ KIT = 'base_accounting_kit.'
 class TestBilanResultat(TestFondLiaison):
     """Parts de partage entières, passif positif dans le Bilan, Compte de résultat par identifiant (et non par nom)."""
 
-    def _lines(self, xmlid, company, lang='en_US'):
+    def _report_data(self, xmlid, company, lang='en_US'):
         report = self.env.ref(KIT + xmlid)
         wizard = self.env['financial.report'].with_company(company).with_context(lang=lang).new({
             'account_report_id': report.id, 'date_to': '2099-12-31', 'target_move': 'posted', 'company_id': company.id})
@@ -20,7 +20,11 @@ class TestBilanResultat(TestFondLiaison):
                 'view_format': 'vertical', 'company_id': [company.id, company.name],
                 'filter_cmp': 'filter_no', 'date_from_cmp': False, 'date_to_cmp': False}
         data['used_context'] = wizard._build_contexts({'form': data})
-        return {line['r_id']: line['balance'] for line in wizard.get_account_lines(data) if line['type'] == 'report'}
+        return wizard.get_account_lines(data)
+
+    def _lines(self, xmlid, company, lang='en_US'):
+        return {line['r_id']: line['balance'] for line in self._report_data(xmlid, company, lang)
+                if line['type'] == 'report'}
 
     def _xml(self, xmlid):
         return self.env.ref(KIT + xmlid).id
@@ -95,7 +99,7 @@ class TestBilanResultat(TestFondLiaison):
             pl = self._lines('account_financial_report_profitandloss0', self.agency, lang)
             self.assertEqual(pl[self._xml('account_financial_report_profitandloss0')], 55000.0, lang)
             self.assertEqual(pl[self._xml('account_financial_report_income0')], 100000.0, lang)
-            self.assertEqual(abs(pl[self._xml('account_financial_report_expense0')]), 45000.0, lang)
+            self.assertEqual(pl[self._xml('account_financial_report_expense0')], 45000.0, lang)
             assets = bs[self._xml('account_financial_report_assets0')]
             liability = bs[self._xml('account_financial_report_liabilitysum0')]
             equity = bs[self._xml('account_financial_report_equitysection0')]
@@ -114,3 +118,42 @@ class TestBilanResultat(TestFondLiaison):
         after = self._lines('account_financial_report_profitandloss0', self.agency, 'fr_FR')[regular.id]
         self.assertEqual(before, 45000.0)
         self.assertEqual(after, before)
+
+    # ------------------------------------------------------------------ Compte de résultat : produits et charges positifs
+    def test_profit_loss_signs_script_is_idempotent_and_leaves_the_balance_sheet_alone(self):
+        Report = self.env['account.financial.report']
+        Report._mf_apply_profit_loss_signs()
+        self.assertEqual(Report._mf_apply_profit_loss_signs(), [])
+        self.assertEqual(Report._mf_apply_profit_loss_signs(dry_run=True), [])
+        self.assertEqual(self.env.ref(KIT + 'account_financial_report_other_income0').sign, '-1')
+        self.assertEqual(self.env.ref(KIT + 'account_financial_report_expense0').sign, '1')
+        self.assertEqual(self.env.ref(KIT + 'account_financial_report_assets0').sign, '1')
+        self.assertEqual(self.env.ref(KIT + 'account_financial_report_liabilitysum0').sign, '-1')
+
+    def test_profit_loss_shows_positive_products_and_charges_and_net_result(self):
+        ag = self.agency
+        bank = self._acc(ag, 'T131999B', 'asset_cash', False)
+        subvention = self._acc(ag, 'T762000B', 'income_other', False)
+        charge = self._acc(ag, 'T622000B', 'expense', False)
+        self._post(ag, [(bank, 100000000.0, 0.0), (subvention, 0.0, 100000000.0)])
+        self._post(ag, [(charge, 40000000.0, 0.0), (bank, 0.0, 40000000.0)])
+        self.env.flush_all()
+        for lang in ('fr_FR', 'en_US'):
+            data = self._report_data('account_financial_report_profitandloss0', ag, lang)
+            by_id = {line['r_id']: line['balance'] for line in data if line['type'] == 'report'}
+            self.assertEqual(by_id[self._xml('account_financial_report_income0')], 100000000.0, lang)   # PRODUIT
+            self.assertEqual(by_id[self._xml('account_financial_report_other_income0')], 100000000.0, lang)
+            self.assertEqual(by_id[self._xml('financial_report_gross_profit')], 0.0, lang)
+            self.assertEqual(by_id[self._xml('account_financial_report_expense0')], 40000000.0, lang)   # CHARGE
+            self.assertEqual(by_id[self._xml('account_financial_report_expense_regular0')], 40000000.0, lang)
+            self.assertEqual(by_id[self._xml('account_financial_report_profitandloss0')], 60000000.0, lang)  # résultat net
+            self.assertFalse([line for line in data if (line.get('balance') or 0.0) < 0.0],
+                             'Aucune ligne négative pour un montant normal (%s)' % lang)
+            account_lines = [line for line in data if line['type'] == 'account' and line['name'].startswith('T762000B')]
+            self.assertEqual([line['balance'] for line in account_lines], [100000000.0], lang)
+            bs = self._lines('account_financial_report_balancesheet0', ag, lang)
+            self.assertEqual(bs[self._xml('account_financial_report_profitloss_toreport0')], 60000000.0, lang)
+            assets = bs[self._xml('account_financial_report_assets0')]
+            self.assertEqual(assets, 60000000.0, lang)
+            self.assertEqual(assets, bs[self._xml('account_financial_report_liabilitysum0')]
+                             + bs[self._xml('account_financial_report_equitysection0')], lang)
