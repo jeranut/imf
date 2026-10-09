@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Grand livre : écran interactif (même famille que le Journal de banque, base_accounting_kit.journal_ledger_report).
+         Le menu d'origine de base_accounting_kit garde son identifiant : seule son action change, ses restrictions de
+         groupes sont levées (l'accès est contrôlé par le contrôleur, comme pour les autres rapports interactifs).
+         L'ancien assistant (action_account_general_ledger_menu) et son PDF restent dans la base. -->
+    <record id="action_general_ledger_mf" model="ir.actions.client">
+        <field name="name">Grand livre</field>
+        <field name="tag">microfinance_loan_management.general_ledger</field>
+        <field name="params" eval="{'report_title': 'Grand livre'}"/>
+    </record>
+
+    <record id="base_accounting_kit.menu_general_ledger" model="ir.ui.menu">
+        <field name="name">Grand livre</field>
+        <field name="action" eval="'ir.actions.client,%d' % ref('microfinance_loan_management.action_general_ledger_mf')"/>
+        <field name="groups_id" eval="[(5, 0, 0)]"/>
+    </record>
+</odoo>
