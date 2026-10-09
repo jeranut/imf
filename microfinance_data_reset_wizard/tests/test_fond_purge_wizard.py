@@ -293,7 +293,7 @@ class TestFondPurgeWizard(TestBankStatementPaper):
         Wizard = self.env['microfinance.fond.purge.wizard'].with_user(manager)
         self.assertFalse(Wizard.check_access_rights('read', raise_exception=False))
         with self.assertRaises(AccessError):
-            Wizard.default_get(['scope'])
+            Wizard.search([])
         with self.assertRaises(AccessError):
             Wizard.create({'scope': 'both'})
         with self.assertRaises(AccessError):
