@@ -28,6 +28,22 @@ class AccountBankStatement(models.Model):
     mf_todo_count = fields.Integer(string='Lignes à traiter', compute='_compute_mf_balance')
     mf_has_attachment = fields.Boolean(compute='_compute_mf_balance')
 
+    # ------------------------------------------------------------------ nom
+    @api.depends('create_date', 'journal_id', 'mf_date_from', 'mf_date_to', 'mf_state', 'date')
+    def _compute_name(self):
+        """« <code du journal> – <début> → <fin> » (dates courtes) ; un élément manquant est omis, jamais écrit « False » ;
+        sans journal : « Nouveau relevé ». Un relevé validé garde son nom ; en brouillon il suit journal et période."""
+        for stmt in self:
+            if stmt.mf_state == 'validated' and stmt.name:
+                continue
+            code = stmt.journal_id.code
+            if not code:
+                stmt.name = _("Nouveau relevé")
+                continue
+            start, end = stmt.mf_date_from or stmt.date, stmt.mf_date_to
+            period = ' → '.join(d.strftime('%d/%m/%y') for d in (start, end) if d)
+            stmt.name = ' – '.join(filter(None, [code, period]))
+
     # ------------------------------------------------------------------ calculs
     @api.depends('line_ids.journal_id')
     def _compute_journal_id(self):
