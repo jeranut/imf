@@ -2,14 +2,23 @@
 """Assistant de purge des fonds de crédit rotatif (microfinance.fond.credit).
 
 Contexte : audit docs_dev/fond_credit/AUDIT_suppression_fonds.md (module
-microfinance_loan_management). Trois relations sont en ondelete='restrict' vers
+microfinance_loan_management). Quatre relations sont en ondelete='restrict' vers
 microfinance.fond.credit (microfinance.fond.contribution.fond_id,
-microfinance.fond.allocation.fond_id, microfinance.fond.partage.fond_id) : un unlink()
-direct échoue systématiquement en base tant qu'une seule ligne fille existe. Ce wizard
-supprime donc explicitement ces lignes filles avant le fonds lui-même (choix validé :
-purge en cascade, pas un simple archivage) — les account.move déjà postés référencés par
-ces contributions ne sont JAMAIS touchés (leur champ microfinance_fond_contribution_id
-passe seulement à NULL, ondelete='set null' natif du champ sur account.move).
+microfinance.fond.allocation.fond_id, microfinance.fond.partage.fond_id,
+microfinance.portfolio.allocation.fond_id) : un unlink() direct échoue systématiquement en
+base tant qu'une seule ligne fille existe. Ce wizard supprime donc explicitement ces lignes
+filles avant le fonds lui-même (choix validé : purge en cascade, pas un simple archivage) —
+les account.move déjà postés référencés par ces contributions ne sont JAMAIS touchés (leur
+champ microfinance_fond_contribution_id passe seulement à NULL, ondelete='set null' natif).
+
+Ordre de traitement par fonds : crédits non décaissés (selon blocking_loan_action) ->
+contributions -> répartitions de portefeuille (microfinance.portfolio.allocation, annulées
+d'abord si validées pour restituer amount_allocated aux portefeuilles ; leurs lignes partent
+en cascade ORM/SQL) -> partages -> allocations d'agence résiduelles -> fonds. Les
+répartitions de portefeuille passent AVANT les partages/allocations d'agence, dont elles
+dépendent (reste_a_repartir_portefeuille). Dépendants en SET NULL, gérés par la base :
+res_company.microfinance_fond_credit_default_id, microfinance.loan.fond_credit_id (traité
+explicitement ci-dessous), microfinance.portfolio.allocation.line.fond_id.
 """
 from datetime import datetime
 
@@ -173,18 +182,53 @@ class MicrofinanceFondCreditPurgeWizard(models.TransientModel):
             result.append((fond, blockers))
         return result
 
+    def _fund_counts(self, fond):
+        """Nombre d'enregistrements liés au fonds, par modèle (lecture seule). Même
+        périmètre que _purge : ce qui sera supprimé (contributions, répartitions de
+        portefeuille + leurs lignes, partages, allocations d'agence) ou délié (crédits non
+        décaissés selon l'action choisie, sociétés dont le fonds est le défaut)."""
+        self.ensure_one()
+        env = self.env
+        domain = [('fond_id', '=', fond.id)]
+        alloc_pf = env['microfinance.portfolio.allocation'].sudo().with_context(active_test=False)
+        loans = fond.loan_ids
+        return {
+            'contribution': env['microfinance.fond.contribution'].sudo().search_count(domain),
+            'portfolio_allocation': alloc_pf.search_count(domain),
+            'portfolio_allocation_validated': alloc_pf.search_count(domain + [('state', '=', 'validated')]),
+            'portfolio_allocation_line': env['microfinance.portfolio.allocation.line'].sudo().search_count(
+                [('allocation_id.fond_id', '=', fond.id)]),
+            'partage': env['microfinance.fond.partage'].sudo().search_count(domain),
+            'allocation': env['microfinance.fond.allocation'].sudo().search_count(domain),
+            'loan_not_disbursed': len(loans.filtered(lambda l: not l.disbursement_date)),
+            'company_default': env['res.company'].sudo().search_count(
+                [('microfinance_fond_credit_default_id', '=', fond.id)]),
+        }
+
+    def _format_counts(self, counts):
+        action = self.blocking_loan_action
+        loan_effect = {
+            'stop': _('bloquant'), 'unlink_reference': _('déliés'), 'delete_test_loan': _('supprimés'),
+        }[action]
+        return (
+            "%(c)d contribution(s), %(pa)d répartition(s) de portefeuille (dont %(pav)d validée(s) "
+            "à annuler) avec %(pal)d ligne(s), %(p)d partage(s), %(a)d allocation(s) d'agence ; "
+            "crédits non décaissés : %(l)d (%(le)s) ; sociétés au fonds par défaut (remis à vide) : %(cd)d"
+        ) % {
+            'c': counts['contribution'], 'pa': counts['portfolio_allocation'],
+            'pav': counts['portfolio_allocation_validated'], 'pal': counts['portfolio_allocation_line'],
+            'p': counts['partage'], 'a': counts['allocation'],
+            'l': counts['loan_not_disbursed'], 'le': loan_effect, 'cd': counts['company_default'],
+        }
+
     def _describe_fund(self, fond, blockers):
-        n_contrib = len(fond.contribution_ids)
-        n_alloc = len(fond.allocation_ids)
-        n_partage = len(fond.partage_ids)
         company_label = fond.company_id.name if fond.company_id else _('Multi-agences')
         line = _(
-            "[%(id)d] %(code)s « %(name)s » (%(company)s, %(scope)s%(active)s) : "
-            "%(nc)d contribution(s), %(na)d allocation(s), %(np)d partage(s)"
+            "[%(id)d] %(code)s « %(name)s » (%(company)s, %(scope)s%(active)s) : %(counts)s"
         ) % {
             'id': fond.id, 'code': fond.code, 'name': fond.name, 'company': company_label,
             'scope': fond.scope, 'active': '' if fond.active else ', ARCHIVÉ',
-            'nc': n_contrib, 'na': n_alloc, 'np': n_partage,
+            'counts': self._format_counts(self._fund_counts(fond)),
         }
         if blockers:
             line += "\n    BLOQUÉ : " + " ; ".join(blockers)
@@ -252,6 +296,10 @@ class MicrofinanceFondCreditPurgeWizard(models.TransientModel):
             microfinance_skip_parent_check=True, fond_partage_technique=True)
         Partage = self.env['microfinance.fond.partage'].sudo().with_context(
             microfinance_skip_parent_check=True)
+        # active_test=False : une répartition n'a pas de champ active aujourd'hui, mais ne
+        # jamais laisser un filtre implicite masquer un dépendant RESTRICT.
+        PortfolioAllocation = self.env['microfinance.portfolio.allocation'].sudo().with_context(
+            active_test=False)
 
         for fond, blockers in self._scan_funds():
             fond = fond.sudo()
@@ -259,6 +307,10 @@ class MicrofinanceFondCreditPurgeWizard(models.TransientModel):
             if blockers:
                 self._trace(lines, f"[{fond.id}] {fond.code} « {fond.name} » ignoré : " + " ; ".join(blockers))
                 continue
+
+            # Détail par modèle AVANT toute suppression (visible aussi en dry-run).
+            self._trace(lines, f"[{fond.id}] {fond.code} « {fond.name} » à traiter : "
+                        + self._format_counts(self._fund_counts(fond)))
 
             other_loans = fond.loan_ids.filtered(lambda l: not l.disbursement_date)
             if other_loans and self.blocking_loan_action == 'unlink_reference':
@@ -293,6 +345,23 @@ class MicrofinanceFondCreditPurgeWizard(models.TransientModel):
             if n_contrib:
                 Contribution.search([('fond_id', '=', fond.id)]).unlink()
                 self._trace(lines, f"[{fond.id}] {fond.code} : {n_contrib} contribution(s) supprimée(s) (account.move déjà postés conservés, juste déliés)")
+
+            # Répartitions agence -> portefeuilles (FK RESTRICT sur le fonds). Une répartition
+            # 'validated' ne peut pas être supprimée telle quelle (unlink() la refuse) : on
+            # l'annule d'abord via action_cancel(), qui retire sa part de amount_allocated des
+            # portefeuilles (et bloque si un portefeuille a déjà utilisé sa part : le fonds est
+            # alors légitimement non purgeable, l'erreur remonte et tout est annulé). Les
+            # lignes partent en ondelete='cascade'. À traiter avant les partages/allocations
+            # d'agence : elles en dépendent (reste_a_repartir_portefeuille).
+            repartitions = PortfolioAllocation.search([('fond_id', '=', fond.id)])
+            if repartitions:
+                n_rep, n_lines = len(repartitions), len(repartitions.line_ids)
+                rep_cancel = repartitions.filtered(lambda r: r.state == 'validated')
+                if rep_cancel:
+                    rep_cancel.action_cancel()
+                repartitions.unlink()
+                self._trace(lines, f"[{fond.id}] {fond.code} : {n_rep} répartition(s) de portefeuille supprimée(s) "
+                            f"({n_lines} ligne(s), {len(rep_cancel)} annulée(s) au préalable)")
 
             # Un partage 'validated' ne peut pas être supprimé tel quel (fond_partage.unlink()
             # le refuse explicitement) : il faut d'abord l'annuler via action_cancel(), qui

@@ -273,6 +273,8 @@ class MicrofinanceDataResetWizard(models.TransientModel):
             n_applications = self.env['microfinance.loan.application'].sudo().search_count([('company_id', '=', cid)])
             n_sav_txn = self.env['microfinance.savings.transaction'].sudo().search_count([('company_id', '=', cid)])
             n_sav_acc = self.env['microfinance.savings.account'].sudo().search_count([('company_id', '=', cid)])
+            n_sav_holders = self.env['microfinance.savings.holder.account'].sudo().search_count(
+                [('company_id', '=', cid)]) if 'microfinance.savings.holder.account' in self.env else 0
             n_moves = Move.search_count(self._accounting_domain(cid))
             lines.append(
                 f"[{cid}] {company.name} : "
@@ -282,7 +284,7 @@ class MicrofinanceDataResetWizard(models.TransientModel):
                 f"{n_transferts} transferts inter-agences, "
                 f"{n_guarantees} garanties, {n_scoring} lignes de scoring, "
                 f"{n_reschedule} historiques de rééchelonnement, {n_visits} visites de recouvrement, "
-                f"{n_sav_acc} comptes épargne, {n_sav_txn} transactions épargne, "
+                f"{n_sav_holders} comptes épargne, {n_sav_acc} produits d'épargne, {n_sav_txn} transactions épargne, "
                 f"{n_moves} écritures comptables liées"
             )
 
@@ -624,6 +626,14 @@ class MicrofinanceDataResetWizard(models.TransientModel):
                 "comptes d'épargne", cid, company_name, dry_run, stats,
             )
             lines.append(f"  - {n} microfinance.savings.account supprimés (par lots de {self._BATCH_SIZE})")
+            # Comptes épargne (client) APRÈS leurs produits : un compte qui porte encore des
+            # produits refuse sa suppression.
+            if 'microfinance.savings.holder.account' in self.env:
+                n = self._batch_unlink(
+                    'microfinance.savings.holder.account', [('company_id', '=', cid)],
+                    "comptes épargne (client)", cid, company_name, dry_run, stats,
+                )
+                lines.append(f"  - {n} microfinance.savings.holder.account supprimés (par lots de {self._BATCH_SIZE})")
 
         return [f"Agence [{cid}] {company_name} :"] + lines
 
