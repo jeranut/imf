@@ -872,6 +872,7 @@ def provision_company_pcec(env, company):
     _create_journals(env, company)
     _set_default_operating_journal(env, company)
     _fill_ecart_caisse_accounts(env, company)
+    company._fill_default_subvention_account()
 
 
 def post_init_hook(env):

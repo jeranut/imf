@@ -1112,7 +1112,42 @@ class MicrofinanceLoan(models.Model):
                     ],
                 })
             tiles.append(tile)
+            tiles.extend(self._exploitation_fund_tiles(company))
         return tiles
+
+    def _exploitation_fund_tiles(self, company):
+        """Tuile distincte « Fonds d'exploitation reçus » : réservée à la direction du siège et à la comptabilité,
+        absente des agences. Ces fonds ne comptent jamais dans « Fonds accessibles à l'agence »."""
+        from .microfinance_fond_exploitation import GROUP_ACCOUNT_MANAGER, GROUP_COMPTABLE, GROUP_MANAGER, _has_any_group
+        parent = self.env['res.company']._get_microfinance_parent()
+        if (parent and company != parent) or not _has_any_group(self.env, (GROUP_MANAGER, GROUP_COMPTABLE, GROUP_ACCOUNT_MANAGER)):
+            return []
+        FondCredit = self.env['microfinance.fond.credit']
+        if not FondCredit.check_access_rights('read', raise_exception=False):
+            return []
+        holder = {}
+
+        def received():
+            amounts = FondCredit._get_exploitation_amounts(company.id)
+            holder['items'] = [
+                {'label': _('En transit'), 'value': amounts['en_transit']},
+                {'label': _('Reçu en banque'), 'value': amounts['recu_banque']},
+                {'label': _('Dû aux bailleurs (avances)'), 'value': amounts['du']},
+            ]
+            return amounts['recu']
+
+        domain = [('destination', '=', 'exploitation'), ('active', '=', True), ('company_id', '=', company.id)]
+        tile = self._overview_tile(
+            'exploitation_funds', _("Fonds d'exploitation reçus"), 'money', 'fa-briefcase', 'fonds', received,
+            'microfinance.fond.credit', domain, _("Voir les fonds d'exploitation"))
+        tile.update({
+            'secondary_items': holder.get('items', []),
+            'views': [
+                [self.env.ref('microfinance_loan_management.view_microfinance_fond_credit_tree_exploitation').id, 'list'],
+                [self.env.ref('microfinance_loan_management.view_microfinance_fond_credit_form_dashboard').id, 'form'],
+            ],
+        })
+        return [tile]
 
     @api.model
     def get_recent_loans(self, company_id, limit=5):
