@@ -89,3 +89,4 @@ from . import test_clients_portefeuille
 from . import test_dashboard_tiles
 from . import test_fond_origine
 from . import test_fond_vue_agence
+from . import test_bank_statement_paper
