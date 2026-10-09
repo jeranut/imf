@@ -8,7 +8,6 @@ Voir docs_dev/migration_ouverture/PURGE_FONDS_PLAN.md. Principes :
     détectées) ; l'exécution exige une simulation de la MÊME sélection ;
   - une seule transaction (savepoint) pour tout le périmètre : à la moindre erreur, rollback complet.
 """
-import hashlib
 from collections import defaultdict
 from datetime import datetime
 
@@ -18,7 +17,6 @@ from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, UserError
 from odoo.tools import float_is_zero
 
-from .microfinance_fond_credit_purge_wizard import MicrofinanceFondCreditPurgeWizard as LegacyPurgeWizard
 
 TECH_CONTEXT = {'microfinance_skip_parent_check': True}
 
@@ -86,9 +84,6 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
 
     # Clé du verrou advisory : propre à cet assistant (cf. clés des autres RAZ du même cluster Postgres).
     _LOCK_KEY = 823476515
-    PHRASE = 'PURGER'
-    APPLY_PARAM = LegacyPurgeWizard.APPLY_PARAM
-    TEST_ENV_PARAM = 'microfinance.raz_environnement_test'
 
     scope = fields.Selection([
         ('selection', 'Une sélection de fonds'),
@@ -110,32 +105,12 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         help="« Remettre à zéro » supprime les contributions, partages et allocations du fonds et garde le fonds. "
              "« Supprimer le fonds » fait la même chose puis supprime le fonds ; son compte d'origine automatique "
              "(240xxx / 250xxx) est archivé, jamais supprimé.")
-    move_mode = fields.Selection([
-        ('reverse', 'A - Extourner les écritures comptabilisées (garde la trace)'),
-        ('delete', 'B - Supprimer les écritures de test (même comptabilisées)'),
-    ], string='Écritures comptables', required=True, default='reverse',
-        help="A (défaut) : extourne par les actions normales d'Odoo. B : suppression (contexte force_delete), "
-             "seulement si le paramètre système microfinance.raz_environnement_test vaut True.")
-    include_mirror = fields.Boolean(
-        string='Inclure les écritures miroirs des agences', default=True,
-        help="Décoché : les écritures côté agence ne sont ni extournées ni supprimées (seulement déliées du partage) ; "
-             "les comptes de liaison resteront déséquilibrés.")
-    undo_bank = fields.Boolean(
-        string='Défaire les rapprochements bancaires liés et remettre les lignes de relevé à traiter', default=True,
-        help="Défait le lettrage des lignes de suspens (139100 / 139500) rapprochées avec une ligne de relevé, extourne "
-             "l'écriture de cette ligne et remet la ligne à l'état « à traiter ». Les relevés ne sont jamais supprimés.")
     include_orphans = fields.Boolean(
         string='Inclure les écritures orphelines des journaux de fonds et d\'exploitation', default=True,
         help="Écritures sans plus aucun lien avec un fonds existant (fonds déjà supprimé, purge précédente) dans un journal "
              "d'usage « Fonds » ou « Exploitation », ou portant encore le côté d'un partage. Listées en simulation, traitées "
              "comme les autres (extourne ou suppression, rapprochements défaits). Les lignes de relevé ne sont jamais prises.")
-    confirm_text = fields.Char(string='Tapez « PURGER » pour confirmer')
-
-    test_env_enabled = fields.Boolean(compute='_compute_test_env_enabled')
-    current_key = fields.Char(compute='_compute_current_key')
-    simulated_key = fields.Char(readonly=True, copy=False)
-    has_blockers = fields.Boolean(readonly=True)
-    can_execute = fields.Boolean(compute='_compute_can_execute')
+    summary = fields.Char(string='Concerné', compute='_compute_summary')
     done = fields.Boolean(readonly=True)
     log = fields.Text(string='Journal', readonly=True)
     line_ids = fields.One2many('microfinance.fond.purge.wizard.line', 'wizard_id', string='Simulation', readonly=True)
@@ -143,43 +118,15 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
                                   readonly=True)
 
     # ------------------------------------------------------------------ champs calculés
-    def _compute_test_env_enabled(self):
-        enabled = self._test_env_enabled()
+    @api.depends('scope', 'fond_ids', 'company_ids', 'include_orphans')
+    def _compute_summary(self):
         for wiz in self:
-            wiz.test_env_enabled = enabled
-
-    @api.model
-    def _test_env_enabled(self):
-        return self.env['ir.config_parameter'].sudo().get_param(self.TEST_ENV_PARAM) == 'True'
-
-    @api.depends('scope', 'fond_ids', 'company_ids', 'mode_raz', 'move_mode', 'include_mirror', 'undo_bank', 'include_orphans')
-    def _compute_current_key(self):
-        for wiz in self:
-            wiz.current_key = wiz._selection_key()
-
-    @api.depends('current_key', 'simulated_key', 'has_blockers', 'done')
-    def _compute_can_execute(self):
-        for wiz in self:
-            wiz.can_execute = bool(
-                wiz.simulated_key and wiz.simulated_key == wiz._selection_key() and not wiz.has_blockers
-                and not wiz.done)
-
-    def _selection_key(self):
-        """Empreinte de la sélection RÉSOLUE (fonds trouvés + options) : une simulation ne vaut que pour elle."""
-        self.ensure_one()
-        payload = repr((self.scope, self.mode_raz, self.move_mode, bool(self.include_mirror), bool(self.undo_bank),
-                        bool(self.include_orphans),
-                        sorted(self._get_funds().ids)))
-        return hashlib.sha1(payload.encode()).hexdigest()
-
-    @api.onchange('move_mode')
-    def _onchange_move_mode(self):
-        if self.move_mode == 'delete' and not self._test_env_enabled():
-            self.move_mode = 'reverse'
-            return {'warning': {
-                'title': _('Option B indisponible'),
-                'message': _("Le paramètre système « %s » doit valoir True pour supprimer des écritures comptabilisées.")
-                % self.TEST_ENV_PARAM}}
+            funds = wiz._get_funds()
+            moves = wiz.env['account.move'].sudo()
+            for fund in funds:
+                moves |= wiz._collect(fund)['moves']
+            moves |= wiz._orphan_moves()
+            wiz.summary = _("%(f)d fonds et %(m)d écritures comptables concernés") % {'f': len(funds), 'm': len(moves)}
 
     # ------------------------------------------------------------------ périmètre
     def _get_funds(self):
@@ -216,13 +163,6 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         return {'fund': fund, 'contribs': contribs, 'partages': partages, 'plines': plines, 'allocs': allocs,
                 'portfolio': portfolio, 'moves': moves}
 
-    def _targets(self, moves):
-        """Écritures réellement neutralisées : sans les miroirs agence si la case est décochée."""
-        self.ensure_one()
-        if self.include_mirror:
-            return moves
-        return moves.filtered(lambda m: m.microfinance_partage_side != 'agency')
-
     def _orphan_moves(self):
         """Écritures sans lien avec un fonds existant, dans les journaux de fonds / d'exploitation (ou portant encore le côté
         d'un partage). Jamais les écritures de ligne de relevé ; jamais celles d'un fonds existant (même non sélectionné)."""
@@ -245,14 +185,6 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         Move = self.env['account.move'].sudo().with_context(active_test=False)
         return set(Move.search([('reversed_entry_id', 'in', moves.ids)]).mapped('reversed_entry_id').ids)
 
-    def _split_moves(self, moves):
-        """(à extourner, à supprimer quel que soit le mode, neutres déjà extournés ou extournes) pour les écritures ciblées."""
-        draft = moves.filtered(lambda m: m.state != 'posted')
-        posted = moves - draft
-        already = self._reversed_ids(posted)
-        reversible = posted.filtered(lambda m: not m.reversed_entry_id and m.id not in already)
-        return reversible, draft, posted - reversible
-
     def _bank_entries(self, moves):
         """Lignes de relevé (lot B) rapprochées avec une ligne de ces écritures : par le lettrage, jamais par libellé."""
         lines = moves.sudo().line_ids
@@ -269,21 +201,17 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         """Clés étrangères vers les tables de fonds / d'écritures supprimées qui ne sont pas prévues et qui ont des
         lignes concernées : retournées AVANT toute suppression."""
         cr = self.env.cr
-        delete_all_moves = self.move_mode == 'delete'
         ids_by_model = defaultdict(set)
         for c in collected:
-            moves = self._targets(c['moves'])
+            moves = c['moves']
             ids_by_model['microfinance.fond.credit'].update(c['fund'].ids)
             ids_by_model['microfinance.fond.contribution'].update(c['contribs'].ids)
             ids_by_model['microfinance.fond.partage'].update(c['partages'].ids)
             ids_by_model['microfinance.fond.partage.line'].update(c['plines'].ids)
             ids_by_model['microfinance.fond.allocation'].update(c['allocs'].ids)
             ids_by_model['microfinance.portfolio.allocation'].update(c['portfolio'].ids)
-            ids_by_model['account.move'].update((moves if delete_all_moves else moves.filtered(
-                lambda m: m.state != 'posted')).ids)
-        orphans = self._targets(self._orphan_moves())
-        ids_by_model['account.move'].update((orphans if delete_all_moves else orphans.filtered(
-            lambda m: m.state != 'posted')).ids)
+            ids_by_model['account.move'].update(moves.ids)
+        ids_by_model['account.move'].update(self._orphan_moves().ids)
         blockers = []
         for model, ids in ids_by_model.items():
             if not ids:
@@ -317,10 +245,6 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         if not funds:
             blockers.append(_("Aucun fonds dans le périmètre."))
             return blockers
-        if self.move_mode == 'delete' and not self._test_env_enabled():
-            blockers.append(_(
-                "Le mode B (supprimer les écritures) exige le paramètre système « %s » = True (absent ou différent de "
-                "True).") % self.TEST_ENV_PARAM)
         blockers += self._unknown_dependencies(collected)
         for c in collected:
             fund = c['fund']
@@ -336,15 +260,6 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             if used:
                 blockers.append(_("%(f)s : allocation déjà utilisée par %(a)s.") % {
                     'f': label, 'a': ', '.join(used.mapped('company_id.name'))})
-        if not self.undo_bank:
-            moves = self.env['account.move'].sudo()
-            for c in collected:
-                moves |= c['moves']
-            entries = self._bank_entries(self._targets(moves | self._orphan_moves()))
-            if entries:
-                blockers.append(_(
-                    "%(n)d ligne(s) de relevé rapprochée(s) avec les écritures à purger - cochez « Défaire les "
-                    "rapprochements bancaires ».") % {'n': len(entries)})
         return blockers
 
     # ------------------------------------------------------------------ soldes de contrôle
@@ -372,8 +287,6 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         """Dans la transaction en cours (savepoint géré par _run). Retourne les statistiques."""
         self.ensure_one()
         env = self.env
-        today = fields.Date.context_today(self)
-        reverse_mode = self.move_mode == 'reverse'
         counts = []
         fund_labels = ['%s « %s »' % (c['fund'].code, c['fund'].name) for c in collected]
 
@@ -403,32 +316,23 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             for rep in c['portfolio']:
                 add(rep.company_id.name, _('Répartitions de portefeuille'), 1, rep.base_amount)
             all_moves |= c['moves']
-            targets |= self._targets(c['moves'])
+            targets |= c['moves']
             plines |= c['plines']
-        orphans = self._targets(self._orphan_moves())
+        orphans = self._orphan_moves()
         for company in orphans.company_id:
             add(company.name, _('Écritures orphelines (sans fonds)'), len(orphans.filtered(
                 lambda m: m.company_id == company)), debit(orphans.filtered(lambda m: m.company_id == company)))
         all_moves |= orphans
         targets |= orphans
-        reversible, drafts, neutral = self._split_moves(targets)
-        posted_effect = reversible if reverse_mode else (targets - drafts)
-        kept_mirrors = all_moves - targets
-        for company in targets.company_id | kept_mirrors.company_id:
+        posted = targets.filtered(lambda m: m.state == 'posted')
+        for company in targets.company_id:
             mine = lambda recs: recs.filtered(lambda m: m.company_id == company)
-            add(company.name, _('Écritures en brouillon (supprimées)'), len(mine(drafts)), debit(mine(drafts)))
-            if reverse_mode:
-                add(company.name, _('Écritures comptabilisées (extournées)'), len(mine(reversible)),
-                    debit(mine(reversible)))
-                add(company.name, _('Écritures déjà neutralisées (conservées)'), len(mine(neutral)),
-                    debit(mine(neutral)))
-            else:
-                add(company.name, _('Écritures comptabilisées (supprimées)'), len(mine(targets - drafts)),
-                    debit(mine(targets - drafts)))
+            add(company.name, _('Écritures en brouillon (supprimées)'), len(mine(targets - posted)),
+                debit(mine(targets - posted)))
+            add(company.name, _('Écritures comptabilisées (supprimées)'), len(mine(posted)), debit(mine(posted)))
             add(company.name, _('dont écritures miroirs des agences'), len(mine(targets).filtered(
                 lambda m: m.microfinance_partage_side == 'agency')))
-            add(company.name, _('Écritures miroirs des agences laissées en place (déliées)'), len(mine(kept_mirrors)))
-        entries_all = self._bank_entries(targets) if self.undo_bank else entries_all
+        entries_all = self._bank_entries(targets)
         for entry in entries_all:
             add(entry.company_id.name, _('Lignes de relevé délettrées (remises à traiter)'), 1, entry.amount)
 
@@ -442,7 +346,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         pairs |= {(line.company_id.id, line.account_id.id) for line in statement_lines}
         before = self._balances(pairs)
         impact = defaultdict(float)
-        for line in posted_effect.line_ids | statement_lines:
+        for line in posted.line_ids | statement_lines:
             impact[(line.company_id.id, line.account_id.id)] -= line.balance
 
         # 1. Rapprochements bancaires (avant toute extourne : une ligne lettrée ne peut pas être extournée).
@@ -458,27 +362,15 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
                     to_cancel.action_cancel()
                 repartitions.unlink()
 
-        # 3. Écritures : déliage des partages (RESTRICT), puis extourne / suppression.
+        # 3. Écritures : déliage des partages (RESTRICT), délettrage puis suppression.
         plines.sudo().write({'hq_move_id': False, 'agency_move_id': False})
         all_moves.write({'microfinance_fond_partage_id': False, 'microfinance_fond_partage_line_id': False})
         created = Move.browse()
-        if reverse_mode:
-            for move in reversible:
-                company = move.company_id
-                created |= move.with_company(company).with_context(allowed_company_ids=[company.id])._reverse_moves(
-                    [{'date': today, 'ref': _('Extourne %s') % (move.ref or move.name),
-                      'microfinance_partage_side': move.microfinance_partage_side}], cancel=True)
-            drafts.unlink()
-        else:
-            reconciled = targets.line_ids.filtered(lambda l: l.matched_debit_ids or l.matched_credit_ids)
-            if reconciled:
-                reconciled.remove_move_reconcile()
-            targets.with_context(force_delete=True).unlink()
-        kept = (all_moves - drafts) if reverse_mode else kept_mirrors
-        kept_names = ['%s (%s)' % (m.name, m.company_id.name) for m in kept.exists()]
-        created_names = ['%s (%s)' % (m.name, m.company_id.name) for m in created]
-        for company in created.company_id:
-            add(company.name, _('Écritures d\'extourne créées'), len(created.filtered(lambda m: m.company_id == company)))
+        reconciled = targets.line_ids.filtered(lambda l: l.matched_debit_ids or l.matched_credit_ids)
+        if reconciled:
+            reconciled.remove_move_reconcile()
+        targets.with_context(force_delete=True).unlink()
+        kept_names, created_names = [], []
 
         # 4. Partages (parts en cascade), contributions, allocations.
         Partage = env['microfinance.fond.partage'].sudo().with_context(active_test=False, **TECH_CONTEXT)
@@ -606,9 +498,8 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             'scope': dict(self._fields['scope'].selection)[self.scope],
             'funds': '\n'.join(stats['funds']) if stats else '',
             'mode_raz': dict(self._fields['mode_raz'].selection)[self.mode_raz],
-            'move_mode': dict(self._fields['move_mode'].selection)[self.move_mode],
-            'options': 'miroirs agences : %s ; rapprochements défaits : %s ; écritures orphelines : %s' % (
-                _('oui') if self.include_mirror else _('non'), _('oui') if self.undo_bank else _('non'),
+            'move_mode': _('Suppression des écritures liées (comptabilisées comprises)'),
+            'options': 'miroirs agences : oui ; rapprochements défaits : oui ; écritures orphelines : %s' % (
                 _('oui') if self.include_orphans else _('non')),
             'counts': self._fmt_counts(stats['counts']) if stats else '',
             'balances_before': self._fmt_balances(stats['balances'], 3) if stats else '',
@@ -625,7 +516,8 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         collected = [self._collect(fund) for fund in funds]
         blockers = self._blockers(funds, collected)
         if blockers:
-            self.write({'has_blockers': True, 'simulated_key': False})
+            if execute:
+                raise UserError(_("Purge impossible, rien n'a été supprimé :\n%s") % '\n'.join(blockers))
             self._write_report(None, blockers, execute)
             return self._reopen()
         savepoint = self.env.cr.savepoint()
@@ -639,13 +531,9 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         else:
             savepoint.close(rollback=not execute)
             self.env.invalidate_all()
-        key = self._selection_key()
         if execute:
             self._create_audit(stats, execute, error)
-            self.write({'done': not error, 'simulated_key': False if not error else self.simulated_key,
-                        'has_blockers': False, 'confirm_text': False})
-        else:
-            self.write({'has_blockers': bool(error), 'simulated_key': False if error else key})
+            self.write({'done': not error})
         self._write_report(stats, [], execute, error)
         return self._reopen()
 
@@ -665,21 +553,12 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         self.ensure_one()
         if not self.env.user.has_group('base.group_system'):
             raise AccessError(_("Réservé à l'administrateur technique."))
-        if self.env['ir.config_parameter'].sudo().get_param(self.APPLY_PARAM) != 'True':
-            raise UserError(_(
-                "L'exécution réelle est désactivée par le paramètre système « %s » (absent ou différent de \"True\"). "
-                "Un administrateur technique doit l'activer explicitement.") % self.APPLY_PARAM)
-        if (self.confirm_text or '').strip() != self.PHRASE:
-            raise UserError(_('Tapez exactement « %s » pour confirmer.') % self.PHRASE)
-        if not self.simulated_key or self.simulated_key != self._selection_key():
-            raise UserError(_("Lancez d'abord la simulation de cette même sélection (la sélection a changé ou n'a pas "
-                              "été simulée)."))
         self._acquire_lock_or_raise()
         return self._run(execute=True)
 
     def action_reset(self):
         self.ensure_one()
-        self.write({'simulated_key': False, 'has_blockers': False, 'done': False, 'confirm_text': False, 'log': False})
+        self.write({'done': False, 'log': False})
         self.line_ids.unlink()
         self.balance_ids.unlink()
         return self._reopen()
