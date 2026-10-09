@@ -1120,7 +1120,9 @@ class MicrofinanceLoan(models.Model):
         absente des agences. Ces fonds ne comptent jamais dans « Fonds accessibles à l'agence »."""
         from .microfinance_fond_exploitation import GROUP_ACCOUNT_MANAGER, GROUP_COMPTABLE, GROUP_MANAGER, _has_any_group
         parent = self.env['res.company']._get_microfinance_parent()
-        if (parent and company != parent) or not _has_any_group(self.env, (GROUP_MANAGER, GROUP_COMPTABLE, GROUP_ACCOUNT_MANAGER)):
+        if parent and company != parent:
+            return self._exploitation_agency_tiles(company)
+        if not _has_any_group(self.env, (GROUP_MANAGER, GROUP_COMPTABLE, GROUP_ACCOUNT_MANAGER)):
             return []
         FondCredit = self.env['microfinance.fond.credit']
         if not FondCredit.check_access_rights('read', raise_exception=False):
@@ -1134,6 +1136,11 @@ class MicrofinanceLoan(models.Model):
                 {'label': _('Reçu en banque'), 'value': amounts['recu_banque']},
                 {'label': _('Dû aux bailleurs (avances)'), 'value': amounts['du']},
             ]
+            # total et ventilation par agence des parts déjà partagées (parts validées)
+            breakdown = self.env['microfinance.fond.partage.line']._get_exploitation_breakdown(company.id)
+            if breakdown:
+                holder['items'].append({'label': _('Partagé aux agences'), 'value': sum(a for _c, a in breakdown)})
+                holder['items'].extend({'label': '  %s' % agency.name, 'value': amount} for agency, amount in breakdown)
             return amounts['recu']
 
         domain = [('destination', '=', 'exploitation'), ('active', '=', True), ('company_id', '=', company.id)]
@@ -1147,6 +1154,30 @@ class MicrofinanceLoan(models.Model):
                 [self.env.ref('microfinance_loan_management.view_microfinance_fond_credit_form_dashboard').id, 'form'],
             ],
         })
+        return [tile]
+
+    def _exploitation_agency_tiles(self, company):
+        """Tuile « Fonds d'exploitation reçus » d'une agence : sa propre part seulement (alloué, en transit, reçu en
+        banque), calculée sur les parts validées qui lui sont destinées. Absente tant qu'elle n'a rien reçu. Un fonds
+        d'exploitation n'entre jamais dans « Fonds accessibles à l'agence » ni dans la disponibilité du crédit."""
+        Line = self.env['microfinance.fond.partage.line']
+        if not Line._get_exploitation_share_amounts(company.id)['lines']:
+            return []
+        holder = {}
+
+        def received():
+            amounts = Line._get_exploitation_share_amounts(company.id)
+            holder['items'] = [
+                {'label': _('En transit'), 'value': amounts['in_transit']},
+                {'label': _('Reçu en banque'), 'value': amounts['received']},
+            ]
+            if amounts['not_received']:
+                holder['items'].append({'label': _('Non reçu'), 'value': amounts['not_received']})
+            return amounts['allocated']
+
+        tile = self._overview_tile(
+            'exploitation_funds_agency', _("Fonds d'exploitation reçus"), 'money', 'fa-briefcase', 'fonds', received)
+        tile.update({'secondary_label': _("dont :"), 'secondary_items': holder.get('items', [])})
         return [tile]
 
     @api.model
