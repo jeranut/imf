@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'RAZ Microfinance (multi-agence)',
-    'version': '17.0.1.0.0',
+    'version': '17.0.1.1.0',
     'category': 'Tools',
     'summary': "Assistant de remise à zéro des données transactionnelles microfinance "
                "(dossiers d'instruction, crédits, épargne, comptabilité) par agence.",
@@ -52,7 +52,19 @@ groupe métier group_microfinance_manager (pas group_system) : DRY-RUN par
 défaut, verrouillé en plus par le paramètre système
 microfinance.fond_credit_purge_apply (à activer explicitement pour une
 exécution réelle). Cf. docs_dev/fond_credit/AUDIT_suppression_fonds.md du
-module microfinance_loan_management.
+module microfinance_loan_management. Cet ancien assistant n'a plus de menu.
+
+Purge des fonds (crédit ET exploitation) : menu « Purge des fonds », réservé à
+l'administrateur technique. Remet à zéro (garde le fonds) ou supprime le fonds,
+avec ses contributions, partages, allocations, répartitions et écritures
+comptables LIÉES (par les champs de lien, jamais par libellé) : extourne (défaut)
+ou suppression des écritures de test (si microfinance.raz_environnement_test =
+True), écritures miroirs des agences, rapprochements bancaires défaits (lignes de
+relevé remises à traiter), compte d'origine automatique archivé. Simulation
+obligatoire de la même sélection, mot PURGER, paramètre
+microfinance.fond_credit_purge_apply, transaction unique avec rollback complet,
+arrêt avant toute suppression si une clé étrangère inconnue bloque, soldes de
+contrôle et journal d'audit conservé (menu « Journal des purges de fonds »).
     """,
     'author': 'Micka',
     'license': 'LGPL-3',

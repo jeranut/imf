@@ -39,6 +39,8 @@ KNOWN_FOREIGN_KEYS = {
     ('account_move', 'microfinance_fond_partage_line_id'),
     ('account_move', 'microfinance_fond_contribution_id'),
     ('microfinance_fond_contribution', 'move_id'),
+    # sélection de fonds de cet assistant lui-même (transitoire)
+    ('microfinance_fond_purge_wizard_fond_rel', 'fond_id'),
 }
 # Tables du cœur comptable qui référencent une écriture en CASCADE par construction (lignes, relevés, assistants).
 ACCOUNT_MOVE_CASCADE_TABLES = {
@@ -178,13 +180,13 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         self.ensure_one()
         Fond = self.env['microfinance.fond.credit'].sudo().with_context(active_test=False)
         if self.scope == 'selection':
-            funds = Fond.browse(self.fond_ids.ids).exists()
+            funds = Fond.browse(self.sudo().fond_ids.ids).exists()
         elif self.scope in ('credit', 'exploitation'):
             funds = Fond.search([('destination', '=', self.scope)])
         else:
             funds = Fond.search([])
-        if self.company_ids:
-            companies = self.company_ids.ids
+        if self.sudo().company_ids:
+            companies = self.sudo().company_ids.ids
             funds = funds.filtered(lambda f: f._fund_company().id in companies)
         return funds
 
@@ -344,6 +346,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         today = fields.Date.context_today(self)
         reverse_mode = self.move_mode == 'reverse'
         counts = []
+        fund_labels = ['%s « %s »' % (c['fund'].code, c['fund'].name) for c in collected]
 
         def add(company, item, n, amount=0.0, note=''):
             if n:
@@ -399,9 +402,12 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
         for c in collected:
             if c['fund'].account_id:
                 pairs.add((c['fund']._fund_company().id, c['fund'].account_id.id))
+        # Les écritures des lignes de relevé défaites sont extournées : leur effet entre dans le contrôle.
+        statement_lines = entries_all.statement_line_id.move_id.line_ids
+        pairs |= {(line.company_id.id, line.account_id.id) for line in statement_lines}
         before = self._balances(pairs)
         impact = defaultdict(float)
-        for line in posted_effect.line_ids:
+        for line in posted_effect.line_ids | statement_lines:
             impact[(line.company_id.id, line.account_id.id)] -= line.balance
 
         # 1. Rapprochements bancaires (avant toute extourne : une ligne lettrée ne peut pas être extournée).
@@ -476,6 +482,10 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
             if not others and not foreign and float_is_zero(posted_balance, precision_digits=2):
                 account.write({'deprecated': True})
                 archived.append((company.name, account.code))
+            else:
+                add(company.name, _("Comptes d'origine conservés (non archivés)"), 1, 0.0, _(
+                    "%(code)s : écritures étrangères à cette purge, solde non nul ou compte partagé") % {
+                    'code': account.code})
         for company_name, code in archived:
             add(company_name, _('Comptes d\'origine archivés'), 1, 0.0, code)
 
@@ -502,7 +512,7 @@ class MicrofinanceFondPurgeWizard(models.TransientModel):
                 flag = _('Solde non nul')
             balance_rows.append((companies[pair[0]].name, accounts[pair[1]].code, accounts[pair[1]].name, b, e, a, flag))
         return {'counts': counts, 'balances': balance_rows, 'anomalies': anomalies, 'kept': kept_names,
-                'created': created_names, 'funds': ['%s « %s »' % (c['fund'].code, c['fund'].name) for c in collected],
+                'created': created_names, 'funds': fund_labels,
                 'companies': sorted({row[0] for row in balance_rows} | {row[0] for row in counts if row[0]})}
 
     # ------------------------------------------------------------------ présentation et audit
