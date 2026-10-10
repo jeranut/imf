@@ -98,5 +98,6 @@ from . import test_fond_exploitation
 from . import test_menus_fonds
 from . import test_general_ledger
 from . import test_trial_balance
+from . import test_journal_control
 from . import test_fond_partage_exploitation
 from . import test_mf_trace
