@@ -326,6 +326,49 @@
     }
 }
 
+// "Vue d'ensemble" : cartes sur 2 colonnes, texte plus lisible (rem). Limité à la grille d'ensemble
+// (modificateur --overview) : la grille du portefeuille garde sa mise en page.
+.o_microfinance_dashboard .o_microfinance_kpi_grid--overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+
+    .o_microfinance_kpi {
+        padding: 20px 24px;
+    }
+
+    .o_microfinance_kpi__icon {
+        width: 48px;
+        height: 48px;
+        min-width: 48px;
+    }
+
+    .o_microfinance_kpi__content {
+        strong {
+            font-size: 2rem;
+            font-weight: 700;
+        }
+
+        span {
+            font-size: 1.05rem;
+        }
+
+        small {
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+    }
+
+    .o_microfinance_kpi__link {
+        font-size: 0.95rem;
+    }
+}
+
+@media (max-width: 767px) {
+    .o_microfinance_dashboard .o_microfinance_kpi_grid--overview {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 .o_microfinance_kpi_toolbar {
     display: flex;
     justify-content: flex-end;

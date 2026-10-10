@@ -51,7 +51,7 @@
                         <i class="fa fa-refresh me-1" role="img" aria-label="Actualiser"/>Actualiser
                     </button>
                 </div>
-                <div class="o_microfinance_kpi_grid">
+                <div class="o_microfinance_kpi_grid o_microfinance_kpi_grid--overview">
                     <article t-foreach="tiles" t-as="tile" t-key="tile.key"
                              t-attf-class="o_microfinance_kpi o_microfinance_kpi--{{tile.style}}">
                         <div class="o_microfinance_kpi__body">
