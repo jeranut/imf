@@ -6,11 +6,11 @@
         <field name="name">microfinance.bank.statement.tree</field>
         <field name="model">account.bank.statement</field>
         <field name="arch" type="xml">
-            <tree string="Relevés bancaires" decoration-muted="mf_state == 'draft'" decoration-danger="mf_gap != 0">
+            <tree string="Relevés bancaires" default_order="mf_datetime_from desc, id desc" decoration-muted="mf_state == 'draft'" decoration-danger="mf_gap != 0">
                 <field name="name"/>
                 <field name="journal_id"/>
-                <field name="mf_date_from"/>
-                <field name="mf_date_to"/>
+                <field name="mf_datetime_from"/>
+                <field name="mf_datetime_to"/>
                 <field name="balance_start"/>
                 <field name="balance_end_real" string="Solde final"/>
                 <field name="mf_gap" string="Écart"/>
@@ -36,14 +36,19 @@
                     <field name="mf_state" widget="statusbar" statusbar_visible="draft,validated"/>
                 </header>
                 <sheet>
+                    <div class="alert alert-warning" role="alert" invisible="not mf_tz_missing">
+                        Aucun fuseau horaire n'est défini sur votre utilisateur : les heures sont calculées avec le fuseau de la société,
+                        à défaut « Indian/Antananarivo ». Renseignez-le dans vos préférences.
+                    </div>
+                    <field name="mf_tz_missing" invisible="1"/>
                     <div class="oe_title"><h1><field name="name" placeholder="Référence (automatique)" readonly="1"/></h1></div>
                     <group>
                         <group string="Relevé papier">
                             <field name="journal_id" options="{'no_create': True, 'no_open': True}"
                                    domain="[('type', '=', 'bank'), ('microfinance_usage', '!=', 'fund')]"
                                    required="1" readonly="mf_state == 'validated' or mf_entry_ids" force_save="1"/>
-                            <field name="mf_date_from"/>
-                            <field name="mf_date_to"/>
+                            <field name="mf_datetime_from" required="1" readonly="mf_state == 'validated'"/>
+                            <field name="mf_datetime_to" required="1" readonly="mf_state == 'validated'"/>
                             <field name="attachment_ids" widget="many2many_binary" string="Scan ou photo du relevé"/>
                         </group>
                         <group string="Soldes imprimés">

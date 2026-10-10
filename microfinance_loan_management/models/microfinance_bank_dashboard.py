@@ -3,6 +3,8 @@
 comptable, écart et nombre de lignes à traiter."""
 from odoo import models, _
 
+from .microfinance_bank_statement import FMT_LONG
+
 
 class AccountJournal(models.Model):
     _inherit = 'account.journal'
@@ -15,7 +17,7 @@ class AccountJournal(models.Model):
             data = dashboard_data[journal.id]
             currency = journal.currency_id or journal.company_id.sudo().currency_id
             last = Statement.search([('journal_id', '=', journal.id), ('mf_state', '=', 'validated')],
-                                    order='mf_date_to desc, id desc', limit=1)
+                                    order='mf_datetime_to desc, id desc', limit=1)
             self.env.cr.execute(
                 "SELECT COALESCE(SUM(balance), 0) FROM account_move_line "
                 "WHERE account_id = %s AND company_id = %s AND parent_state = 'posted'",
@@ -28,7 +30,7 @@ class AccountJournal(models.Model):
                 'mf_book_balance': currency.format(book),
                 'mf_gap': currency.format(currency.round(statement_balance - book)),
                 'mf_gap_nonzero': not currency.is_zero(statement_balance - book),
-                'mf_last_statement': last.mf_date_to and last.mf_date_to.strftime('%d/%m/%Y') or '',
+                'mf_last_statement': last._mf_fmt(last.mf_datetime_to, FMT_LONG),
                 'mf_todo_count': Entry.search_count([('journal_id', '=', journal.id), ('state', '=', 'todo')]),
             })
 

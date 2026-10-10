@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Fuseau d'affichage des relevés bancaires quand ni l'utilisateur ni la société n'en ont un -->
+    <record id="param_mf_default_tz" model="ir.config_parameter">
+        <field name="key">mf.default_tz</field>
+        <field name="value">Indian/Antananarivo</field>
+    </record>
+</odoo>

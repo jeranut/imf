@@ -341,7 +341,7 @@ class MfTraceBankStatement(models.Model):
 
     def _mf_period(self):
         self.ensure_one()
-        return _('du %(debut)s au %(fin)s') % {'debut': _dash(self.mf_date_from), 'fin': _dash(self.mf_date_to)}
+        return self._mf_range_text()
 
     @mf_safe
     def _mf_trace_created(self):
