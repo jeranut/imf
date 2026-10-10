@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!-- Balance générale : hérite de la page du Grand livre (barre de filtres, bannière, en-tête) ; remplace le filtre de
+         tri par le regroupement par classe, le message de chargement et le tableau. -->
+    <t t-name="microfinance_loan_management.TrialBalanceReport" t-inherit="microfinance_loan_management.GeneralLedgerReport" t-inherit-mode="primary">
+
+        <xpath expr="//div[hasclass('bak-dropdown')][.//span[@t-esc='sortLabel()']]" position="replace">
+            <div class="bak-dropdown">
+                <button t-att-class="state.groupByClass ? 'bak-filter-button active' : 'bak-filter-button'" type="button" t-on-click="this.toggleGroupByClass">
+                    <i t-att-class="state.groupByClass ? 'fa fa-check-square-o' : 'fa fa-square-o'"/>
+                    <span>Regrouper par classe</span>
+                </button>
+            </div>
+        </xpath>
+
+        <xpath expr="//div[hasclass('bak-report-meta')]" position="after">
+            <div t-if="!state.loading and !state.error and state.reportData"
+                 t-att-class="balanceCheck().balanced ? 'alert alert-success py-1 bak-balance-check' : 'alert alert-warning py-1 bak-balance-check'">
+                <i t-att-class="balanceCheck().balanced ? 'fa fa-check-circle' : 'fa fa-exclamation-triangle'"/>
+                <span t-if="balanceCheck().balanced">Équilibrée</span>
+                <span t-else="">Balance déséquilibrée : écart de <strong t-esc="formatAmount(balanceCheck().gap)"/> (total des débits différent du total des crédits).</span>
+            </div>
+        </xpath>
+
+        <xpath expr="//div[hasclass('bak-loading')]" position="replace">
+            <div class="bak-loading">Chargement de la balance générale...</div>
+        </xpath>
+
+        <xpath expr="//t[@t-if='!state.loading and !state.error and state.reportData']" position="replace">
+            <t t-if="!state.loading and !state.error and state.reportData">
+                <div t-if="!accounts().length" class="bak-empty-menu">Aucun compte pour ces filtres.</div>
+                <table t-if="accounts().length" class="bak-ledger-table bak-trial-balance-table">
+                    <thead>
+                        <tr>
+                            <th rowspan="2">Compte</th>
+                            <th colspan="2" class="text-center">Solde initial</th>
+                            <th colspan="2" class="text-center">Mouvements</th>
+                            <th colspan="2" class="text-center">Solde final</th>
+                        </tr>
+                        <tr>
+                            <th class="text-end">Débit</th><th class="text-end">Crédit</th>
+                            <th class="text-end">Débit</th><th class="text-end">Crédit</th>
+                            <th class="text-end">Débit</th><th class="text-end">Crédit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <t t-if="state.groupByClass">
+                            <t t-foreach="classes()" t-as="group" t-key="group.key">
+                                <tr class="bak-gl-account-header" t-on-click="() => this.toggleClass(group)">
+                                    <td>
+                                        <button class="bak-caret" type="button">
+                                            <t t-if="!isFolded('class_' + group.key)">▾</t>
+                                            <t t-else="">▸</t>
+                                        </button>
+                                        <strong t-esc="group.label"/>
+                                    </td>
+                                    <td class="text-end" t-esc="formatAmount(group.opening_debit)"/>
+                                    <td class="text-end" t-esc="formatAmount(group.opening_credit)"/>
+                                    <td class="text-end" t-esc="formatAmount(group.debit)"/>
+                                    <td class="text-end" t-esc="formatAmount(group.credit)"/>
+                                    <td class="text-end" t-esc="formatAmount(group.closing_debit)"/>
+                                    <td class="text-end" t-esc="formatAmount(group.closing_credit)"/>
+                                </tr>
+                                <t t-if="!isFolded('class_' + group.key)">
+                                    <tr t-foreach="group.accounts" t-as="account" t-key="account.id">
+                                        <td class="ps-4">
+                                            <a href="#" t-on-click.prevent="() => this.openLedger(account)" t-esc="account.code + ' — ' + account.name"/>
+                                        </td>
+                                        <td class="text-end" t-esc="formatAmount(account.opening_debit)"/>
+                                        <td class="text-end" t-esc="formatAmount(account.opening_credit)"/>
+                                        <td class="text-end" t-esc="formatAmount(account.debit)"/>
+                                        <td class="text-end" t-esc="formatAmount(account.credit)"/>
+                                        <td class="text-end" t-esc="formatAmount(account.closing_debit)"/>
+                                        <td class="text-end" t-esc="formatAmount(account.closing_credit)"/>
+                                    </tr>
+                                </t>
+                            </t>
+                        </t>
+                        <t t-else="">
+                            <tr t-foreach="accounts()" t-as="account" t-key="account.id">
+                                <td>
+                                    <a href="#" t-on-click.prevent="() => this.openLedger(account)" t-esc="account.code + ' — ' + account.name"/>
+                                </td>
+                                <td class="text-end" t-esc="formatAmount(account.opening_debit)"/>
+                                <td class="text-end" t-esc="formatAmount(account.opening_credit)"/>
+                                <td class="text-end" t-esc="formatAmount(account.debit)"/>
+                                <td class="text-end" t-esc="formatAmount(account.credit)"/>
+                                <td class="text-end" t-esc="formatAmount(account.closing_debit)"/>
+                                <td class="text-end" t-esc="formatAmount(account.closing_credit)"/>
+                            </tr>
+                        </t>
+                    </tbody>
+                    <tfoot>
+                        <tr class="bak-ledger-total-row">
+                            <td>Total général</td>
+                            <td class="text-end" t-esc="formatAmount(totals().opening_debit)"/>
+                            <td class="text-end" t-esc="formatAmount(totals().opening_credit)"/>
+                            <td class="text-end" t-esc="formatAmount(totals().debit)"/>
+                            <td class="text-end" t-esc="formatAmount(totals().credit)"/>
+                            <td class="text-end" t-esc="formatAmount(totals().closing_debit)"/>
+                            <td class="text-end" t-esc="formatAmount(totals().closing_credit)"/>
+                        </tr>
+                    </tfoot>
+                </table>
+            </t>
+        </xpath>
+    </t>
+
+</templates>

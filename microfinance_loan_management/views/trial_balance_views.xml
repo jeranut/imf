@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <!-- Balance générale : écran interactif (même famille que le Grand livre). Le menu d'origine de base_accounting_kit
+         garde son identifiant : seule son action change, ses restrictions de groupes sont levées (l'accès est contrôlé
+         par le contrôleur, comme pour le Grand livre). L'ancien assistant (action_account_balance_menu) et son PDF
+         restent dans la base. -->
+    <record id="action_trial_balance_mf" model="ir.actions.client">
+        <field name="name">Balance générale</field>
+        <field name="tag">microfinance_loan_management.trial_balance</field>
+        <field name="params" eval="{'report_title': 'Balance générale'}"/>
+    </record>
+
+    <record id="base_accounting_kit.menu_Balance_report" model="ir.ui.menu">
+        <field name="name">Balance générale</field>
+        <field name="action" eval="'ir.actions.client,%d' % ref('microfinance_loan_management.action_trial_balance_mf')"/>
+        <field name="groups_id" eval="[(5, 0, 0)]"/>
+    </record>
+</odoo>

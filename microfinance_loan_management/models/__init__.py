@@ -59,6 +59,8 @@ from . import account_journal
 from . import account_financial_report_mf
 from . import account_general_ledger_report
 from . import report_general_ledger_mf
+from . import account_trial_balance_report
+from . import report_trial_balance_mf
 from . import microfinance_fond_partage_exploitation
 
 from . import mf_trace

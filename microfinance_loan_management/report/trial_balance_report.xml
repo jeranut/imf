@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <!-- PDF de la Balance générale interactive : mêmes filtres que l'écran, regroupée par classe. -->
+    <template id="report_trial_balance_mf">
+        <t t-call="web.html_container">
+            <t t-call="web.internal_layout">
+                <div class="page">
+                    <h2 t-esc="title"/>
+                    <div class="row mt32 mb32">
+                        <div class="col-4"><strong>Agence :</strong><p t-esc="company.name"/></div>
+                        <div class="col-4"><strong>Période :</strong><p>Du <span t-esc="date_from"/> au <span t-esc="date_to"/></p></div>
+                        <div class="col-4">
+                            <strong>Journaux :</strong><p t-esc="journals_label"/>
+                            <strong>Pièces :</strong><p t-esc="target_move_label"/>
+                        </div>
+                    </div>
+                    <table class="table table-sm table-reports">
+                        <thead>
+                            <tr>
+                                <th rowspan="2">Compte</th>
+                                <th colspan="2" class="text-center">Solde initial</th>
+                                <th colspan="2" class="text-center">Mouvements</th>
+                                <th colspan="2" class="text-center">Solde final</th>
+                            </tr>
+                            <tr>
+                                <th class="text-end">Débit</th><th class="text-end">Crédit</th>
+                                <th class="text-end">Débit</th><th class="text-end">Crédit</th>
+                                <th class="text-end">Débit</th><th class="text-end">Crédit</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <t t-foreach="report_data['classes']" t-as="group" t-key="group['key']">
+                                <tr t-foreach="group['accounts']" t-as="account" t-key="account['id']">
+                                    <td><span t-esc="account['code']"/> — <span t-esc="account['name']"/></td>
+                                    <td class="text-end" t-esc="'%.2f' % account['opening_debit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % account['opening_credit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % account['debit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % account['credit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % account['closing_debit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % account['closing_credit']"/>
+                                </tr>
+                                <tr class="fw-bold">
+                                    <td>Sous-total <span t-esc="group['label']"/></td>
+                                    <td class="text-end" t-esc="'%.2f' % group['opening_debit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % group['opening_credit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % group['debit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % group['credit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % group['closing_debit']"/>
+                                    <td class="text-end" t-esc="'%.2f' % group['closing_credit']"/>
+                                </tr>
+                            </t>
+                            <tr class="fw-bold">
+                                <td>Total général</td>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['opening_debit']"/>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['opening_credit']"/>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['debit']"/>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['credit']"/>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['closing_debit']"/>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['closing_credit']"/>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p t-if="report_data['balance_check']['balanced']" class="fw-bold">Balance équilibrée.</p>
+                    <p t-else="" class="fw-bold text-danger">Balance déséquilibrée : écart de
+                        <span t-esc="'%.2f' % report_data['balance_check']['gap']"/>.</p>
+                </div>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_trial_balance_mf" model="ir.actions.report">
+        <field name="name">Balance générale</field>
+        <field name="model">res.company</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_trial_balance_mf</field>
+        <field name="report_file">microfinance_loan_management.report_trial_balance_mf</field>
+        <field name="attachment_use">False</field>
+    </record>
+</odoo>
