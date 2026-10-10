@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<odoo>
+    <!-- PDF du Contrôle des journaux interactif : synthèse par journal et détail des anomalies, mêmes filtres que l'écran. -->
+    <template id="report_journal_control_mf">
+        <t t-call="web.html_container">
+            <t t-call="web.internal_layout">
+                <div class="page">
+                    <h2 t-esc="title"/>
+                    <div class="row mt32 mb32">
+                        <div class="col-4"><strong>Agence :</strong><p t-esc="company.name"/></div>
+                        <div class="col-4"><strong>Période :</strong><p>Du <span t-esc="date_from"/> au <span t-esc="date_to"/></p></div>
+                        <div class="col-4">
+                            <strong>Journaux :</strong><p t-esc="journals_label"/>
+                            <strong>Pièces :</strong><p t-esc="target_move_label"/>
+                        </div>
+                    </div>
+                    <table class="table table-sm table-reports">
+                        <thead>
+                            <tr><th>Journal</th><th>Type</th><th class="text-end">Pièces</th><th class="text-end">Débit</th>
+                                <th class="text-end">Crédit</th><th class="text-end">Écart</th>
+                                <th class="text-end">Désé-quilibrées</th><th class="text-end">Brouillons</th>
+                                <th class="text-end">Annulées</th><th class="text-end">Trous</th><th>Statut</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr t-foreach="report_data['journals']" t-as="j" t-key="j['id']">
+                                <td><span t-esc="j['code']"/> — <span t-esc="j['name']"/></td>
+                                <td t-esc="j['type']"/>
+                                <td class="text-end" t-esc="j['count']"/>
+                                <td class="text-end" t-esc="'%.2f' % j['debit']"/>
+                                <td class="text-end" t-esc="'%.2f' % j['credit']"/>
+                                <td class="text-end" t-esc="'%.2f' % j['gap']"/>
+                                <td class="text-end" t-esc="j['anomalies']['unbalanced']"/>
+                                <td class="text-end" t-esc="j['anomalies']['draft']"/>
+                                <td class="text-end" t-esc="j['anomalies']['cancel']"/>
+                                <td class="text-end" t-esc="j['anomalies']['gaps']"/>
+                                <td><t t-if="j['status'] == 'ok'">OK</t><t t-elif="j['status'] == 'info'">À noter</t><t t-else="">Anomalie</t></td>
+                            </tr>
+                            <tr class="fw-bold">
+                                <td colspan="2">Total général</td>
+                                <td class="text-end" t-esc="report_data['totals']['count']"/>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['debit']"/>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['credit']"/>
+                                <td class="text-end" t-esc="'%.2f' % report_data['totals']['gap']"/>
+                                <td colspan="5"/>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p t-if="report_data['balanced']" class="fw-bold">Équilibrée.</p>
+                    <p t-else="" class="fw-bold text-danger">Déséquilibrée : écart de <span t-esc="'%.2f' % report_data['totals']['gap']"/>.</p>
+
+                    <t t-foreach="report_data['journals']" t-as="j" t-key="j['id']">
+                        <t t-set="moves_by_kind" t-value="details.get(j['id'], {})"/>
+                        <t t-if="moves_by_kind or j['gap_details']">
+                            <h5><span t-esc="j['code']"/> — <span t-esc="j['name']"/></h5>
+                            <t t-foreach="moves_by_kind.items()" t-as="entry" t-key="entry[0]">
+                                <p class="mb-0 fw-bold" t-esc="kind_labels[entry[0]]"/>
+                                <table class="table table-sm table-reports">
+                                    <tbody>
+                                        <tr t-foreach="entry[1]" t-as="m" t-key="m['move_id']">
+                                            <td t-esc="m['date']"/><td t-esc="m['piece']"/><td t-esc="m['state_label']"/>
+                                            <td t-esc="m['partner_name']"/><td t-esc="m['label']"/>
+                                            <td class="text-end" t-esc="'%.2f' % m['debit']"/>
+                                            <td class="text-end" t-esc="'%.2f' % m['credit']"/>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </t>
+                            <t t-foreach="j['gap_details']" t-as="gap" t-key="gap['prefix']">
+                                <p>Trou de numérotation (information, pièce supprimée ou numéro consommé) :
+                                    <span t-esc="', '.join(gap['labels'])"/></p>
+                            </t>
+                        </t>
+                    </t>
+                </div>
+            </t>
+        </t>
+    </template>
+
+    <record id="action_report_journal_control_mf" model="ir.actions.report">
+        <field name="name">Contrôle des journaux</field>
+        <field name="model">res.company</field>
+        <field name="report_type">qweb-pdf</field>
+        <field name="report_name">microfinance_loan_management.report_journal_control_mf</field>
+        <field name="report_file">microfinance_loan_management.report_journal_control_mf</field>
+        <field name="attachment_use">False</field>
+    </record>
+</odoo>

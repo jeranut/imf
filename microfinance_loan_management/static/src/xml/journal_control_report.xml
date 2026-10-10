@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <!-- Contrôle des journaux : hérite de la page du Grand livre (barre de filtres, bannière, en-tête) ; retire les filtres
+         propres aux comptes, adapte le tri, remplace le tableau. -->
+    <t t-name="microfinance_loan_management.JournalControlReport" t-inherit="microfinance_loan_management.GeneralLedgerReport" t-inherit-mode="primary">
+
+        <xpath expr="//div[hasclass('bak-dropdown')][.//span[@t-esc='displayAccountLabel()']]" position="replace"/>
+        <xpath expr="//div[hasclass('bak-dropdown')][.//span[text()='Soldes initiaux']]" position="replace"/>
+
+        <xpath expr="//div[hasclass('bak-dropdown')][.//span[@t-esc='sortLabel()']]" position="replace">
+            <div class="bak-dropdown">
+                <button class="bak-filter-button" type="button" t-on-click="() => this.toggleDropdown('sort')">
+                    <i class="fa fa-sort"/>
+                    <span t-esc="sortLabel()"/>
+                </button>
+                <div t-if="this.isDropdownOpen('sort')" class="bak-menu">
+                    <button type="button" t-att-class="state.sortby === 'sort_date' ? 'active' : ''" t-on-click="() => this.setSortby('sort_date')">Date</button>
+                    <button type="button" t-att-class="state.sortby === 'sort_number' ? 'active' : ''" t-on-click="() => this.setSortby('sort_number')">Numéro de pièce</button>
+                </div>
+            </div>
+        </xpath>
+
+        <xpath expr="//div[hasclass('bak-loading')]" position="replace">
+            <div class="bak-loading">Chargement du contrôle des journaux...</div>
+        </xpath>
+
+        <xpath expr="//t[@t-if='!state.loading and !state.error and state.reportData']" position="replace">
+            <t t-if="!state.loading and !state.error and state.reportData">
+                <div t-if="!journalRows().length" class="bak-empty-menu">Aucun journal pour ces filtres.</div>
+                <table t-if="journalRows().length" class="bak-ledger-table">
+                    <thead>
+                        <tr>
+                            <th>Journal</th><th>Type</th><th class="text-end">Pièces</th>
+                            <th class="text-end">Débit</th><th class="text-end">Crédit</th><th class="text-end">Écart</th>
+                            <th class="text-end">Déséquilibrées</th><th class="text-end">Brouillons</th>
+                            <th class="text-end">Annulées</th><th class="text-end">Trous</th><th>Statut</th>
+                        </tr>
+                    </thead>
+                    <t t-foreach="journalRows()" t-as="journal" t-key="journal.id">
+                        <tbody>
+                            <tr class="bak-gl-account-header" t-on-click="() => this.toggleJournalRow(journal)">
+                                <td>
+                                    <button class="bak-caret" type="button">
+                                        <t t-if="!isFolded('journal_' + journal.id)">▾</t>
+                                        <t t-else="">▸</t>
+                                    </button>
+                                    <span t-esc="journal.code + ' — ' + journal.name"/>
+                                </td>
+                                <td t-esc="journal.type"/>
+                                <td class="text-end" t-esc="journal.count"/>
+                                <td class="text-end" t-esc="formatAmount(journal.debit)"/>
+                                <td class="text-end" t-esc="formatAmount(journal.credit)"/>
+                                <td class="text-end" t-esc="formatAmount(journal.gap)"/>
+                                <td class="text-end">
+                                    <a t-if="journal.anomalies.unbalanced" href="#" class="text-danger fw-bold" t-on-click.prevent.stop="() => this.openAnomaly(journal, 'unbalanced')" t-esc="journal.anomalies.unbalanced"/>
+                                    <span t-else="">0</span>
+                                </td>
+                                <td class="text-end">
+                                    <a t-if="journal.anomalies.draft" href="#" t-on-click.prevent.stop="() => this.openAnomaly(journal, 'draft')" t-esc="journal.anomalies.draft"/>
+                                    <span t-else="">0</span>
+                                </td>
+                                <td class="text-end">
+                                    <a t-if="journal.anomalies.cancel" href="#" t-on-click.prevent.stop="() => this.openAnomaly(journal, 'cancel')" t-esc="journal.anomalies.cancel"/>
+                                    <span t-else="">0</span>
+                                </td>
+                                <td class="text-end">
+                                    <a t-if="journal.anomalies.gaps" href="#" title="Information : un trou signale une pièce supprimée ou un numéro consommé" t-on-click.prevent.stop="() => this.toggleGaps(journal)" t-esc="journal.anomalies.gaps"/>
+                                    <span t-else="">0</span>
+                                </td>
+                                <td>
+                                    <span t-att-class="journal.status === 'anomaly' ? 'badge text-bg-danger' : (journal.status === 'info' ? 'badge text-bg-warning' : 'badge text-bg-success')" t-esc="statusLabel(journal.status)"/>
+                                </td>
+                            </tr>
+                            <tr t-if="!isFolded('journal_' + journal.id)">
+                                <td colspan="11">
+                                    <div t-if="state.gapsOpen[journal.id]" class="alert alert-info py-1">
+                                        <strong>Trous de numérotation (information) :</strong> un trou signale une pièce supprimée ou un numéro consommé.
+                                        <div t-foreach="journal.gap_details" t-as="gap" t-key="gap.prefix">
+                                            Numéros manquants (<t t-esc="gap.count"/>) : <span t-esc="gap.labels.join(', ')"/>
+                                            <t t-if="gap.count &gt; gap.labels.length"> …</t>
+                                        </div>
+                                    </div>
+                                    <div t-if="state.anomalyFilter[journal.id]" class="alert alert-warning py-1">
+                                        Filtre : <strong t-esc="anomalyLabel(state.anomalyFilter[journal.id])"/>
+                                        <a href="#" class="ms-2" t-on-click.prevent="() => this.clearAnomaly(journal)">Retirer le filtre</a>
+                                    </div>
+                                    <table class="bak-ledger-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th><th>Pièce</th><th>État</th><th>Tiers</th><th>Libellé</th>
+                                                <th class="text-end">Débit</th><th class="text-end">Crédit</th><th>Équilibre</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <t t-foreach="moves(journal).rows" t-as="move" t-key="move.move_id">
+                                                <tr>
+                                                    <td t-esc="formatDate(move.date)"/>
+                                                    <td>
+                                                        <button class="bak-caret" type="button" t-on-click="() => this.toggleMove(move)">
+                                                            <t t-if="!isFolded('move_' + move.move_id)">▾</t>
+                                                            <t t-else="">▸</t>
+                                                        </button>
+                                                        <a href="#" t-on-click.prevent="() => this.openMove(move.move_id)" t-esc="move.piece"/>
+                                                        <i class="fa fa-search bak-loupe" title="Ouvrir la pièce" t-on-click="() => this.openMove(move.move_id)"/>
+                                                    </td>
+                                                    <td t-esc="move.state_label"/>
+                                                    <td t-esc="move.partner_name"/>
+                                                    <td t-esc="move.label"/>
+                                                    <td class="text-end" t-esc="formatAmount(move.debit)"/>
+                                                    <td class="text-end" t-esc="formatAmount(move.credit)"/>
+                                                    <td>
+                                                        <span t-if="move.balanced" class="text-success">Équilibrée</span>
+                                                        <span t-else="" class="text-danger fw-bold">Déséquilibrée</span>
+                                                    </td>
+                                                </tr>
+                                                <tr t-if="!isFolded('move_' + move.move_id)">
+                                                    <td colspan="8">
+                                                        <table class="bak-ledger-table">
+                                                            <thead><tr><th>Compte</th><th>Libellé</th><th class="text-end">Débit</th><th class="text-end">Crédit</th></tr></thead>
+                                                            <tbody>
+                                                                <tr t-foreach="linesOf(move)" t-as="line" t-key="line.line_id">
+                                                                    <td t-esc="line.account"/>
+                                                                    <td t-esc="line.label"/>
+                                                                    <td class="text-end" t-esc="formatAmount(line.debit)"/>
+                                                                    <td class="text-end" t-esc="formatAmount(line.credit)"/>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                            </t>
+                                            <tr t-if="moves(journal).loading"><td colspan="8">Chargement...</td></tr>
+                                            <tr t-if="!moves(journal).rows.length and !moves(journal).loading"><td colspan="8">Aucune pièce.</td></tr>
+                                        </tbody>
+                                    </table>
+                                    <div t-if="moves(journal).hasMore" class="bak-gl-more">
+                                        <button class="btn btn-secondary" type="button" t-on-click="() => this.loadMoves(journal)">Voir plus</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </t>
+                    <tfoot>
+                        <tr class="bak-ledger-total-row">
+                            <td>Total général</td>
+                            <td/>
+                            <td class="text-end" t-esc="totals().count"/>
+                            <td class="text-end" t-esc="formatAmount(totals().debit)"/>
+                            <td class="text-end" t-esc="formatAmount(totals().credit)"/>
+                            <td class="text-end" t-esc="formatAmount(totals().gap)"/>
+                            <td class="text-end" t-esc="totals().anomalies.unbalanced"/>
+                            <td class="text-end" t-esc="totals().anomalies.draft"/>
+                            <td class="text-end" t-esc="totals().anomalies.cancel"/>
+                            <td class="text-end" t-esc="totals().anomalies.gaps"/>
+                            <td>
+                                <span t-if="isBalanced()" class="badge text-bg-success">Équilibrée</span>
+                                <span t-else="" class="badge text-bg-danger">Déséquilibrée (écart <t t-esc="formatAmount(totals().gap)"/>)</span>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </t>
+        </xpath>
+    </t>
+
+</templates>
