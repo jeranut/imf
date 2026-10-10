@@ -56,6 +56,7 @@ class TestDashboardTiles(MicrofinanceNoFundMixin, MicrofinanceCommon):
         field_name = {
             'granted_amount': 'loan_amount', 'outstanding_amount': 'balance_total',
             'overdue_amount': 'overdue_amount', 'savings_outstanding_total': 'balance',
+            'fund_count': 'agency_allocated',
         }.get(tile['key'])
         expected = sum(records.mapped(field_name)) if field_name else len(records)
         self.assertAlmostEqual(tile['value'], expected, places=2, msg=tile['key'])
@@ -124,8 +125,12 @@ class TestDashboardTiles(MicrofinanceNoFundMixin, MicrofinanceCommon):
     def test_tuile_fonds_compteur_egal_liste(self):
         tile = self._tiles()['fund_count']
         funds, allocated = self.env['microfinance.fond.credit']._get_agency_accessible_funds(self.company_a.id)
-        self.assertEqual(tile['value'], len(funds))
-        self.assertAlmostEqual(tile['secondary'], allocated, places=2)
+        # chiffre principal = part allouée en Ar (même champ que la colonne « Alloué (ma part) » de la liste) ;
+        # le nombre de fonds passe en ligne secondaire
+        self.assertEqual(tile['type'], 'money')
+        self.assertAlmostEqual(tile['value'], allocated, places=2)
+        self.assertFalse(tile['secondary'])
+        self.assertEqual(tile['secondary_items'][0], {'label': '%d fonds' % len(funds), 'text': True})
         self.assertEqual(self.env['microfinance.fond.credit'].search(tile['domain']), funds)
 
     def test_erreur_de_calcul_jamais_affichee_a_zero(self):

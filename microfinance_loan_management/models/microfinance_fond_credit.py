@@ -351,7 +351,8 @@ class MicrofinanceFondCredit(models.Model):
     @api.model
     def _get_agency_accessible_funds(self, company_id):
         """(fonds, part disponible pour l'agence) : fonds actifs de l'agence + fonds partagés, un
-        fonds partagé géré par allocation n'étant retenu que s'il a une allocation pour l'agence.
+        fonds partagé géré par allocation n'étant retenu que s'il a une allocation pour l'agence (sauf pour la
+        société mère, qui reçoit les fonds avant de les partager).
         Les fonds sont lus avec les droits de l'utilisateur ; seul le montant de l'allocation est lu
         en sudo (l'agence ne voit par ir.rule que sa propre allocation, lecture déterministe)."""
         candidates = self.search([
@@ -360,12 +361,16 @@ class MicrofinanceFondCredit(models.Model):
         ])
         funds = self.browse()
         total = 0.0
+        parent_id = self.env['res.company']._get_microfinance_parent().id
         for fund in candidates:
             if fund.scope == 'multi_company' and fund.allocation_required:
                 allocation = fund.sudo().allocation_ids.filtered(lambda a: a.company_id.id == company_id)
                 if not allocation:
-                    continue
-                total += allocation.solde_disponible
+                    # La société mère reçoit les fonds avant de les partager : elle les voit même sans part (N1).
+                    if company_id != parent_id:
+                        continue
+                else:
+                    total += allocation.solde_disponible
             else:
                 total += fund.solde_disponible
             funds |= fund

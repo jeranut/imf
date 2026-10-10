@@ -67,7 +67,7 @@
                                     <t t-esc="tile.secondary_label"/> <t t-esc="formatMoney(tile.secondary)"/>
                                 </small>
                                 <small t-foreach="tile.secondary_items or []" t-as="item" t-key="item.label" t-if="!tile.error" class="text-muted d-block">
-                                    <t t-esc="item.label"/> : <t t-esc="formatMoney(item.value)"/>
+                                    <t t-esc="item.label"/><t t-if="!item.text"> : <t t-esc="formatMoney(item.value)"/></t><t t-if="item.note"> · <t t-esc="item.note"/></t>
                                 </small>
                             </div>
                         </div>

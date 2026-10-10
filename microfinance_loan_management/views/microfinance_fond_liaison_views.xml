@@ -57,11 +57,22 @@
         <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_fond_credit_form"/>
         <field name="arch" type="xml">
             <xpath expr="//group[field[@name='total_contributions']]" position="before">
-                <group string="Part de l'agence" invisible="not allocation_required">
+                <group string="Part allouée à l'agence" invisible="not allocation_required">
                     <field name="agency_allocated" string="Alloué"/>
                     <field name="agency_in_transit" string="En transit"/>
+                    <field name="transit_banque_agence" string="Relevé à saisir (banque, journal)"
+                           invisible="not transit_banque_agence"/>
                     <field name="agency_received" string="Reçu en banque"/>
                     <field name="agency_not_received" string="Non reçu (écriture agence à générer)"/>
+                </group>
+                <group string="Fonds reçus à répartir (siège)" invisible="not siege_view">
+                    <field name="siege_view" invisible="1"/>
+                    <field name="siege_contribue" string="Contribué (dépôts − retraits)"/>
+                    <field name="siege_en_transit" string="En transit"/>
+                    <field name="transit_banque_siege" string="Relevé à saisir (banque, journal)"
+                           invisible="not transit_banque_siege"/>
+                    <field name="siege_recu_banque" string="Reçu en banque"/>
+                    <field name="reste_partageable" string="Reste à répartir"/>
                 </group>
                 <field name="can_manage_funds" invisible="1"/>
                 <field name="allocation_required" invisible="1"/>
@@ -85,6 +96,13 @@
                 <field name="agency_allocated" string="Alloué (ma part)" optional="show"/>
                 <field name="agency_in_transit" string="En transit" optional="show"/>
                 <field name="agency_received" string="Reçu en banque" optional="show"/>
+                <field name="siege_view" column_invisible="1"/>
+                <field name="siege_contribue" string="Siège : contribué" optional="show" invisible="not siege_view"/>
+                <field name="siege_en_transit" string="Siège : en transit" optional="show" invisible="not siege_view"/>
+                <field name="siege_recu_banque" string="Siège : reçu en banque" optional="show" invisible="not siege_view"/>
+                <field name="transit_banque_siege" string="Banque (relevé du siège)" optional="show"
+                       invisible="not siege_view"/>
+                <field name="transit_banque_agence" string="Banque (relevé de l'agence)" optional="show"/>
             </xpath>
         </field>
     </record>

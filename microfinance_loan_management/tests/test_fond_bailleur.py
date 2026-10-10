@@ -13,6 +13,10 @@ class TestFondBailleurCommon(MicrofinanceCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        # Une base réelle (MOWGLI et ses copies) a déjà une société mère désignée : sans cette ligne, la création du
+        # bailleur ci-dessous est refusée depuis une autre société. Supprimée dans la transaction de classe
+        # (annulée en fin de classe), jamais dans la base ; les tests qui en ont besoin la posent via _set_parent().
+        cls.env['ir.config_parameter'].sudo().search([('key', '=', 'microfinance.parent_company_id')]).unlink()
         cls.bailleur = cls.env['microfinance.bailleur.fonds'].create({'name': 'Bailleur Test'})
         cls.fond_account = cls.env['account.account'].create({
             'name': 'Dette bailleur test', 'code': 'TFONDGL', 'account_type': 'liability_current',

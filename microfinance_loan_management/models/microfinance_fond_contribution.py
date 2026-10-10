@@ -216,6 +216,22 @@ class MicrofinanceFondContribution(models.Model):
             'line_ids': line_ids,
         }
 
+    def _bank_received_amount(self):
+        """Montant de la contribution dont la ligne en suspens est lettrée avec une ligne de relevé bancaire.
+        Dépôt : ligne débitrice 139100 lettrée avec un relevé ; retrait (ou remboursement) : ligne créditrice 139500.
+        Un lettrage avec une autre pièce (extourne) n'est jamais un relevé : il ne compte pas."""
+        self.ensure_one()
+        lines = self.move_id.sudo().line_ids
+        if self.type_mouvement == 'depot':
+            suspense = lines.filtered(lambda l: l.debit > 0)[:1]
+            banked = sum(partial.amount for partial in suspense.matched_credit_ids
+                         if partial.credit_move_id.move_id.statement_line_id)
+        else:
+            suspense = lines.filtered(lambda l: l.credit > 0)[:1]
+            banked = sum(partial.amount for partial in suspense.matched_debit_ids
+                         if partial.debit_move_id.move_id.statement_line_id)
+        return min(banked, self.amount)
+
     def action_post(self):
         self._check_parent_only_shared()
         for contrib in self:

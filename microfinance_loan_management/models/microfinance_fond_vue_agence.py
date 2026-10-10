@@ -9,6 +9,14 @@ Trois montants calculés (jamais saisis) par allocation d'agence :
   - Non reçu          : parts sans écriture miroir (côté agence pas encore généré).
 L'état de rapprochement se lit sur le lettrage de la ligne, jamais sur un champ saisi.
 
+Deux niveaux, jamais mélangés (la société mère est à la fois le siège et une agence) :
+  - N1 « Fonds reçus à répartir (siège) » : contributions bailleur → banque du siège (Dr 139100 du journal de fonds).
+        Contribué = dépôts validés − retraits ; reçu en banque = part lettrée avec un relevé ; en transit =
+        contribué − reçu en banque (faits bancaires bruts, non nets du partagé) ; reste à répartir = reste_partageable.
+        Calculés pour la société mère seulement ; 0 pour une agence.
+  - N2 « Part allouée à l'agence » : partages siège → agences (ci-dessus), part gardée du siège comprise (elle reste
+        en transit tant que le relevé du journal crédit n'a pas lettré sa 139100).
+
 Une agence ne voit que sa part : pour une société qui n'est pas la société mère, la lecture du fonds (_read_format)
 remplace les montants consolidés (100 % du fonds) par ceux de sa propre allocation.
 """
@@ -73,18 +81,11 @@ class MicrofinanceFondAllocation(models.Model):
                     ('partage_id.fond_id', '=', allocation.fond_id.id), ('partage_id.state', '=', 'validated'),
                     ('company_id', '=', allocation.company_id.id), ('amount', '>', 0)])
                 for line in lines:
-                    # La part gardée par la société mère n'a pas de miroir : sa propre écriture porte le suspens.
-                    move = line.hq_move_id if line.company_id == line.partage_id.company_id else line.agency_move_id
-                    if not move:
-                        missing += line.amount
-                        continue
-                    suspense = move.line_ids.filtered(lambda l: l.debit > 0)[:1]
-                    banked = sum(
-                        partial.amount for partial in suspense.matched_credit_ids
-                        if partial.credit_move_id.move_id.statement_line_id)
-                    banked = min(banked, line.amount)
+                    # Même lecture du lettrage que la mention de la banque (microfinance_fond_transit_banque.py).
+                    banked, in_transit, not_received, _journal = line._bank_state()
                     received += banked
-                    transit += line.amount - banked
+                    transit += in_transit
+                    missing += not_received
             allocation.amount_in_transit = transit
             allocation.amount_received = received
             allocation.amount_not_received = missing
@@ -113,6 +114,49 @@ class MicrofinanceFondCredit(models.Model):
     agency_not_received = fields.Monetary(
         string='Non reçu', compute='_compute_agency_amounts', compute_sudo=True,
         help="Parts de la société courante sans écriture miroir (à générer).")
+
+    siege_view = fields.Boolean(
+        string='Vue siège', compute='_compute_siege_amounts', compute_sudo=True,
+        help="Vrai quand la société courante est la société mère : seule elle voit les contributions du fonds (N1).")
+    siege_contribue = fields.Monetary(
+        string='Contribué (siège)', compute='_compute_siege_amounts', compute_sudo=True,
+        help="Dépôts bailleur validés moins retraits, sur le journal de fonds du siège.")
+    siege_recu_banque = fields.Monetary(
+        string='Reçu en banque (siège)', compute='_compute_siege_amounts', compute_sudo=True,
+        help="Part des contributions dont la ligne en suspens est lettrée avec une ligne de relevé du siège.")
+    siege_en_transit = fields.Monetary(
+        string='En transit (siège)', compute='_compute_siege_amounts', compute_sudo=True,
+        help="Contribué moins reçu en banque : contributions comptabilisées, pas encore rapprochées d'un relevé. "
+             "Brut : non diminué de ce qui a déjà été partagé aux agences.")
+
+    @api.depends_context('company')
+    @api.depends('destination', 'passer_gl', 'company_id', 'contribution_ids.amount',
+                 'contribution_ids.type_mouvement', 'contribution_ids.state', 'contribution_ids.move_id')
+    def _compute_siege_amounts(self):
+        parent = self.env['res.company']._get_microfinance_parent()
+        is_parent = bool(parent) and self.env.company == parent
+        for fond in self:
+            contribue = banked = 0.0
+            if is_parent and fond.destination == 'credit' and fond.passer_gl and fond._fund_company() == parent:
+                for contrib in fond.contribution_ids.filtered(lambda c: c.state == 'posted' and c.move_id):
+                    sign = 1.0 if contrib.type_mouvement == 'depot' else -1.0
+                    contribue += sign * contrib.amount
+                    banked += sign * contrib._bank_received_amount()
+            fond.siege_view = is_parent
+            fond.siege_contribue = contribue
+            fond.siege_recu_banque = banked
+            fond.siege_en_transit = contribue - banked
+
+    @api.model
+    def _get_siege_fund_amounts(self, company_id, funds):
+        """Totaux N1 de la tuile « Fonds reçus à répartir (siège) » : mêmes champs que la liste."""
+        funds = funds.with_company(company_id)
+        return {
+            'contribue': sum(funds.mapped('siege_contribue')),
+            'en_transit': sum(funds.mapped('siege_en_transit')),
+            'recu_banque': sum(funds.mapped('siege_recu_banque')),
+            'reste': sum(funds.mapped('reste_partageable')) if funds else 0.0,
+        }
 
     # ------------------------------------------------------------------ montants de l'agence
     def _agency_allocation(self, company):

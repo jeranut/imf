@@ -1085,23 +1085,25 @@ class MicrofinanceLoan(models.Model):
             def fund_count():
                 funds, _solde = FondCredit._get_agency_accessible_funds(company.id)
                 funds_holder['domain'] = [('id', 'in', funds.ids)]
-                # Trois montants calculés (jamais saisis) : alloué, en transit (ligne 139100 non lettrée),
-                # reçu en banque (ligne 139100 lettrée avec un relevé).
+                # Chiffre principal : part allouée à l'agence (même champ que la colonne « Alloué (ma part) » de la
+                # liste). Trois montants calculés (jamais saisis) : alloué, en transit (ligne 139100 non lettrée, avec
+                # la banque dont il faut saisir le relevé), reçu en banque (ligne 139100 lettrée avec un relevé).
                 amounts = FondCredit._get_agency_fund_amounts(company.id, funds)
                 funds_holder['items'] = [
-                    {'label': _('En transit'), 'value': amounts['in_transit']},
+                    {'label': _('%d fonds') % len(funds), 'text': True},
+                    {'label': _('En transit'), 'value': amounts['in_transit'],
+                     'note': FondCredit.with_company(company)._transit_note_for(funds, 'agence')},
                     {'label': _('Reçu en banque'), 'value': amounts['received']},
                 ]
-                return len(funds), amounts['allocated']
+                return amounts['allocated']
 
             tile = self._overview_tile(
-                'fund_count', _("Fonds accessibles à l'agence"), 'count', 'fa-university', 'fonds',
+                'fund_count', _("Fonds accessibles à l'agence"), 'money', 'fa-university', 'fonds',
                 fund_count)
             if funds_holder:
                 tile.update({
                     'model': 'microfinance.fond.credit', 'domain': funds_holder['domain'],
                     'link_label': _('Voir les fonds'),
-                    'secondary_label': _("dont part allouée à l'agence :"),
                     'secondary_items': funds_holder.get('items', []),
                     # Vues dédiées sans création/import/duplication (tableau de bord =
                     # consultation uniquement) ; le menu "Fonds de crédit" garde ses vues
@@ -1112,8 +1114,45 @@ class MicrofinanceLoan(models.Model):
                     ],
                 })
             tiles.append(tile)
+            tiles.extend(self._siege_fund_tiles(company, funds_holder))
             tiles.extend(self._exploitation_fund_tiles(company))
         return tiles
+
+    def _siege_fund_tiles(self, company, funds_holder):
+        """Tuile N1 « Fonds reçus à répartir (siège) », société mère seulement : contributions bailleur (contribué,
+        en transit, reçu en banque, reste à répartir) sur les mêmes fonds et les mêmes champs que la liste. Distincte
+        du bloc N2 « part allouée à l'agence » de la tuile « Fonds accessibles à l'agence » : une agence autre que la
+        société mère n'affiche que N2."""
+        parent = self.env['res.company']._get_microfinance_parent()
+        if not parent or company != parent or not funds_holder.get('domain'):
+            return []
+        FondCredit = self.env['microfinance.fond.credit']
+        holder = {}
+
+        def received():
+            funds = FondCredit.with_company(company).search(funds_holder['domain'])
+            amounts = FondCredit._get_siege_fund_amounts(company.id, funds)
+            holder['items'] = [
+                {'label': _('En transit'), 'value': amounts['en_transit'],
+                 'note': FondCredit._transit_note_for(funds, 'siege')},
+                {'label': _('Reçu en banque'), 'value': amounts['recu_banque']},
+                {'label': _('Reste à répartir aux agences'), 'value': amounts['reste']},
+            ]
+            return amounts['contribue']
+
+        tile = self._overview_tile(
+            'siege_funds', _('Fonds reçus à répartir (siège)'), 'money', 'fa-download', 'fonds', received,
+            'microfinance.fond.credit', funds_holder['domain'], _('Voir les fonds'),
+            tooltip=_("Contributions des bailleurs sur la banque du siège (dépôts moins retraits). En transit : pas "
+                      "encore rapproché d'un relevé du siège. Brut : non diminué de ce qui est déjà partagé."))
+        tile.update({
+            'secondary_items': holder.get('items', []),
+            'views': [
+                [self.env.ref('microfinance_loan_management.view_microfinance_fond_credit_tree_dashboard').id, 'list'],
+                [self.env.ref('microfinance_loan_management.view_microfinance_fond_credit_form_dashboard').id, 'form'],
+            ],
+        })
+        return [tile]
 
     def _exploitation_fund_tiles(self, company):
         """Tuile distincte « Fonds d'exploitation reçus » : réservée à la direction du siège et à la comptabilité,
@@ -1132,7 +1171,8 @@ class MicrofinanceLoan(models.Model):
         def received():
             amounts = FondCredit._get_exploitation_amounts(company.id)
             holder['items'] = [
-                {'label': _('En transit'), 'value': amounts['en_transit']},
+                {'label': _('En transit'), 'value': amounts['en_transit'],
+                 'note': FondCredit._transit_note_for(amounts['funds'].with_company(company), 'siege')},
                 {'label': _('Reçu en banque'), 'value': amounts['recu_banque']},
                 {'label': _('Dû aux bailleurs (avances)'), 'value': amounts['du']},
             ]
@@ -1168,7 +1208,10 @@ class MicrofinanceLoan(models.Model):
         def received():
             amounts = Line._get_exploitation_share_amounts(company.id)
             holder['items'] = [
-                {'label': _('En transit'), 'value': amounts['in_transit']},
+                {'label': _('En transit'), 'value': amounts['in_transit'],
+                 'note': self.env['microfinance.fond.credit']._transit_note(
+                     [(journal, transit) for _b, transit, _m, journal in
+                      (line._bank_state() for line in amounts['lines']) if journal])},
                 {'label': _('Reçu en banque'), 'value': amounts['received']},
             ]
             if amounts['not_received']:
