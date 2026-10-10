@@ -302,8 +302,8 @@ class TestBankStatementPaper(TestFondLiaison):
     def test_new_statement_form_then_journal_then_a_line(self):
         form = Form(self.env['account.bank.statement'].with_context(default_mf_state='draft'), view=self.FORM_VIEW)
         form.journal_id = self.ag_journal
-        form.mf_date_from = self.D_FROM
-        form.mf_date_to = self.D_TO
+        form.mf_datetime_from = self.D_FROM + ' 08:00:00'
+        form.mf_datetime_to = self.D_TO + ' 08:00:00'
         form.balance_start = 0.0
         form.balance_end_real = 300.0
         self.assertEqual(form.mf_gap, 300.0)
@@ -320,8 +320,8 @@ class TestBankStatementPaper(TestFondLiaison):
         form = Form(self.env['account.bank.statement'].with_context(**action['context']), view=self.FORM_VIEW)
         self.assertEqual(form.journal_id, self.ag_journal)
         self.assertEqual(form.mf_state, 'draft')
-        form.mf_date_from = self.D_FROM
-        form.mf_date_to = self.D_TO
+        form.mf_datetime_from = self.D_FROM + ' 08:00:00'
+        form.mf_datetime_to = self.D_TO + ' 08:00:00'
         form.balance_end_real = 0.0
         self.assertEqual(form.mf_gap, 0.0)
         self.assertEqual(self.env['account.bank.statement'].with_context(**action['context']).new({})._mf_currency(),
@@ -339,12 +339,12 @@ class TestBankStatementPaper(TestFondLiaison):
         form.journal_id = self.ag_journal
         statement = form.save()
         self._assert_clean_name(statement)
-        self.assertEqual(statement.name, self.ag_journal.code)
+        self.assertTrue(statement.name.startswith(self.ag_journal.code + ' – '))  # plage par défaut
 
     def test_statement_name_created_by_the_orm_without_period_or_journal(self):
         no_period = self.env['account.bank.statement'].create({'journal_id': self.ag_journal.id, 'mf_state': 'draft'})
         self._assert_clean_name(no_period)
-        self.assertEqual(no_period.name, self.ag_journal.code)
+        self.assertTrue(no_period.name.startswith(self.ag_journal.code + ' – '))  # plage par défaut posée à la création
         no_journal = self.env['account.bank.statement'].create({'mf_state': 'draft'})
         self._assert_clean_name(no_journal)
         self.assertEqual(no_journal.name, 'Nouveau relevé')
@@ -352,9 +352,9 @@ class TestBankStatementPaper(TestFondLiaison):
     def test_statement_name_with_period_follows_changes_in_draft_and_is_frozen_once_validated(self):
         stmt = self._mf_statement(self.ag_journal, 0.0, 200.0, [{'name': 'Dépôt', 'amount_in': 200.0}])
         self._assert_clean_name(stmt)
-        self.assertEqual(stmt.name, '%s – 01/10/26 → 31/10/26' % self.ag_journal.code)
+        self.assertEqual(stmt.name, '%s – 01/10/26 00:00 → 31/10/26 23:59' % self.ag_journal.code)
         stmt.mf_date_to = '2026-10-30'
-        self.assertEqual(stmt.name, '%s – 01/10/26 → 30/10/26' % self.ag_journal.code)
+        self.assertEqual(stmt.name, '%s – 01/10/26 00:00 → 30/10/26 23:59' % self.ag_journal.code)
         stmt.mf_date_to = '2026-10-31'
         stmt.action_mf_validate()
         frozen = stmt.name
@@ -367,5 +367,5 @@ class TestBankStatementPaper(TestFondLiaison):
         first.action_mf_validate()
         form = Form(self.env['account.bank.statement'].with_context(default_mf_state='draft'), view=self.FORM_VIEW)
         form.journal_id = self.ag_journal
-        form.mf_date_from = '2026-11-01'
+        form.mf_datetime_from = '2026-11-01 05:00:00'
         self.assertEqual(form.balance_start, 200.0)

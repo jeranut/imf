@@ -161,7 +161,7 @@ class TestBankStatementAccess(TestFondLiaison):
             allowed_company_ids=[self.hq.id])
         form = Form(model, view='microfinance_loan_management.view_microfinance_bank_statement_form')
         form.journal_id = self.fdbm
-        form.mf_date_from, form.mf_date_to, form.balance_end_real = '2026-10-01', '2026-10-31', 5.0
+        form.mf_datetime_from, form.mf_datetime_to, form.balance_end_real = '2026-10-01 05:00:00', '2026-10-31 15:00:00', 5.0
         with form.mf_entry_ids.new() as line:
             line.name, line.amount_in = 'Dépôt', 5.0
         stmt = form.save()
@@ -181,7 +181,7 @@ class TestBankStatementAccess(TestFondLiaison):
             action['context'], allowed_company_ids=[self.hq.id])
         form = Form(model, view='microfinance_loan_management.view_microfinance_bank_statement_form')
         self.assertEqual(form.journal_id, self.fdbm)
-        form.mf_date_from, form.mf_date_to, form.balance_end_real = '2026-10-01', '2026-10-31', 5.0
+        form.mf_datetime_from, form.mf_datetime_to, form.balance_end_real = '2026-10-01 05:00:00', '2026-10-31 15:00:00', 5.0
         with form.mf_entry_ids.new() as line:
             line.name, line.amount_in = 'Dépôt', 5.0
         self.assertEqual(form.save().mf_entry_ids.company_id, self.hq)
