@@ -326,10 +326,10 @@
     }
 }
 
-// "Vue d'ensemble" : cartes sur 2 colonnes, texte plus lisible (rem). Limité à la grille d'ensemble
+// "Vue d'ensemble" : cartes sur 3 colonnes, texte plus lisible (rem). Limité à la grille d'ensemble
 // (modificateur --overview) : la grille du portefeuille garde sa mise en page.
 .o_microfinance_dashboard .o_microfinance_kpi_grid--overview {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 16px;
 
     .o_microfinance_kpi {
