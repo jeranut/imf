@@ -21,7 +21,13 @@ class GeneralLedgerReport extends JournalLedgerReport {
             sortby: "sort_date",
             pageSize: 80,
             accountLines: {},
+            accountId: false,
         });
+        // Ouverture depuis un autre écran (Balance générale) : filtres de départ transmis par l'action
+        const initial = ((this.props.action || {}).params || {}).initial;
+        if (initial) {
+            Object.assign(this.state, initial);
+        }
     }
 
     // ------------------------------------------------------------------ filtres propres
@@ -95,6 +101,7 @@ class GeneralLedgerReport extends JournalLedgerReport {
                 ...this.filterParams(),
                 search: this.state.search || false,
                 display_account: this.state.displayAccount,
+                account_id: this.state.accountId || false,
             });
             if (!result.success) {
                 this.state.error = result.error || "Erreur de chargement.";
@@ -164,6 +171,7 @@ class GeneralLedgerReport extends JournalLedgerReport {
             journal_ids: this.state.selectedJournalIds.join(","),
             search: this.state.search || "",
             display_account: this.state.displayAccount,
+            account_id: this.state.accountId || "",
         };
     }
 
@@ -173,6 +181,11 @@ class GeneralLedgerReport extends JournalLedgerReport {
 
     exportXlsx() {
         window.open(this._exportUrl("/microfinance/general_ledger/xlsx"), "_blank");
+    }
+
+    async onSearchInput(ev) {
+        this.state.accountId = false; // une recherche libre remplace le filtre de compte venu de l'extérieur
+        return super.onSearchInput(ev);
     }
 
     onSearchPlaceholder() {

@@ -44,13 +44,15 @@ class GeneralLedgerReportController(JournalLedgerReportController):
 
     @http.route('/microfinance/general_ledger/data', type='json', auth='user')
     def general_ledger_data(self, date_from=None, date_to=None, target_move='posted', journal_ids=None, search=None,
-                            company_id=None, display_account='all', sortby='sort_date', init_balance=True, **kwargs):
+                            company_id=None, display_account='all', sortby='sort_date', init_balance=True,
+                            account_id=None, **kwargs):
         f = self._filters(company_id, journal_ids, display_account, sortby, init_balance)
         if not date_from or not date_to:
             return {'success': False, 'error': 'Période (Du / Au) requise.'}
         company = f['company']
         data = request.env['account.general.ledger.report'].with_company(company).get_accounts(
-            company, f['journal_ids'], date_from, date_to, target_move, f['display_account'], f['init_balance'], search)
+            company, f['journal_ids'], date_from, date_to, target_move, f['display_account'], f['init_balance'], search,
+            account_id)
         return {
             'success': True, 'title': TITLE, 'date_from': date_from, 'date_to': date_to,
             'currency': company.currency_id.symbol or '', 'company_name': company.name,
@@ -78,7 +80,7 @@ class GeneralLedgerReportController(JournalLedgerReportController):
         date_from, date_to = kw.get('date_from'), kw.get('date_to')
         model = request.env['account.general.ledger.report'].with_company(company)
         data = model.get_accounts(company, f['journal_ids'], date_from, date_to, target_move, f['display_account'],
-                                  f['init_balance'], kw.get('search') or None)
+                                  f['init_balance'], kw.get('search') or None, kw.get('account_id') or None)
         data['accounts'] = model.get_all_lines_for_export(
             company, data['accounts'], f['journal_ids'], date_from, date_to, target_move, f['sortby'], f['init_balance'])
         return f, data, target_move

@@ -45,8 +45,13 @@ class AccountGeneralLedgerReport(models.AbstractModel):
         return {g['account_id'][0]: (g['debit'] or 0.0, g['credit'] or 0.0, g['__count']) for g in groups if g['account_id']}
 
     @api.model
-    def _account_domain(self, company, search):
+    def _account_domain(self, company, search, account_id=None):
         domain = [('company_id', '=', company.id)]
+        if account_id:  # filtre venu de l'extérieur (clic depuis la Balance générale)
+            try:
+                domain.append(('id', '=', int(account_id)))
+            except (TypeError, ValueError):
+                domain.append(('id', '=', 0))
         if search:
             domain += ['|', ('code', 'ilike', search), ('name', 'ilike', search)]
         return domain
@@ -54,13 +59,13 @@ class AccountGeneralLedgerReport(models.AbstractModel):
     # ------------------------------------------------------------------ une ligne par compte
     @api.model
     def get_accounts(self, company, journal_ids, date_from, date_to, target_move, display_account='all',
-                     init_balance=True, search=None):
+                     init_balance=True, search=None, account_id=None):
         display_account = display_account if display_account in DISPLAY_ACCOUNTS else 'all'
         period = self._sum_by_account(self._period_domain(company, journal_ids, date_from, date_to, target_move))
         opening = self._sum_by_account(self._opening_domain(company, journal_ids, date_from)) if init_balance and date_from else {}
         currency = company.currency_id
         rows = []
-        for account in self.env['account.account'].search(self._account_domain(company, search), order='code'):
+        for account in self.env['account.account'].search(self._account_domain(company, search, account_id), order='code'):
             debit, credit, count = period.get(account.id, (0.0, 0.0, 0))
             op_debit, op_credit, _count = opening.get(account.id, (0.0, 0.0, 0))
             opening_balance = currency.round(op_debit - op_credit)
