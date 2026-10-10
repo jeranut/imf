@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Logo du journal : vignette 40 x 40 avant le titre de la carte kanban (route d'image d'Odoo, jamais de base64
+         dans kanban_dashboard) ; sans logo, icône Font Awesome choisie par usage microfinance, puis type, puis code. -->
+    <record id="account_journal_dashboard_kanban_view_mf_logo" model="ir.ui.view">
+        <field name="name">account.journal.dashboard.kanban.mf.logo</field>
+        <field name="model">account.journal</field>
+        <field name="inherit_id" ref="account.account_journal_dashboard_kanban_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='kanban_dashboard']" position="after">
+                <field name="code"/>
+                <field name="microfinance_usage"/>
+                <field name="mf_logo"/>
+                <field name="write_date"/>
+            </xpath>
+            <xpath expr="//t[@t-name='JournalTop']//div[hasclass('o_kanban_card_header_title')]" position="before">
+                <t t-set="mf_usage_icons" t-value="{'fund': 'fa-lock', 'operating': 'fa-briefcase', 'mobile': 'fa-mobile', 'cash': 'fa-money'}"/>
+                <t t-set="mf_type_icons" t-value="{'bank': 'fa-university', 'cash': 'fa-money', 'sale': 'fa-tags', 'purchase': 'fa-shopping-basket', 'general': 'fa-book'}"/>
+                <t t-set="mf_code_icons" t-value="{'AN': 'fa-step-forward', 'VIR': 'fa-exchange', 'TRANS': 'fa-exchange'}"/>
+                <div class="o_mf_journal_thumb float-start me-2 my-n2 d-flex align-items-center justify-content-center overflow-hidden"
+                     style="width: 40px; height: 40px; border-radius: 8px;">
+                    <img t-if="record.mf_logo.raw_value"
+                         t-att-src="kanban_image('account.journal', 'mf_logo', record.id.raw_value)"
+                         t-att-alt="record.name.value" width="40" height="40"
+                         style="width: 40px; height: 40px; object-fit: contain; border-radius: 8px;"/>
+                    <span t-else="" class="text-muted bg-100 d-flex align-items-center justify-content-center"
+                          style="width: 40px; height: 40px; border-radius: 8px;">
+                        <i t-attf-class="fa fa-lg #{(journal_type == 'general' and mf_code_icons[record.code.raw_value]) or mf_usage_icons[record.microfinance_usage.raw_value] or mf_type_icons[journal_type] or 'fa-book'}"
+                           role="presentation" aria-hidden="true"/>
+                    </span>
+                </div>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Fiche du journal : logo en tête, réservé au gestionnaire comptable -->
+    <record id="view_account_journal_form_mf_logo" model="ir.ui.view">
+        <field name="name">account.journal.form.mf.logo</field>
+        <field name="model">account.journal</field>
+        <field name="inherit_id" ref="account.view_account_journal_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//div[hasclass('oe_title')]" position="before">
+                <field name="mf_logo" widget="image" string="Logo" class="oe_avatar" options="{'size': [80, 80]}"
+                       groups="account.group_account_manager"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

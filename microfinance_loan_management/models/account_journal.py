@@ -24,6 +24,11 @@ class AccountJournal(models.Model):
         help="Rôle du journal dans la structure de trésorerie. « Fonds » : journal de réception des "
              "fonds des bailleurs ; un fonds = une seule banque = un journal de fonds par société.",
     )
+    mf_logo = fields.Image(
+        string='Logo', max_width=256, max_height=256,
+        help="Vignette affichée sur la carte du journal dans le tableau de bord. Sans logo, une icône est choisie "
+             "selon l'usage puis le type du journal.",
+    )
 
     def write(self, vals):
         res = super().write(vals)

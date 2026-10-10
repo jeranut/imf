@@ -83,6 +83,7 @@
         'views/res_config_settings_views.xml',
         'views/microfinance_menus.xml',
         'views/microfinance_bank_statement_views.xml',
+        'views/account_journal_logo_views.xml',
         'views/microfinance_fond_exploitation_views.xml',
         'views/microfinance_fond_partage_exploitation_views.xml',
         # Chargés après microfinance_menus.xml : leurs <menuitem parent="..."> référencent
