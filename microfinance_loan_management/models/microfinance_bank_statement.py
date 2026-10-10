@@ -19,8 +19,12 @@ class AccountBankStatement(models.Model):
 
     mf_state = fields.Selection([('draft', 'Brouillon'), ('validated', 'Validé')], string='État du relevé',
                                 copy=False, tracking=True)
-    mf_date_from = fields.Date(string='Début de période')
-    mf_date_to = fields.Date(string='Fin de période')
+    # Champs natifs sensibles d'un relevé papier : seul le suivi est ajouté, le reste de leur définition est inchangé.
+    journal_id = fields.Many2one(tracking=True)
+    balance_start = fields.Monetary(tracking=True)
+    balance_end_real = fields.Monetary(tracking=True)
+    mf_date_from = fields.Date(string='Début de période', tracking=True)
+    mf_date_to = fields.Date(string='Fin de période', tracking=True)
     mf_entry_ids = fields.One2many('microfinance.bank.statement.entry', 'statement_id', string='Lignes du relevé')
     mf_last_date = fields.Date(string='Date de la dernière ligne', compute='_compute_mf_last_date')
     mf_balance_computed = fields.Monetary(string='Solde calculé', compute='_compute_mf_balance')

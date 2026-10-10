@@ -25,7 +25,7 @@ class MicrofinanceFondCredit(models.Model):
              "fonds public. Modifiable tant qu'aucune contribution validée n'existe ; le compte dédié est alors "
              "renuméroté dans l'autre classe.")
     account_id = fields.Many2one(
-        default=False,
+        default=False, tracking=True,
         help="Compte passif dédié au fonds (dette envers le bailleur), créé automatiquement selon l'origine du "
              "fonds, dans la société du fonds. Non modifiable dès qu'une écriture existe dessus.")
     account_auto = fields.Boolean(
