@@ -117,6 +117,7 @@ class TestPayrollAccounts(MowgliSmeTestMixin, TransactionCase):
     def _reports(self, company):
         """Valeurs des lignes « Charges d'exploitation », « Résultat net » du
         Compte de résultat et « Résultat de l'exercice » du Bilan."""
+        self.env.flush_all()
         values = {}
         for key, xmlid in (('pl', 'account_financial_report_profitandloss0'),
                            ('bs', 'account_financial_report_balancesheet0')):
@@ -140,7 +141,8 @@ class TestPayrollAccounts(MowgliSmeTestMixin, TransactionCase):
             'bilan': bs.get('Profit (Loss) to report', 0.0)}
 
     def test_societe_neuve_recoit_comptes_et_ecriture(self):
-        company = self.env['res.company'].create({'name': 'Agence test paie neuve'})
+        company = self.env['res.company'].create(
+            {'name': 'Agence test paie neuve', 'agency_code': 'ZPN'})
         self.env['account.chart.template'].try_loading(
             'mg_pcec', company, install_demo=False)
         for code in ACCOUNT_CODES:
