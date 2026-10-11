@@ -169,6 +169,8 @@ class TestPayrollAccounts(MowgliSmeTestMixin, TransactionCase):
         other = self.Account.search(
             [('code', '=', '315000'), ('company_id', '=', company.id)], limit=1)
         net.with_company(company).write({'credit_account_id': other.id})
+        irsa = self.structure.rule_ids.filtered(lambda r: r.code == 'IRSA').sudo()
+        irsa.with_company(company).write({'credit_account_id': False})
         self.Account.search(
             [('code', '=', '315400'), ('company_id', '=', company.id)]).unlink()
         result = self.Rule._mf_ensure_payroll_accounts(company)
