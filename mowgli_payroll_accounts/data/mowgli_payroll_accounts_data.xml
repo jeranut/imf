@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- À chaque install/update, idempotent : crée les comptes de paie manquants
+         et configure les comptes des règles pour chaque société avec plan. -->
+    <function model="hr.salary.rule" name="_mf_ensure_payroll_accounts_all"/>
+</odoo>

@@ -1,0 +1,27 @@
+{
+  "accounts": [
+    {"code": "652100", "name": "Rémunérations du personnel", "account_type": "expense", "reconcile": false},
+    {"code": "652500", "name": "Cotisations aux organismes sociaux", "account_type": "expense", "reconcile": false},
+    {"code": "315100", "name": "Personnel, rémunérations dues", "account_type": "liability_current", "reconcile": true},
+    {"code": "315200", "name": "CNaPS à payer", "account_type": "liability_current", "reconcile": true},
+    {"code": "315300", "name": "OSTIE à payer", "account_type": "liability_current", "reconcile": true},
+    {"code": "315400", "name": "État, IRSA à payer", "account_type": "liability_current", "reconcile": true}
+  ],
+  "rules": [
+    {"rule": "BASIC",    "role": "debit",  "account": "652100"},
+    {"rule": "Travel",   "role": "debit",  "account": "652100"},
+    {"rule": "HRA",      "role": "debit",  "account": "652100"},
+    {"rule": "DA",       "role": "debit",  "account": "652100"},
+    {"rule": "Meal",     "role": "debit",  "account": "652100"},
+    {"rule": "Medical",  "role": "debit",  "account": "652100"},
+    {"rule": "Other",    "role": "debit",  "account": "652100"},
+    {"rule": "CNAPS",    "role": "credit", "account": "315200"},
+    {"rule": "OSTIE",    "role": "credit", "account": "315300"},
+    {"rule": "IRSA",     "role": "credit", "account": "315400"},
+    {"rule": "NET",      "role": "credit", "account": "315100"},
+    {"rule": "CNAPS_ER", "role": "debit",  "account": "652500"},
+    {"rule": "CNAPS_ER", "role": "credit", "account": "315200"},
+    {"rule": "OSTIE_ER", "role": "debit",  "account": "652500"},
+    {"rule": "OSTIE_ER", "role": "credit", "account": "315300"}
+  ]
+}
