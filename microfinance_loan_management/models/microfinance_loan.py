@@ -8,6 +8,8 @@ from dateutil.relativedelta import relativedelta
 from odoo import api, fields, models, _
 from odoo.exceptions import AccessError, UserError, ValidationError
 
+from .mf_trace import mf_safe
+
 try:
     from num2words import num2words
 except ImportError:  # pragma: no cover
@@ -3588,6 +3590,7 @@ class MicrofinanceLoan(models.Model):
         diffère via la chaîne de repli). Appelée par _do_activate() (première activation) et par
         write() (modification manuelle de disbursement_date_planned après activation, cf.
         _PLANNED_DISBURSEMENT_TRIGGER_FIELDS)."""
+            loan._release_to_cashier('activation')
         self.ensure_one()
         if any(inst.paid_principal or inst.paid_interest or inst.paid_penalty
                for inst in self.installment_ids):
@@ -3799,14 +3802,94 @@ class MicrofinanceLoan(models.Model):
 
     @api.model
     def cron_release_ready_disbursements(self):
-        """Libère quotidiennement, pour apparition au guichet (onglet « Décaissements en
-        attente », get_pending_disbursements ci-dessous), les crédits activés dont la date
-        provisoire de décaissement a été confirmée (disbursement_date_confirmed) et est
-        atteinte (disbursement_date_planned <= aujourd'hui). Idempotent (le domaine exclut déjà
-        disbursement_release_ready=True) : aucune autre écriture que ce champ, même patron que
-        cron_update_overdue_and_penalties ci-dessus (data/cron.xml, 1×/jour). Chantier
-        décaissement provisoire, docs_dev/decaissement_provisoire/."""
+        """Filet de sécurité quotidien (data/cron.xml) : libère via _release_to_cashier('cron')
+        les crédits activés dont la date provisoire de décaissement est confirmée et atteinte.
+        Idempotent : le domaine exclut les crédits déjà libérés, et la méthode ignore tout crédit
+        libéré entre-temps. Chantier décaissement provisoire, docs_dev/decaissement_provisoire/."""
         today = fields.Date.context_today(self)
+    def _release_is_due(self):
+        """Date provisoire confirmée et atteinte (aujourd'hui ou avant, en date locale de
+        l'utilisateur/du cron, même base que _compute_disbursement_date_planned_default)."""
+        self.ensure_one()
+        return bool(self.disbursement_date_confirmed and self.disbursement_date_planned
+                    and self.disbursement_date_planned <= fields.Date.context_today(self))
+
+    def _release_to_cashier(self, origin, reason=None):
+        """UNE seule méthode de libération vers le guichet (onglet « Décaissements en attente »),
+        appelée par l'activation (origin='activation'), le cron (origin='cron') et le bouton
+        « Envoyer à la caisse » (origin='manual'). Pose disbursement_release_ready, rien d'autre.
+        Idempotente : un crédit déjà libéré, non actif ou déjà décaissé est ignoré sans erreur.
+        Activation et cron ne libèrent que si la date provisoire est confirmée et atteinte ; le
+        manuel libère toujours (l'appelant a déjà exigé la confirmation et le motif en cas
+        d'anticipation). Retourne les crédits effectivement libérés. Aucun contrôle de fonds ou de
+        solde ici : ils restent dans action_process_disbursement()."""
+        released = self.browse()
+        for loan in self:
+            # Verrou ligne puis relecture : deux clics (ou bouton + cron) concurrents ne libèrent
+            # qu'une fois.
+            loan.env.cr.execute("SELECT id FROM microfinance_loan WHERE id = %s FOR UPDATE", (loan.id,))
+            loan.invalidate_recordset(['state', 'disbursement_date', 'disbursement_release_ready'])
+            if loan.state != 'active' or loan.disbursement_date or loan.disbursement_release_ready:
+                continue
+            anticipated = not loan._release_is_due()
+            if origin != 'manual' and anticipated:
+                continue
+            loan.disbursement_release_ready = True
+            today = fields.Date.context_today(loan)
+            if origin == 'activation':
+                body = _("Libéré vers la caisse à l'activation, le %s.", today)
+            elif origin == 'cron':
+                body = _("Libéré vers la caisse par le cron, le %s.", today)
+            else:
+                body = _("Libéré vers la caisse manuellement par %(user)s, le %(date)s.",
+                         user=self.env.user.name, date=today)
+                if anticipated:
+                    body += " " + _("Anticipation de la date provisoire (%(planned)s). Motif : %(reason)s",
+                                    planned=loan.disbursement_date_planned or _('non définie'),
+                                    reason=reason or '')
+            loan._post_release_note(body)
+            released |= loan
+        return released
+
+    @mf_safe
+    def _post_release_note(self, body):
+        """Trace chatter de la libération : une trace qui échoue (ex. utilisateur sans adresse e-mail)
+        ne doit jamais empêcher la libération elle-même."""
+        self.message_post(body=body)
+
+    def _check_release_rights(self):
+        if not self.env.user.has_group('microfinance_loan_management.group_microfinance_manager'):
+            raise AccessError(_("Seuls le manager de crédit, le chef d'agence et le gestionnaire peuvent "
+                                "envoyer un crédit à la caisse."))
+
+    def action_release_to_cashier(self):
+        """Bouton « Envoyer à la caisse » : libération immédiate si la date provisoire est confirmée
+        et atteinte ; sinon ouvre l'assistant qui demande confirmation (date visible) et motif."""
+        self.ensure_one()
+        self._check_release_rights()
+        if self.state != 'active' or self.disbursement_date or self.disbursement_release_ready:
+            return True
+        if self._release_is_due():
+            self._release_to_cashier('manual')
+            return True
+        return {
+            'name': _('Envoyer à la caisse'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'microfinance.loan.release.wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {'default_loan_id': self.id},
+        }
+
+    def action_release_to_cashier_confirmed(self, reason):
+        """Libération anticipée après confirmation (assistant) : motif obligatoire, tracé."""
+        self.ensure_one()
+        self._check_release_rights()
+        if not (reason or '').strip():
+            raise UserError(_("Le motif de l'anticipation est obligatoire."))
+        self._release_to_cashier('manual', reason=reason.strip())
+        return True
+
         loans = self.search([
             ('state', '=', 'active'),
             ('disbursement_date', '=', False),
@@ -3814,8 +3897,7 @@ class MicrofinanceLoan(models.Model):
             ('disbursement_release_ready', '=', False),
             ('disbursement_date_planned', '<=', today),
         ])
-        if loans:
-            loans.write({'disbursement_release_ready': True})
+        loans._release_to_cashier('cron')
         return True
 
     @api.model
