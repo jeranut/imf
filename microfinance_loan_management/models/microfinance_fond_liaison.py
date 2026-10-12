@@ -6,9 +6,11 @@ Validation d'un partage (une part par agence, société mère incluse) :
     relevé de chaque société :
       siège  : journal du fonds (FDBM/FDBN)   Dr 301xxx (liaison agence) / Cr 139500
       agence : journal crédit de la même banque (BMCR si FDBM, BNCR si FDBN)   Dr 139100 / Cr 301010
-  - part gardée par la société mère : UNE écriture sur le journal du fonds, par les comptes en suspens :
-    Dr 139100 (entrant du journal crédit BMCR/BNCR, même banque) / Cr 139500 (sortant du journal du fonds),
-    sans compte de liaison ; chaque relevé solde ensuite son compte en suspens.
+  - part gardée par la société mère : DEUX écritures du même partage (une pièce n'a qu'un journal), reliées par le
+    compte de virement interne de la société, sans compte de liaison :
+      journal du fonds   : Dr virement interne / Cr 139500 (sortant du journal du fonds)
+      journal crédit     : Dr 139100 (entrant du journal crédit, même banque) / Cr virement interne
+    chaque relevé solde ensuite son compte en suspens.
 Si le côté agence ne peut pas être créé (agence non configurée), le côté siège reste en suspens et la
 ligne passe en « envoyé, non reçu » ; le bouton « Générer le côté agence » le crée ensuite. Rien n'est
 généré si le fonds ne passe pas au grand livre (passer_gl faux) ou n'a pas de journal bancaire.
@@ -255,21 +257,34 @@ class MicrofinanceFondPartage(models.Model):
             hq = partage.company_id
             for line in partage.line_ids.filtered(lambda l: l.amount > 0 and not l.hq_move_id):
                 if line.company_id == hq:
-                    # Part gardée : par les comptes en suspens, comme les parts envoyées. Le relevé du journal de
-                    # fonds solde le 139500, celui du journal crédit solde le 139100 (aucune écriture directe
-                    # entre les deux comptes bancaires, qui serait doublée par les relevés).
+                    # Part gardée : par les comptes en suspens, chacun sur le journal de sa banque. Une pièce n'a qu'un
+                    # journal : DEUX pièces du même partage, reliées par le compte de virement interne de la société
+                    # (aucun compte de liaison : une société ne se doit rien à elle-même). Le relevé du journal de
+                    # fonds solde le 139500, celui du journal crédit solde le 139100 (aucune écriture directe entre
+                    # les deux comptes bancaires, qui serait doublée par les relevés).
                     credit_journal = partage._credit_journal_for(fund_journal, hq)
                     if not credit_journal:
-                        raise UserError(_("Journal crédit (même banque que le fonds) introuvable pour %s.") % hq.name)
+                        raise UserError(_(
+                            "Journal crédit (même banque que le fonds) introuvable pour %s : créez-le avant de valider "
+                            "le partage.") % hq.name)
                     inbound = partage._payment_account(credit_journal, 'inbound')
                     outbound = partage._payment_account(fund_journal, 'outbound')
                     if not inbound or not outbound:
                         raise UserError(_(
                             "Comptes de paiement en suspens manquants pour la part gardée : entrant du journal crédit « %(c)s » "
                             "ou sortant du journal de fonds « %(f)s ».") % {'c': credit_journal.display_name, 'f': fund_journal.display_name})
-                    move = partage._create_move(hq, partage._move_vals(
-                        line, fund_journal, _('Part gardée %s') % fond.code, inbound, outbound, 'hq_own'))
-                    line.hq_move_id = move
+                    transfer = hq.sudo().transfer_account_id
+                    if not transfer:
+                        raise UserError(_(
+                            "La société « %s » n'a pas de compte de virement interne (Comptabilité > Configuration) : il "
+                            "relie la sortie du journal de fonds et l'entrée du journal crédit.") % hq.name)
+                    label = _('Fonds %(code)s alloué à %(agence)s') % {'code': fond.code, 'agence': line.company_id.name}
+                    move_out = partage._create_move(hq, partage._move_vals(
+                        line, fund_journal, label, transfer, outbound, 'hq_own'))
+                    move_in = partage._create_move(hq, partage._move_vals(
+                        line, credit_journal, label, inbound, transfer, 'hq_own'))
+                    line.hq_move_id = move_out
+                    line.agency_move_id = move_in
                     continue
                 liaison_hq = line.company_id.microfinance_liaison_hq_account_id
                 outbound = partage._payment_account(fund_journal, 'outbound')

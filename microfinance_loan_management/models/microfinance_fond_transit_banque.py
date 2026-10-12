@@ -34,7 +34,9 @@ class MicrofinanceFondPartageLine(models.Model):
         line = self.sudo()
         partage = line.partage_id
         own = line.company_id == partage.company_id
-        move = line.hq_move_id if own else line.agency_move_id
+        # part gardée : la pièce qui porte le 139100 est celle du journal crédit (agency_move_id) ; anciens partages :
+        # une seule pièce (hq_move_id) portait le 139100 et le 139500
+        move = (line.agency_move_id or line.hq_move_id) if own else line.agency_move_id
         if not move:
             return 0.0, 0.0, line.amount, self.env['account.journal']
         suspense = move.line_ids.filtered(lambda l: l.debit > 0)[:1]

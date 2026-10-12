@@ -126,7 +126,7 @@ class TestFondOrigine(TestFondLiaison):
     def test_labels_reference_and_links_on_both_sides(self):
         fond, partage = self._shared(500.0, 300.0)
         moves = self._moves(partage)
-        self.assertEqual(len(moves), 3)
+        self.assertEqual(len(moves), 4)   # siège + agence + part gardée (2 pièces : journal de fonds, journal crédit)
         for move in moves:
             self.assertEqual(move.ref, partage.name)
             self.assertEqual(move.microfinance_fond_partage_id, partage)
@@ -135,7 +135,7 @@ class TestFondOrigine(TestFondLiaison):
         hq_move = moves.filtered(lambda m: m.microfinance_partage_side == 'hq')
         self.assertIn(self.agency.name, hq_move.line_ids[0].name)
         own = moves.filtered(lambda m: m.microfinance_partage_side == 'hq_own')
-        self.assertTrue(own.line_ids[0].name.startswith('Part gardée'))
+        self.assertTrue(own[0].line_ids[0].name.startswith('Fonds %s alloué à' % fond.code))
 
     def test_agency_mirror_in_agency_company_with_right_accounts(self):
         fond, partage = self._shared(500.0, 300.0)
@@ -152,8 +152,10 @@ class TestFondOrigine(TestFondLiaison):
         credit_journal = partage._credit_journal_for(self.fdbm, self.hq)
         inbound = partage._payment_account(credit_journal, 'inbound')
         outbound = partage._payment_account(self.fdbm, 'outbound')
-        self.assertEqual({(l.account_id, l.debit, l.credit) for l in own.line_ids},
-                         {(inbound, 500.0, 0.0), (outbound, 0.0, 500.0)})
+        transfer = self.hq.transfer_account_id
+        self.assertEqual({(l.journal_id, l.account_id, l.debit, l.credit) for l in own.line_ids},
+                         {(credit_journal, inbound, 500.0, 0.0), (credit_journal, transfer, 0.0, 500.0),
+                          (self.fdbm, transfer, 500.0, 0.0), (self.fdbm, outbound, 0.0, 500.0)})
         banks = {self.fdbm.default_account_id, credit_journal.default_account_id}
         self.assertFalse(set(own.line_ids.account_id) & banks)
 

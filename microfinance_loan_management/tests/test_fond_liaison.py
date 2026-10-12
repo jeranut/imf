@@ -31,6 +31,8 @@ class TestFondLiaison(TestFondPartageBase):
         cls.agency.microfinance_liaison_agency_account_id = cls.ag_liaison
         # agence 2 : compte de liaison côté siège seulement (côté agence non configuré)
         cls.hq_liaison2 = cls._acc(cls.hq, 'T301HQC', 'asset_current', True)
+        # virement interne de la société mère : relie la sortie du journal de fonds et l'entrée du journal crédit
+        cls.hq.transfer_account_id = cls._acc(cls.hq, 'T301TRH', 'asset_current', True)
         cls.agency2.microfinance_liaison_hq_account_id = cls.hq_liaison2
 
     @classmethod
@@ -183,18 +185,78 @@ class TestFondLiaison(TestFondPartageBase):
             partage.action_cancel()
         self.assertEqual(partage.state, 'validated')
 
-    def test_parent_own_share_is_a_single_move_without_liaison(self):
+    def test_parent_own_share_goes_through_credit_journal_of_the_same_bank(self):
         partage = self._validated({self.hq: 100.0})
         moves = self._moves(partage)
-        self.assertEqual(len(moves), 1)
-        self.assertEqual(moves.microfinance_partage_side, 'hq_own')
-        # part gardée par les comptes en suspens (139100 du journal crédit / 139500 du journal de fonds), jamais
-        # directement entre les deux comptes bancaires : les relevés des deux banques se rapprochent ensuite.
+        self.assertEqual(len(moves), 2)
+        self.assertEqual(set(moves.mapped('microfinance_partage_side')), {'hq_own'})
         credit_journal = partage._credit_journal_for(self.fdbm, self.hq)
-        self.assertEqual({(l.account_id, l.debit, l.credit) for l in moves.line_ids},
-                         {(partage._payment_account(credit_journal, 'inbound'), self.AMOUNT, 0.0),
-                          (self.hq_out, 0.0, self.AMOUNT)})
-        self.assertFalse(set(moves.line_ids.account_id) & {self.hq_credit_bank, self.hq_bank})
+        inbound = partage._payment_account(credit_journal, 'inbound')
+        transfer = self.hq.transfer_account_id
+        # 139100 sur le journal de crédit de la MÊME banque, 139500 sur le journal du fonds, aucune liaison 301xxx
+        received = moves.filtered(lambda m: m.journal_id == credit_journal)
+        sent = moves.filtered(lambda m: m.journal_id == self.fdbm)
+        self.assertEqual({(l.account_id, l.debit, l.credit) for l in received.line_ids},
+                         {(inbound, self.AMOUNT, 0.0), (transfer, 0.0, self.AMOUNT)})
+        self.assertEqual({(l.account_id, l.debit, l.credit) for l in sent.line_ids},
+                         {(transfer, self.AMOUNT, 0.0), (self.hq_out, 0.0, self.AMOUNT)})
+        self.assertFalse(set(moves.line_ids.account_id) & {self.hq_credit_bank, self.hq_bank, self.hq_liaison})
+        self.assertEqual(received.line_ids[0].name, 'Fonds %s alloué à %s' % (partage.fond_id.code, self.hq.name))
+        line = partage.line_ids.filtered(lambda l: l.company_id == self.hq)
+        self.assertEqual((line.hq_move_id, line.agency_move_id), (sent, received))
+        self.assertEqual(line.liaison_state, 'own')
+
+    def test_parent_own_share_statements_settle_both_lines(self):
+        partage = self._validated({self.hq: 100.0})
+        moves = self._moves(partage)
+        credit_journal = partage._credit_journal_for(self.fdbm, self.hq)
+        inbound = partage._payment_account(credit_journal, 'inbound')
+        before = (self._balance(self.hq_bank), self._balance(self.hq_credit_bank))
+        self._reconcile(moves, self.hq_out, self._statement(self.fdbm, -self.AMOUNT, self.hq_out))
+        self._reconcile(moves, inbound, self._statement(credit_journal, self.AMOUNT, inbound))
+        self.assertFalse(moves.line_ids.filtered(
+            lambda l: l.account_id in (self.hq_out, inbound) and not l.reconciled))
+        self.assertEqual(self._balance(self.hq_bank), before[0] - self.AMOUNT)
+        self.assertEqual(self._balance(self.hq_credit_bank), before[1] + self.AMOUNT)
+
+    def test_treasury_tab_shows_kept_share_on_credit_journal(self):
+        fond = self._fond()
+        Loan = self.env['microfinance.loan'].with_company(self.hq).with_context(allowed_company_ids=self.hq.ids)
+        credit_journal = self._credit_journal_of_hq()
+        before = {r['journal_id']: r for r in Loan.get_treasury_data()['rows']}
+        partage = self._partage(fond, {self.hq: 100.0})
+        partage.action_validate()
+        after = {r['journal_id']: r for r in Loan.get_treasury_data()['rows']}
+        # « Crédit » : la part gardée est À recevoir sur le journal de crédit ; « Fonds » : plus dans À recevoir,
+        # la sortie en transit du fonds reste comptée
+        self.assertEqual(after[credit_journal.id]['in_transit'] - before[credit_journal.id]['in_transit'], self.AMOUNT)
+        self.assertEqual(after[self.fdbm.id]['in_transit'], before[self.fdbm.id]['in_transit'])
+        self.assertEqual(after[self.fdbm.id]['out_transit'] - before[self.fdbm.id]['out_transit'], self.AMOUNT)
+
+    def _credit_journal_of_hq(self):
+        return self.env['account.journal'].search([
+            ('company_id', '=', self.hq.id), ('microfinance_usage', '=', 'credit'),
+            ('microfinance_bank_id', '=', self.bank.id)], limit=1)
+
+    def test_parent_own_share_refused_without_credit_journal_of_the_bank(self):
+        fond = self._fond()
+        self.hq_credit_journal = self.env['account.journal'].search([
+            ('company_id', '=', self.hq.id), ('microfinance_usage', '=', 'credit'),
+            ('microfinance_bank_id', '=', self.bank.id)])
+        self.hq_credit_journal.write({'microfinance_usage': False})
+        partage = self._partage(fond, {self.hq: 100.0})
+        with self.assertRaises(UserError) as caught:
+            partage.action_validate()
+        self.assertIn('Journal crédit', str(caught.exception))
+        self.assertFalse(self._moves(partage))
+
+    def test_parent_own_share_cancel_reverses_both_moves(self):
+        partage = self._validated({self.hq: 100.0})
+        moves = self._moves(partage)
+        partage.action_cancel()
+        self.assertEqual(partage.state, 'cancelled')
+        reversals = self.env['account.move'].sudo().search([('reversed_entry_id', 'in', moves.ids)])
+        self.assertEqual(len(reversals), 2)
 
     def test_no_moves_without_gl_or_without_fund_journal(self):
         # fonds sans passer_gl
