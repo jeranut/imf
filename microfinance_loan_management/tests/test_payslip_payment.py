@@ -399,7 +399,11 @@ class TestPayslipPayment(TransactionCase):
         tiles = self._tiles()
         keys = list(tiles)
         self.assertEqual(keys.index('operating_treasury'), keys.index('exploitation_funds') + 1)
-        to_funds = tiles['operating_treasury']['extra_links'][0]
+        links = {l['label']: l for l in tiles['operating_treasury']['extra_links']}
+        self.assertFalse(tiles['operating_treasury']['model'])   # pas de lien principal (cf. règle des tuiles)
+        self.assertEqual(self.env['account.journal'].search(
+            links["Voir les journaux d'exploitation"]['domain']), self.bmop | self.bnop)
+        to_funds = links["Voir les fonds d'exploitation"]
         self.assertEqual((to_funds['label'], to_funds['model']), ("Voir les fonds d'exploitation",
                                                                   'microfinance.fond.credit'))
         self.assertEqual(to_funds['domain'], tiles['exploitation_funds']['domain'])

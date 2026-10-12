@@ -22,10 +22,10 @@ class MicrofinanceLoan(models.Model):
             treasury = treasury[0]
             if funds:
                 # liens croisés entre les deux tuiles, placées côte à côte
-                treasury['extra_links'] = [{
+                treasury['extra_links'].append({
                     'label': _("Voir les fonds d'exploitation"), 'model': funds['model'], 'domain': funds['domain'],
                     'name': funds['label'], 'views': funds.get('views'),
-                }]
+                })
                 tiles.insert(tiles.index(funds) + 1, treasury)
             else:
                 anchor = next((i for i, t in enumerate(tiles) if t['key'] == 'exploitation_funds_agency'), None)
@@ -85,9 +85,13 @@ class MicrofinanceLoan(models.Model):
         if not tile['error'] and not holder.get('rows'):
             return []   # pas de journal d'exploitation : rien à montrer
         domain = holder.get('journals_domain', [('id', '=', 0)])
+        # Pas de lien principal (model/domain) : le chiffre affiché (total disponible) n'est pas un nombre de lignes de
+        # la liste ouverte. Les ouvertures sont des liens secondaires : la banque (fiche du journal), « En transit »
+        # (lignes concernées) et « Voir les journaux d'exploitation ».
         tile.update({
-            'model': 'account.journal', 'domain': domain, 'link_label': _("Voir les journaux d'exploitation"),
             'secondary_items': holder.get('items', []), 'journals': holder.get('rows', []),
             'journals_domain': domain,
+            'extra_links': [{'label': _("Voir les journaux d'exploitation"), 'model': 'account.journal',
+                             'domain': domain, 'name': _("Journaux d'exploitation"), 'views': False}],
         })
         return [tile]
