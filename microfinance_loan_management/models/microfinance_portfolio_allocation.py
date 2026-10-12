@@ -3,6 +3,7 @@ from odoo import api, fields, models, Command, _
 from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.tools import float_compare, float_is_zero, float_round
 
+from .microfinance_fond_allocation import check_whole_amounts, format_ariary
 from .microfinance_portfolio import PORTFOLIO_ALLOCATION_TECHNICAL_CONTEXT
 
 
@@ -64,6 +65,15 @@ class MicrofinancePortfolioAllocation(models.Model):
     reste_a_repartir = fields.Monetary(
         string="Reste à répartir de l'allocation d'agence", compute='_compute_reste_a_repartir_agence', readonly=True,
     )
+    agence_recu_banque = fields.Monetary(
+        string="Reçu en banque de l'agence", compute='_compute_agence_bank_amounts',
+        help="Part de l'agence sur ce fonds dont la ligne en suspens (139100) est soldée par un relevé bancaire.")
+    agence_deja_alloue = fields.Monetary(
+        string='Déjà alloué', compute='_compute_agence_bank_amounts',
+        help="Total des autres répartitions validées de cette agence sur ce fonds.")
+    agence_allouable = fields.Monetary(
+        string='Allouable', compute='_compute_agence_bank_amounts',
+        help="Reçu en banque de l'agence moins déjà alloué : plafond d'une allocation, appliqué à la validation.")
     state = fields.Selection([
         ('draft', 'Brouillon'),
         ('validated', 'Validé'),
@@ -98,6 +108,35 @@ class MicrofinancePortfolioAllocation(models.Model):
                 ('fond_id', '=', repartition.fond_id.id), ('company_id', '=', repartition.company_id.id),
             ], limit=1)
             repartition.reste_a_repartir = allocation.reste_a_repartir_portefeuille if allocation else 0.0
+
+    def _bank_amounts(self):
+        """(reçu en banque, déjà alloué, allouable) de l'agence de cette répartition sur son fonds ; 0 sans allocation
+        d'agence. Seule la société de la répartition est lue."""
+        self.ensure_one()
+        allocation = self.env['microfinance.fond.allocation'].sudo().search([
+            ('fond_id', '=', self.fond_id.id), ('company_id', '=', self.company_id.id)], limit=1)
+        if not allocation:
+            return 0.0, 0.0, 0.0
+        return allocation._portfolio_bank_amounts(exclude=self)
+
+    @api.depends('fond_id', 'company_id', 'state')
+    def _compute_agence_bank_amounts(self):
+        for repartition in self:
+            amounts = repartition._bank_amounts() if repartition.fond_id and repartition.company_id else (0.0,) * 3
+            repartition.agence_recu_banque, repartition.agence_deja_alloue, repartition.agence_allouable = amounts
+
+    def _check_bank_received(self):
+        """Contrôle permanent, sans réglage ni exception : on n'alloue que de l'argent reçu en banque. Le montant ne
+        dépasse pas le reçu en banque de l'agence pour ce fonds moins le déjà alloué (une diminution, c'est-à-dire
+        l'annulation d'une répartition, n'est jamais contrôlée)."""
+        self.ensure_one()
+        check_whole_amounts(self.currency_id, [self.base_amount] + self.line_ids.mapped('amount'))
+        received, allocated, available = self._bank_amounts()
+        if float_compare(self.base_amount, available, precision_rounding=self.currency_id.rounding) > 0:
+            raise UserError(_(
+                "Montant non disponible : reçu en banque %(recu)s, déjà alloué %(alloue)s, disponible %(dispo)s. "
+                "Le relevé de l'agence n'a pas encore confirmé cette somme."
+            ) % {'recu': format_ariary(received), 'alloue': format_ariary(allocated), 'dispo': format_ariary(available)})
 
     @api.depends('base_amount', 'line_ids.percent', 'line_ids.amount')
     def _compute_totals(self):
@@ -328,6 +367,7 @@ class MicrofinancePortfolioAllocation(models.Model):
             if repartition.state != 'draft':
                 raise UserError(_('Seule une répartition en brouillon peut être validée.'))
             rounding = repartition.currency_id.rounding
+            repartition._check_bank_received()
             # Plafond non contournable (Phase 2 §3) : la somme des répartitions agence ->
             # portefeuilles ne peut jamais dépasser le fonds reçu par l'agence (mère -> agence),
             # vérifié ici au présent (reste_a_repartir_portefeuille lu en sudo, indépendant des

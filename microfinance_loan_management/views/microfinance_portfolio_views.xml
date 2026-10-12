@@ -134,6 +134,9 @@
                         <group>
                             <field name="currency_id" invisible="1"/>
                             <field name="reste_a_repartir" string="Reste à répartir du fonds de l'agence"/>
+                            <field name="agence_recu_banque" string="Reçu en banque de l'agence"/>
+                            <field name="agence_deja_alloue" string="Déjà alloué"/>
+                            <field name="agence_allouable" string="Allouable"/>
                             <field name="base_amount" string="Montant à répartir" force_save="1"
                                    readonly="state != 'draft' or allocation_mode == 'allocation'"/>
                         </group>
