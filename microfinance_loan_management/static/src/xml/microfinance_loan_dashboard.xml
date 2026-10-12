@@ -188,7 +188,7 @@
                     </article>
                     <article t-attf-class="o_microfinance_kpi o_microfinance_kpi--defaut o_microfinance_treasury_tile--click {{ tr.filters.flag === 'watch' ? 'o_microfinance_treasury_tile--on' : '' }}"
                              role="button" tabindex="0" t-on-click="() => this.onTreasuryFlag('watch')"
-                             t-on-keydown.enter="() => this.onTreasuryFlag('watch')">
+                             t-on-keydown="(ev) => ev.key === 'Enter' and this.onTreasuryFlag('watch')">
                         <div class="o_microfinance_kpi__body">
                             <span class="o_microfinance_kpi__icon"><i class="fa fa-exclamation-triangle" role="img" aria-label="À surveiller"/></span>
                             <div class="o_microfinance_kpi__content">
@@ -200,7 +200,7 @@
                     </article>
                     <article t-attf-class="o_microfinance_kpi o_microfinance_kpi--defaut o_microfinance_treasury_tile--click {{ tr.filters.flag === 'late' ? 'o_microfinance_treasury_tile--on' : '' }}"
                              role="button" tabindex="0" t-on-click="() => this.onTreasuryFlag('late')"
-                             t-on-keydown.enter="() => this.onTreasuryFlag('late')">
+                             t-on-keydown="(ev) => ev.key === 'Enter' and this.onTreasuryFlag('late')">
                         <div class="o_microfinance_kpi__body">
                             <span class="o_microfinance_kpi__icon"><i class="fa fa-file-text-o" role="img" aria-label="Relevés à saisir"/></span>
                             <div class="o_microfinance_kpi__content">
