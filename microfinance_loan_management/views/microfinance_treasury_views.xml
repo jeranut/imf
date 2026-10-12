@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Réglages de l'onglet « Trésorerie » du tableau de bord (valeurs par défaut : 10 %, 7 jours, 7 jours) -->
+    <record id="res_config_settings_view_form_mf_treasury" model="ir.ui.view">
+        <field name="name">res.config.settings.form.mf.treasury</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="microfinance_loan_management.res_config_settings_view_form_microfinance"/>
+        <field name="arch" type="xml">
+            <xpath expr="//block[@id='microfinance_operating_journal_settings']" position="after">
+                <block title="Tableau de bord : trésorerie" id="microfinance_treasury_dashboard_settings"
+                       groups="account.group_account_manager,base.group_system">
+                    <setting string="Seuil « À surveiller » (%)"
+                        help="Un compte est signalé quand son solde est positif et que son disponible (solde moins sorties en transit) est inférieur ou égal à ce pourcentage du solde, ou quand il est négatif.">
+                        <field name="mf_treasury_watch_pct"/>
+                    </setting>
+                    <setting string="Jours sans relevé avant alerte"
+                        help="Un compte est « Relevé en retard » quand son dernier relevé validé date de plus de ce nombre de jours (ou qu'il n'en a aucun) et qu'il a des écritures postérieures.">
+                        <field name="mf_treasury_statement_days"/>
+                    </setting>
+                    <setting string="Ancienneté d'un montant à recevoir (jours)"
+                        help="Les encaissements en transit plus anciens que ce nombre de jours sont comptés dans « dont X depuis plus de N jours ».">
+                        <field name="mf_treasury_receivable_days"/>
+                    </setting>
+                </block>
+            </xpath>
+        </field>
+    </record>
+</odoo>
