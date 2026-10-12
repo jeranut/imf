@@ -65,6 +65,8 @@ from . import report_trial_balance_mf
 from . import account_journal_control_report
 from . import report_journal_control_mf
 from . import microfinance_fond_partage_exploitation
+from . import mf_operating_treasury
+from . import hr_payslip_payment
 
 from . import mf_trace
 from . import mf_trace_events
