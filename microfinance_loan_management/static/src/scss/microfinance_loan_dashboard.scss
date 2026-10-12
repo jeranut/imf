@@ -838,3 +838,79 @@
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+// Onglet « Trésorerie » : mêmes tuiles et panneaux que la Vue d'ensemble ; seuls le tableau et la bande sont propres.
+.o_microfinance_treasury_filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 10px;
+
+    &__field { display: flex; flex-direction: column; font-size: 12px; color: #64748b; margin: 0; }
+    &__search { max-width: 240px; }
+}
+
+.o_microfinance_treasury_tiles { margin-top: 12px; }
+
+.o_microfinance_treasury_tile--click {
+    cursor: pointer;
+
+    &:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+}
+
+.o_microfinance_treasury_tile--on { box-shadow: 0 0 0 2px #2563eb; }
+
+.o_microfinance_treasury_table {
+    th, td { vertical-align: middle; }
+
+    .o_microfinance_treasury_name {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: inherit;
+        text-decoration: none;
+    }
+}
+
+.o_microfinance_treasury_initials {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.o_microfinance_treasury_line--child td:first-child { padding-left: 2.5rem; }
+
+.o_microfinance_treasury_total th { border-top: 2px solid #cbd5e1; }
+
+.o_microfinance_treasury_bar_col { min-width: 140px; }
+
+.o_microfinance_treasury_bar {
+    display: flex;
+    height: 10px;
+    border-radius: 5px;
+    overflow: hidden;
+    background: #e2e8f0;
+
+    &__avail { background: #2563eb; }
+    &__transit { background: #f59e0b; }
+}
+
+.o_microfinance_treasury_band {
+    margin-top: 16px;
+
+    &__items { display: flex; flex-wrap: wrap; gap: 24px; }
+    &__item { display: flex; flex-direction: column; min-width: 180px; }
+    &__name { color: #64748b; }
+}
+
+@media (max-width: 767px) {
+    .o_microfinance_treasury_filters__search { max-width: none; flex: 1 1 100%; }
+}

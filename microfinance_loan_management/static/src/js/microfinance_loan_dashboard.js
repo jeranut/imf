@@ -17,6 +17,8 @@ export class MicrofinanceLoanDashboard extends Component {
     // t-if de contenu - hidden ne fait que l'exclure de visibleTopics (nav), pas de TOPICS.
     static TOPICS = [
         { id: "apercu", label: "Vue d'ensemble", icon: "fa-tachometer" },
+        // Visible seulement si le serveur l'autorise (data.treasury_visible : direction, comptabilité, chef d'agence).
+        { id: "tresorerie", label: "Trésorerie", icon: "fa-bank", requiresData: "treasury_visible" },
         { id: "portefeuille", label: "Mon portefeuille", icon: "fa-briefcase", hasCharts: true, hidden: true },
         { id: "analyses", label: "Analyses", icon: "fa-bar-chart", hasCharts: true },
         { id: "fonds", label: "Fonds bailleurs", icon: "fa-university", hasCharts: true },
@@ -54,7 +56,6 @@ export class MicrofinanceLoanDashboard extends Component {
         // Liste utilisee par la nav (t-foreach) : exclut les topics hidden (cf. "portefeuille"
         // ci-dessus), sans retirer leur entree de this.topics dont setActiveTopic()/onMounted()
         // ont besoin pour l'ouverture directe via contexte dashboard_topic.
-        this.visibleTopics = this.topics.filter((t) => !t.hidden);
         // activeTopic : vrai systeme d'onglets (un seul topic rendu a la fois via t-if dans le
         // template, pas juste une ancre/scroll) - "apercu" (Vue d'ensemble) est le topic par
         // defaut au chargement.
@@ -63,6 +64,13 @@ export class MicrofinanceLoanDashboard extends Component {
             error: false,
             data: null,
             activeTopic: "apercu",
+            // Onglet « Trésorerie » : UN appel serveur à l'ouverture (get_treasury_data) ; les filtres, tuiles et le
+            // regroupement sont recalculés ici sur les lignes reçues.
+            treasury: {
+                loaded: false, loading: false, data: null,
+                filters: { usage: "operating", mode: "bank", query: "", flag: null },
+                expanded: {},
+            },
             // --- Onglet "Mon portefeuille" (Lot 2) : chargé paresseusement à la 1re activation
             // et rafraîchi à chaque changement d'agent dans le sélecteur d'en-tête. Données
             // servies par des méthodes @api.model dédiées de microfinance.loan avec un scope
@@ -211,9 +219,190 @@ export class MicrofinanceLoanDashboard extends Component {
         if (nextTopic?.hasCharts) {
             this.shouldRenderCharts = true;
         }
+        if (topic === "tresorerie" && !this.state.treasury.loaded) {
+            this.loadTreasury();
+        }
         if (topic === "portefeuille" && !this.state.agent.loaded) {
             this.loadAgentPortfolio();
         }
+    }
+
+    get visibleTopics() {
+        return this.topics.filter((t) => !t.hidden && (!t.requiresData || this.state.data?.[t.requiresData]));
+    }
+
+    // ================================================================
+    // Onglet "Trésorerie" (lecture seule)
+    // ================================================================
+
+    async loadTreasury() {
+        const treasury = this.state.treasury;
+        treasury.loading = true;
+        try {
+            treasury.data = await this.orm.call("microfinance.loan", "get_treasury_data", []);
+            treasury.loaded = true;
+        } catch (error) {
+            this.notification.add(error.data?.message || error.message || "Impossible de charger la trésorerie.", {
+                type: "danger",
+            });
+            console.error("Microfinance dashboard: treasury loading failed", error);
+        } finally {
+            treasury.loading = false;
+        }
+    }
+
+    /** Ouvre l'onglet avec un filtre d'usage ("" = tous) : liens des tuiles de la Vue d'ensemble. */
+    openTreasury(usage) {
+        const filters = this.state.treasury.filters;
+        filters.usage = usage || "all";
+        filters.flag = null;
+        filters.query = "";
+        this.setActiveTopic("tresorerie");
+    }
+
+    onTreasuryFilter(name, value) {
+        this.state.treasury.filters[name] = value;
+    }
+
+    onTreasuryFlag(flag) {
+        const filters = this.state.treasury;
+        filters.filters.flag = filters.filters.flag === flag ? null : flag;
+    }
+
+    _normalize(text) {
+        return (text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    }
+
+    /** Lignes (une par journal) après filtre d'usage et recherche, AVANT le filtre cliquable des tuiles 5 et 6. */
+    get treasuryScopedRows() {
+        const treasury = this.state.treasury;
+        const rows = treasury.data?.rows || [];
+        const { usage, query } = treasury.filters;
+        const needle = this._normalize(query.trim());
+        return rows.filter((row) => {
+            if (usage !== "all" && (row.usage || "__other") !== usage) {
+                return false;
+            }
+            return !needle || this._normalize(`${row.bank_name} ${row.journal_name} ${row.account_name}`).includes(needle);
+        });
+    }
+
+    get treasuryTiles() {
+        const rows = this.treasuryScopedRows;
+        const sum = (key) => rows.reduce((total, row) => total + row[key], 0);
+        const banks = new Set(rows.map((row) => row.bank_id || `j${row.journal_id}`));
+        return {
+            bank: sum("bank_balance"), banks: banks.size, accounts: rows.length,
+            out: sum("out_transit"), in: sum("in_transit"), inOld: sum("in_transit_old"),
+            available: sum("available"),
+            watch: rows.filter((row) => row.watch).length, late: rows.filter((row) => row.late).length,
+        };
+    }
+
+    get treasuryShownRows() {
+        const flag = this.state.treasury.filters.flag;
+        return this.treasuryScopedRows.filter((row) => !flag || row[flag]);
+    }
+
+    /** Lignes du tableau : une par banque (dépliable si plusieurs comptes) en mode « Par banque », sinon une par compte. */
+    get treasuryTable() {
+        const rows = this.treasuryShownRows;
+        const byBank = this.state.treasury.filters.mode === "bank";
+        const make = (key, label, children) => {
+            const sum = (field) => children.reduce((total, row) => total + row[field], 0);
+            const dates = children.map((row) => row.last_statement_days).filter((d) => d !== null);
+            return {
+                key, label, children,
+                usageLabel: this._usageLabel(children[0].usage),
+                bank_balance: sum("bank_balance"), out_transit: sum("out_transit"), in_transit: sum("in_transit"),
+                available: sum("available"),
+                watch: children.some((row) => row.watch), late: children.some((row) => row.late),
+                days: dates.length === children.length && dates.length ? Math.max(...dates) : null,
+                noStatement: children.some((row) => row.last_statement_days === null),
+            };
+        };
+        if (!byBank) {
+            return rows.map((row) => make(`a${row.journal_id}`, row.journal_name, [row]));
+        }
+        const expanded = this.state.treasury.expanded;
+        const flat = [];
+        const groups = new Map();
+        for (const row of rows) {
+            const key = row.bank_id ? `b${row.bank_id}` : `j${row.journal_id}`;
+            if (!groups.has(key)) {
+                groups.set(key, []);
+            }
+            groups.get(key).push(row);
+        }
+        for (const [key, children] of groups) {
+            const line = make(key, children[0].bank_name, children);
+            flat.push(line);
+            if (children.length > 1 && expanded[key]) {
+                for (const child of children) {
+                    flat.push({ ...make(`c${child.journal_id}`, child.journal_name, [child]), isChild: true });
+                }
+            }
+        }
+        return flat;
+    }
+
+    get treasuryTotals() {
+        const rows = this.treasuryShownRows;
+        const sum = (field) => rows.reduce((total, row) => total + row[field], 0);
+        return { bank: sum("bank_balance"), out: sum("out_transit"), in: sum("in_transit"), available: sum("available") };
+    }
+
+    _usageLabel(usage) {
+        const found = (this.state.treasury.data?.usages || []).find((u) => u.id === (usage || "__other"));
+        return found ? found.label : "";
+    }
+
+    treasuryInitials(label) {
+        const words = (label || "").split(/\s+/).filter(Boolean);
+        return (words.length > 1 ? words[0][0] + words[1][0] : (words[0] || "").slice(0, 2)).toUpperCase();
+    }
+
+    treasuryBar(line) {
+        const bank = line.bank_balance;
+        if (bank <= 0) {
+            return { available: 0, transit: 0 };
+        }
+        const transit = Math.min(100, Math.max(0, (line.out_transit / bank) * 100));
+        const available = Math.min(100 - transit, Math.max(0, (line.available / bank) * 100));
+        return { available, transit };
+    }
+
+    treasuryDays(line) {
+        if (line.noStatement) {
+            return "Aucun relevé validé";
+        }
+        return line.days === 0 ? "Dernier relevé : aujourd'hui" : `Dernier relevé : il y a ${line.days} j`;
+    }
+
+    toggleTreasuryLine(line) {
+        if (line.children.length > 1) {
+            const expanded = this.state.treasury.expanded;
+            expanded[line.key] = !expanded[line.key];
+        } else {
+            this.openTreasuryJournal(line.children[0]);
+        }
+    }
+
+    /** Ouvre les écritures comptabilisées du journal (action la moins coûteuse existante : liste filtrée). */
+    openTreasuryJournal(row) {
+        this._openDomainList(
+            "account.move.line", [["journal_id", "=", row.journal_id], ["parent_state", "=", "posted"]],
+            row.bank_name === row.journal_name ? row.journal_name : `${row.bank_name} - ${row.journal_name}`);
+    }
+
+    /** Lignes non lettrées du compte en suspens (139500 sorties / 139100 entrées) d'un journal. */
+    openTreasuryTransit(row, side) {
+        const account = side === "out" ? row.out_account_id : row.in_account_id;
+        this._openDomainList(
+            "account.move.line",
+            [["journal_id", "=", row.journal_id], ["account_id", "=", account], ["reconciled", "=", false],
+             ["parent_state", "=", "posted"]],
+            side === "out" ? `Sorties en transit - ${row.journal_name}` : `À recevoir - ${row.journal_name}`);
     }
 
     // ================================================================
@@ -693,6 +882,10 @@ export class MicrofinanceLoanDashboard extends Component {
 
     /** Lien secondaire d'une tuile (ligne cliquable ou lien croisé) : une fiche (res_id) ou une liste filtrée. */
     openTileLink(link) {
+        if (link.topic === "tresorerie") {
+            this.openTreasury(link.usage);
+            return;
+        }
         if (link.res_id) {
             this.actionService.doAction({
                 type: "ir.actions.act_window",

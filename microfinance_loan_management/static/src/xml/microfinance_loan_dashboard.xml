@@ -7,6 +7,41 @@
         </div>
     </t>
 
+    <t t-name="microfinance_loan_management.TreasuryLine">
+        <tr t-attf-class="o_microfinance_treasury_line {{ line.isChild ? 'o_microfinance_treasury_line--child' : '' }}">
+            <td>
+                <a href="#" class="o_microfinance_treasury_name" t-on-click.prevent="() => this.toggleTreasuryLine(line)">
+                    <span t-if="!line.isChild" class="o_microfinance_treasury_initials" aria-hidden="true" t-esc="treasuryInitials(line.label)"/>
+                    <span class="o_microfinance_treasury_label">
+                        <strong><t t-if="line.children.length &gt; 1 and !line.isChild"><i t-attf-class="fa {{ state.treasury.expanded[line.key] ? 'fa-caret-down' : 'fa-caret-right' }} me-1" role="img" aria-label="Déplier"/></t><t t-esc="line.label"/></strong>
+                        <small class="text-muted d-block">
+                            <t t-if="line.children.length &gt; 1 and !line.isChild"><t t-esc="line.children.length"/> comptes · </t><t t-esc="line.usageLabel"/> · <t t-esc="treasuryDays(line)"/>
+                        </small>
+                        <span t-if="line.watch" class="badge text-bg-warning me-1"><i class="fa fa-exclamation-triangle me-1" role="img" aria-label="Attention"/>À surveiller</span>
+                        <span t-if="line.late" class="badge text-bg-danger"><i class="fa fa-clock-o me-1" role="img" aria-label="Retard"/>Relevé en retard</span>
+                    </span>
+                </a>
+            </td>
+            <td class="text-end"><t t-esc="formatMoney(line.bank_balance)"/></td>
+            <td class="text-end">
+                <a t-if="line.children.length === 1 and line.out_transit" href="#" t-on-click.prevent="() => this.openTreasuryTransit(line.children[0], 'out')" t-esc="formatMoney(line.out_transit)"/>
+                <t t-else="" t-esc="formatMoney(line.out_transit)"/>
+            </td>
+            <td class="text-end">
+                <a t-if="line.children.length === 1 and line.in_transit" href="#" t-on-click.prevent="() => this.openTreasuryTransit(line.children[0], 'in')" t-esc="formatMoney(line.in_transit)"/>
+                <t t-else="" t-esc="formatMoney(line.in_transit)"/>
+            </td>
+            <td class="text-end"><strong t-esc="formatMoney(line.available)"/></td>
+            <td class="o_microfinance_treasury_bar_col">
+                <div class="o_microfinance_treasury_bar" role="img"
+                     t-att-aria-label="'Disponible ' + Math.round(treasuryBar(line).available) + ' %, en transit ' + Math.round(treasuryBar(line).transit) + ' %'">
+                    <span class="o_microfinance_treasury_bar__avail" t-attf-style="width: {{ treasuryBar(line).available }}%"/>
+                    <span class="o_microfinance_treasury_bar__transit" t-attf-style="width: {{ treasuryBar(line).transit }}%"/>
+                </div>
+            </td>
+        </tr>
+    </t>
+
     <t t-name="microfinance_loan_management.MicrofinanceLoanDashboard">
         <div class="o_microfinance_dashboard">
             <div class="o_microfinance_dashboard__header">
@@ -77,6 +112,159 @@
                            t-on-click.prevent="() => this.openTileLink(link)" t-esc="link.label"/>
                     </article>
                 </div>
+                </t>
+
+                <t t-if="state.activeTopic === 'tresorerie'">
+                <t t-call="microfinance_loan_management.DashboardSectionHeader">
+                    <t t-set="label">Trésorerie</t>
+                </t>
+                <t t-set="tr" t-value="state.treasury"/>
+                <div t-if="tr.loading and !tr.loaded" class="o_microfinance_dashboard__loading">Chargement de la trésorerie...</div>
+                <t t-elif="tr.loaded">
+                <t t-set="tt" t-value="treasuryTiles"/>
+                <div class="o_microfinance_kpi_toolbar o_microfinance_treasury_filters">
+                    <label class="o_microfinance_treasury_filters__field">
+                        <span>Usage</span>
+                        <select class="form-select form-select-sm" t-on-change="(ev) => this.onTreasuryFilter('usage', ev.target.value)">
+                            <option value="all" t-att-selected="tr.filters.usage === 'all'">Tous</option>
+                            <option t-foreach="tr.data.usages" t-as="usage" t-key="usage.id" t-att-value="usage.id"
+                                    t-att-selected="tr.filters.usage === usage.id" t-esc="usage.label"/>
+                        </select>
+                    </label>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Regroupement">
+                        <button type="button" t-attf-class="btn {{ tr.filters.mode === 'bank' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                t-on-click="() => this.onTreasuryFilter('mode', 'bank')">Par banque</button>
+                        <button type="button" t-attf-class="btn {{ tr.filters.mode === 'account' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                t-on-click="() => this.onTreasuryFilter('mode', 'account')">Par compte</button>
+                    </div>
+                    <input type="search" class="form-control form-control-sm o_microfinance_treasury_filters__search"
+                           placeholder="Rechercher une banque" aria-label="Rechercher une banque"
+                           t-att-value="tr.filters.query" t-on-input="(ev) => this.onTreasuryFilter('query', ev.target.value)"/>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="() => this.loadTreasury()">
+                        <i class="fa fa-refresh me-1" role="img" aria-label="Actualiser"/>Actualiser
+                    </button>
+                </div>
+
+                <div class="o_microfinance_kpi_grid o_microfinance_kpi_grid--overview o_microfinance_treasury_tiles">
+                    <article class="o_microfinance_kpi o_microfinance_kpi--fonds">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-bank" role="img" aria-label="Solde en banque"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(tt.bank)"/>
+                                <span>Solde en banque</span>
+                                <small class="text-muted"><t t-esc="tt.banks"/> banque(s) · <t t-esc="tt.accounts"/> compte(s)</small>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--fonds">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-arrow-up" role="img" aria-label="Sorties en transit"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(tt.out)"/>
+                                <span>Sorties en transit</span>
+                                <small class="text-muted">Paiements émis, pas encore sur le relevé</small>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--fonds">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-arrow-down" role="img" aria-label="À recevoir"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(tt.in)"/>
+                                <span>À recevoir</span>
+                                <small class="text-muted">dont <t t-esc="formatMoney(tt.inOld)"/> depuis plus de <t t-esc="tr.data.settings.receivable_days"/> jours</small>
+                            </div>
+                        </div>
+                    </article>
+                    <article class="o_microfinance_kpi o_microfinance_kpi--fonds">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-check-circle" role="img" aria-label="Disponible"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatMoney(tt.available)"/>
+                                <span>Disponible</span>
+                                <small class="text-muted">Solde en banque moins sorties en transit</small>
+                            </div>
+                        </div>
+                    </article>
+                    <article t-attf-class="o_microfinance_kpi o_microfinance_kpi--defaut o_microfinance_treasury_tile--click {{ tr.filters.flag === 'watch' ? 'o_microfinance_treasury_tile--on' : '' }}"
+                             role="button" tabindex="0" t-on-click="() => this.onTreasuryFlag('watch')"
+                             t-on-keydown.enter="() => this.onTreasuryFlag('watch')">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-exclamation-triangle" role="img" aria-label="À surveiller"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatNumber(tt.watch)"/>
+                                <span>À surveiller</span>
+                                <small class="text-muted"><t t-if="tr.filters.flag === 'watch'">Filtre actif : cliquer pour retirer</t><t t-else="">Disponible ≤ <t t-esc="tr.data.settings.watch_pct"/> % du solde, ou négatif</t></small>
+                            </div>
+                        </div>
+                    </article>
+                    <article t-attf-class="o_microfinance_kpi o_microfinance_kpi--defaut o_microfinance_treasury_tile--click {{ tr.filters.flag === 'late' ? 'o_microfinance_treasury_tile--on' : '' }}"
+                             role="button" tabindex="0" t-on-click="() => this.onTreasuryFlag('late')"
+                             t-on-keydown.enter="() => this.onTreasuryFlag('late')">
+                        <div class="o_microfinance_kpi__body">
+                            <span class="o_microfinance_kpi__icon"><i class="fa fa-file-text-o" role="img" aria-label="Relevés à saisir"/></span>
+                            <div class="o_microfinance_kpi__content">
+                                <strong t-esc="formatNumber(tt.late)"/>
+                                <span>Relevés à saisir</span>
+                                <small class="text-muted"><t t-if="tr.filters.flag === 'late'">Filtre actif : cliquer pour retirer</t><t t-else="">Dernier relevé &gt; <t t-esc="tr.data.settings.statement_days"/> jours et mouvements depuis</t></small>
+                            </div>
+                        </div>
+                    </article>
+                </div>
+
+                <section class="o_microfinance_panel o_microfinance_panel--table o_microfinance_treasury_panel">
+                    <div class="table-responsive">
+                        <table class="table align-middle o_microfinance_table o_microfinance_treasury_table">
+                            <thead>
+                                <tr>
+                                    <th>Banque</th>
+                                    <th class="text-end">Solde en banque</th>
+                                    <th class="text-end">Sorties en transit</th>
+                                    <th class="text-end">À recevoir</th>
+                                    <th class="text-end">Disponible</th>
+                                    <th class="o_microfinance_treasury_bar_col">Répartition</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr t-if="!treasuryTable.length">
+                                    <td colspan="6" class="text-center text-muted py-4">Aucun compte pour ces filtres.</td>
+                                </tr>
+                                <t t-foreach="treasuryTable" t-as="line" t-key="line.key">
+                                    <t t-call="microfinance_loan_management.TreasuryLine"/>
+                                </t>
+                            </tbody>
+                            <tfoot t-if="treasuryTable.length">
+                                <tr class="o_microfinance_treasury_total">
+                                    <th>Total</th>
+                                    <th class="text-end" t-esc="formatMoney(treasuryTotals.bank)"/>
+                                    <th class="text-end" t-esc="formatMoney(treasuryTotals.out)"/>
+                                    <th class="text-end" t-esc="formatMoney(treasuryTotals.in)"/>
+                                    <th class="text-end" t-esc="formatMoney(treasuryTotals.available)"/>
+                                    <th/>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </section>
+
+                <section t-if="tr.data.band.length" class="o_microfinance_panel o_microfinance_treasury_band">
+                    <div class="o_microfinance_panel__title"><h2>Espèces et mobile money</h2></div>
+                    <div class="o_microfinance_treasury_band__items">
+                        <div t-foreach="tr.data.band" t-as="item" t-key="item.journal_id" class="o_microfinance_treasury_band__item">
+                            <span class="o_microfinance_treasury_band__name">
+                                <i t-attf-class="fa {{ item.kind === 'cash' ? 'fa-money' : 'fa-mobile' }} me-1" role="img" t-att-aria-label="item.name"/>
+                                <t t-esc="item.name"/><t t-if="tr.data.multi_company"> (<t t-esc="item.company_name"/>)</t>
+                            </span>
+                            <strong t-esc="formatMoney(item.balance)"/>
+                            <small t-if="item.kind === 'cash'" class="text-muted">
+                                <t t-if="!item.count">Aucun comptage validé</t>
+                                <t t-elif="item.count.ok"><i class="fa fa-check-circle me-1" role="img" aria-label="Conforme"/>Dernier comptage conforme</t>
+                                <t t-else=""><i class="fa fa-exclamation-triangle me-1" role="img" aria-label="Écart"/>Dernier comptage : écart de <t t-esc="formatMoney(item.count.variance)"/></t>
+                            </small>
+                        </div>
+                    </div>
+                </section>
+                </t>
                 </t>
 
                 <t t-if="state.activeTopic === 'portefeuille'">
