@@ -41,6 +41,9 @@
                         <group>
                             <field name="currency_id" invisible="1"/>
                             <field name="reste_partageable" string="Reste partageable du fonds"/>
+                            <field name="fond_recu_banque" string="Reçu en banque"/>
+                            <field name="fond_deja_reparti" string="Déjà réparti"/>
+                            <field name="fond_reste_banque" string="Reste à répartir (reçu en banque)"/>
                             <field name="base_amount" string="Montant à partager" readonly="state != 'draft'"/>
                         </group>
                     </group>

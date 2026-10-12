@@ -90,6 +90,18 @@ class MicrofinanceFondAllocation(models.Model):
             allocation.amount_received = received
             allocation.amount_not_received = missing
 
+    def _portfolio_bank_amounts(self, exclude=None):
+        """(reçu en banque de l'agence, déjà alloué aux portefeuilles, allouable) pour ce fonds : seule la part de
+        l'agence soldée par un relevé compte. `exclude` : répartition à ne pas compter dans le déjà alloué."""
+        self.ensure_one()
+        self.invalidate_recordset(['amount_in_transit', 'amount_received', 'amount_not_received'])
+        received = self.amount_received
+        done = self.env['microfinance.portfolio.allocation'].sudo().search([
+            ('fond_id', '=', self.fond_id.id), ('company_id', '=', self.company_id.id),
+            ('state', '=', 'validated')]) - (exclude or self.env['microfinance.portfolio.allocation'])
+        allocated = sum(done.mapped('base_amount'))
+        return received, allocated, received - allocated
+
     def _available_for_disbursement(self):
         """Plafond de décaissement de l'agence sur ce fonds. Par défaut : alloué moins utilisé (inchangé).
         Si la société a activé « décaisser seulement sur les fonds reçus en banque » : reçu en banque moins utilisé."""
@@ -157,6 +169,19 @@ class MicrofinanceFondCredit(models.Model):
             'recu_banque': sum(funds.mapped('siege_recu_banque')),
             'reste': sum(funds.mapped('reste_partageable')) if funds else 0.0,
         }
+
+    def _partage_bank_amounts(self, company, exclude=None):
+        """(reçu en banque, déjà réparti, reste à répartir) du fonds pour un partage aux agences, calculé sur le reçu
+        en banque de la société mère : le calcul du siège (siege_recu_banque) pour un fonds de crédit, celui de la
+        liste (exploitation_recu_banque) pour un fonds d'exploitation. `exclude` : partage à ne pas compter."""
+        self.ensure_one()
+        fond = self.sudo().with_company(company)
+        field = 'exploitation_recu_banque' if fond.destination == 'exploitation' else 'siege_recu_banque'
+        fond.invalidate_recordset([field])
+        received = fond[field]
+        done = fond.partage_ids.filtered(lambda p: p.state == 'validated') - (exclude or fond.partage_ids.browse())
+        shared = sum(done.mapped('base_amount'))
+        return received, shared, received - shared
 
     # ------------------------------------------------------------------ montants de l'agence
     def _agency_allocation(self, company):

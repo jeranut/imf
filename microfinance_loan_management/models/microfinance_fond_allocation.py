@@ -1,10 +1,25 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 # Clé de contexte posée par le partage (microfinance.fond.partage) : seule voie autorisée pour
 # créer, modifier ou supprimer une allocation.
 ALLOCATION_TECHNICAL_CONTEXT = 'fond_partage_technique'
+
+
+def format_ariary(amount):
+    """Montant entier lisible (« 30 000 000 »), pour les messages de refus."""
+    return '{:,.0f}'.format(amount).replace(',', ' ')
+
+
+def check_whole_amounts(currency, amounts):
+    """Refuse un montant décimal : l'unité est celle de la monnaie (res.currency), au moins 1 Ariary."""
+    unit = max(currency.rounding, 1.0)
+    for amount in amounts:
+        ratio = amount / unit
+        if abs(ratio - round(ratio)) > 1e-6:
+            raise ValidationError(_(
+                "Les montants doivent être des Ariary entiers : %s n'est pas un montant valide.") % amount)
 
 
 class MicrofinanceFondAllocation(models.Model):

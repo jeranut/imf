@@ -5,7 +5,7 @@ from decimal import Decimal, ROUND_FLOOR
 
 from odoo.tools import float_compare, float_is_zero, float_round
 
-from .microfinance_fond_allocation import ALLOCATION_TECHNICAL_CONTEXT
+from .microfinance_fond_allocation import ALLOCATION_TECHNICAL_CONTEXT, check_whole_amounts, format_ariary
 
 # Champs techniques de liaison comptable d'une part, écrits par la validation/génération même d'un partage
 # déjà validé (microfinance_fond_liaison.py) : exemptés du verrou « partage en brouillon ».
@@ -74,6 +74,36 @@ class MicrofinanceFondPartage(models.Model):
     total_percent = fields.Float(string='Total %', compute='_compute_totals', digits=(16, 4))
     total_amount = fields.Monetary(string='Total réparti', compute='_compute_totals')
     reste_a_partager = fields.Monetary(string='Reste à répartir', compute='_compute_totals')
+
+    fond_recu_banque = fields.Monetary(
+        string='Reçu en banque', compute='_compute_fond_bank_amounts',
+        help="Contributions du fonds dont la ligne en suspens (139100) est soldée par une ligne de relevé bancaire.")
+    fond_deja_reparti = fields.Monetary(
+        string='Déjà réparti', compute='_compute_fond_bank_amounts',
+        help="Total des autres partages validés de ce fonds (part gardée par le siège comprise).")
+    fond_reste_banque = fields.Monetary(
+        string='Reste à répartir (reçu en banque)', compute='_compute_fond_bank_amounts',
+        help="Reçu en banque moins déjà réparti : plafond d'un partage, appliqué à la validation.")
+
+    @api.depends('fond_id', 'company_id', 'state')
+    def _compute_fond_bank_amounts(self):
+        for partage in self:
+            received = shared = rest = 0.0
+            if partage.fond_id and partage.company_id:
+                received, shared, rest = partage.fond_id._partage_bank_amounts(partage.company_id, exclude=partage)
+            partage.fond_recu_banque, partage.fond_deja_reparti, partage.fond_reste_banque = received, shared, rest
+
+    def _check_bank_received(self):
+        """Contrôle permanent, sans réglage ni exception : on ne partage que de l'argent reçu en banque. Le total
+        partagé (lignes des agences ET part gardée) ne dépasse pas le reçu en banque du fonds moins le déjà réparti."""
+        self.ensure_one()
+        check_whole_amounts(self.currency_id, [self.base_amount] + self.line_ids.mapped('amount'))
+        received, shared, rest = self.fond_id._partage_bank_amounts(self.company_id, exclude=self)
+        if float_compare(self.base_amount, rest, precision_rounding=self.currency_id.rounding) > 0:
+            raise UserError(_(
+                "Montant non disponible : reçu en banque %(recu)s, déjà réparti %(reparti)s, reste %(reste)s. "
+                "Saisissez le relevé de la banque pour confirmer l'encaissement."
+            ) % {'recu': format_ariary(received), 'reparti': format_ariary(shared), 'reste': format_ariary(rest)})
 
     @api.depends('base_amount', 'line_ids.percent', 'line_ids.amount')
     def _compute_totals(self):
@@ -283,6 +313,7 @@ class MicrofinanceFondPartage(models.Model):
                 raise UserError(_(
                     'La répartition doit totaliser 100 %% du montant à partager (actuellement %.4f %%).'
                 ) % partage.total_percent)
+            partage._check_bank_received()
             details = []
             for line in partage.line_ids.filtered(lambda l: not float_is_zero(l.amount, precision_rounding=rounding)):
                 allocation = Allocation.search([
