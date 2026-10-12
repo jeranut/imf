@@ -615,7 +615,7 @@
                 <section class="o_microfinance_panel o_microfinance_panel--table">
                     <div class="o_microfinance_panel__title">
                         <h2>Décaissements à venir</h2>
-                        <span class="o_microfinance_dashboard__hint">Crédits activés, en attente de libération vers la caisse (date de décaissement provisoire pas encore atteinte).</span>
+                        <span class="o_microfinance_dashboard__hint">Crédits activés, en attente de libération vers la caisse (date de décaissement provisoire pas encore atteinte ou non confirmée).</span>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-hover align-middle o_microfinance_table">
