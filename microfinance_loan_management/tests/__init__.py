@@ -103,3 +103,4 @@ from . import test_journal_control
 from . import test_fond_partage_exploitation
 from . import test_mf_trace
 from . import test_payslip_payment
+from . import test_treasury_tab

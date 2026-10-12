@@ -11,7 +11,8 @@ from odoo.tests.common import TransactionCase
 NET = 680500.0
 
 
-class TestPayslipPayment(TransactionCase):
+class PayslipPaymentCommon(TransactionCase):
+    """Fixtures communes (sociétés, comptes, journaux d'exploitation, bulletins, relevé) — sans test."""
 
     @classmethod
     def setUpClass(cls):
@@ -131,6 +132,10 @@ class TestPayslipPayment(TransactionCase):
         entry.action_treat()
         self.env.invalidate_all()
         return entry
+
+
+
+class TestPayslipPayment(PayslipPaymentCommon):
 
     # ------------------------------------------------------------------ paiement individuel
     def test_single_payslip_creates_net_payment_in_transit(self):
@@ -307,111 +312,3 @@ class TestPayslipPayment(TransactionCase):
         payment.action_validate()   # non bloquant
         self.assertEqual(payment.state, 'posted')
         self.assertFalse(payment.warning_message)
-
-    # ------------------------------------------------------------------ tuile trésorerie
-    def _tiles(self, company=None, user=None):
-        Loan = self.env['microfinance.loan']
-        if user:
-            Loan = Loan.with_user(user)
-        Loan = Loan.with_company(company or self.company_a).with_context(
-            allowed_company_ids=[(company or self.company_a).id])
-        return {t['key']: t for t in Loan._get_overview_tiles()}
-
-    def _rows(self, tiles):
-        return {row['bank']: row for row in tiles['operating_treasury']['journals']}
-
-    def test_treasury_tile_amounts_and_statement(self):
-        self._opening(self.bmop, 3000000.0, self.setup_a)
-        payment = self._pay(self._slip())
-        receipt = self.env['account.move'].create({
-            'move_type': 'entry', 'journal_id': self.bmop.id, 'date': fields.Date.today(),
-            'line_ids': [
-                (0, 0, {'account_id': self.setup_a['in'].id, 'debit': 1000000.0, 'credit': 0.0, 'name': 'Don'}),
-                (0, 0, {'account_id': self.setup_a['equity'].id, 'debit': 0.0, 'credit': 1000000.0, 'name': 'Don'})]})
-        receipt.action_post()
-        row = self._rows(self._tiles())[self.bmoi.name]
-        self.assertEqual((row['bank_balance'], row['out_transit'], row['in_transit'], row['available']),
-                         (3000000.0, NET, 1000000.0, 3000000.0 - NET))
-        self._statement_out(self.bmop, payment.line_ids.bank_line_id)
-        row = self._rows(self._tiles())[self.bmoi.name]
-        self.assertEqual((row['bank_balance'], row['out_transit'], row['available']),
-                         (3000000.0 - NET, 0.0, 3000000.0 - NET))
-        # la tuile est nommée par sa banque, jamais par un code de journal
-        tile = self._tiles()['operating_treasury']
-        self.assertNotIn(self.bmop.code, ' '.join(item['label'] for item in tile['secondary_items']))
-
-    def test_two_operating_journals_two_rows_and_links(self):
-        self._opening(self.bmop, 3000000.0, self.setup_a)
-        self._opening(self.bnop, 500000.0, self.setup_a)
-        tiles = self._tiles()
-        rows = self._rows(tiles)
-        self.assertEqual((rows[self.bmoi.name]['bank_balance'], rows[self.bni.name]['bank_balance']),
-                         (3000000.0, 500000.0))
-        tile = tiles['operating_treasury']
-        # clic sur la banque -> le journal ; clic sur « En transit » -> les lignes concernées
-        opens = [i['link'] for i in tile['secondary_items'] if i.get('link', {}).get('model') == 'account.journal']
-        self.assertEqual({l['res_id'] for l in opens}, {self.bmop.id, self.bnop.id})
-        transit = next(i['link'] for i in tile['secondary_items'] if i['label'].endswith('Paiements en transit')
-                       and self.bmoi.name in i['label'])
-        self.assertEqual(transit['model'], 'account.move.line')
-
-    def test_agency_user_sees_only_own_company(self):
-        self._opening(self.bmop, 3000000.0, self.setup_a)
-        self._opening(self.setup_b['journals'][0], 70000.0, self.setup_b)
-        group = self.env.ref('microfinance_loan_management.group_microfinance_manager')
-        user = self.env['res.users'].with_context(no_reset_password=True).create({
-            'name': 'Directeur agence B (test)', 'login': 'tres_agence_b', 'company_id': self.company_b.id,
-            'company_ids': [(6, 0, self.company_b.ids)],
-            'groups_id': [(6, 0, [self.env.ref('base.group_user').id, group.id,
-                                  self.env.ref('account.group_account_user').id])]})
-        tile = self._tiles(self.company_b, user)['operating_treasury']
-        self.assertEqual([row['bank_balance'] for row in tile['journals']], [70000.0])
-        self.assertNotIn(self.bni.name, [row['bank'] for row in tile['journals']])
-
-    def test_separation_from_funds_tile(self):
-        self._opening(self.bmop, 3000000.0, self.setup_a)
-        tiles = self._tiles()
-        funds = tiles['exploitation_funds']
-        self.assertEqual(funds['value'], 0.0)
-        self.assertTrue(all(not item.get('value') for item in funds['secondary_items']))
-        self.assertEqual(self._rows(tiles)[self.bmoi.name]['bank_balance'], 3000000.0)
-        # contribution de bailleur de 1 000 000, non rapprochée
-        self.company_a.microfinance_fond_subvention_account_id = self._acc(
-            self.company_a, '762000', 'income_other', False)
-        bailleur = self.env['microfinance.bailleur.fonds'].create({'name': 'Bailleur paie (test)'})
-        fond = self.env['microfinance.fond.credit'].with_company(self.company_a).create({
-            'name': 'Exploitation paie test', 'bailleur_id': bailleur.id, 'date_debut': '2020-01-01',
-            'destination': 'exploitation', 'nature': 'subvention', 'bank_id': self.bmoi.id, 'account_id': False})
-        contrib = self.env['microfinance.fond.contribution'].with_company(self.company_a).create({
-            'fond_id': fond.id, 'type_mouvement': 'depot', 'amount': 1000000.0, 'mode_paiement': 'virement',
-            'reference_paiement': 'VIR-PAIE-TEST'})
-        contrib.action_post()
-        self.env.invalidate_all()
-        tiles = self._tiles()
-        funds = tiles['exploitation_funds']
-        items = {item['label']: item['value'] for item in funds['secondary_items'] if 'value' in item}
-        self.assertEqual((funds['value'], items['En transit'], items['Reçu en banque']), (1000000.0, 1000000.0, 0.0))
-        row = self._rows(tiles)[self.bmoi.name]
-        self.assertEqual((row['bank_balance'], row['in_transit']), (3000000.0, 1000000.0))
-
-    def test_cross_links_between_the_two_tiles(self):
-        self._opening(self.bmop, 3000000.0, self.setup_a)
-        tiles = self._tiles()
-        keys = list(tiles)
-        self.assertEqual(keys.index('operating_treasury'), keys.index('exploitation_funds') + 1)
-        links = {l['label']: l for l in tiles['operating_treasury']['extra_links']}
-        self.assertFalse(tiles['operating_treasury']['model'])   # pas de lien principal (cf. règle des tuiles)
-        self.assertEqual(self.env['account.journal'].search(
-            links["Voir les journaux d'exploitation"]['domain']), self.bmop | self.bnop)
-        to_funds = links["Voir les fonds d'exploitation"]
-        self.assertEqual((to_funds['label'], to_funds['model']), ("Voir les fonds d'exploitation",
-                                                                  'microfinance.fond.credit'))
-        self.assertEqual(to_funds['domain'], tiles['exploitation_funds']['domain'])
-        to_treasury = tiles['exploitation_funds']['extra_links'][0]
-        self.assertEqual((to_treasury['label'], to_treasury['model']),
-                         ("Voir la trésorerie d'exploitation", 'account.journal'))
-        journals = self.env['account.journal'].search(to_treasury['domain'])
-        self.assertEqual(journals, self.bmop | self.bnop)
-        # le contenu de la tuile des fonds est inchangé (mêmes lignes qu'avant)
-        self.assertEqual([i['label'] for i in tiles['exploitation_funds']['secondary_items']][:3],
-                         ['En transit', 'Reçu en banque', 'Dû aux bailleurs (avances)'])
