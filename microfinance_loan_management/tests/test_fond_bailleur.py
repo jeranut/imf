@@ -39,6 +39,34 @@ class TestFondBailleurCommon(MicrofinanceCommon):
             'company_id': cls.env.company.id,
         })
 
+    # Le partage et l'allocation aux portefeuilles refusent tout montant non reçu en banque (contrôle permanent). Les
+    # anciens tests portent sur les écritures, les allocations et les droits, pas sur le rapprochement : ils tiennent
+    # le contribué et l'alloué pour reçus. La classe qui teste le contrôle lui-même met ce drapeau à False.
+    TREAT_FUNDS_AS_RECEIVED = True
+
+    def setUp(self):
+        super().setUp()
+        if self.TREAT_FUNDS_AS_RECEIVED:
+            self._treat_funds_as_received()
+
+    def _treat_funds_as_received(self):
+        Fond = type(self.env['microfinance.fond.credit'])
+        Allocation = type(self.env['microfinance.fond.allocation'])
+        portfolio_amounts = Allocation._portfolio_bank_amounts
+
+        def partage_amounts(fond, company, exclude=None):
+            fond = fond.sudo()
+            done = fond.partage_ids.filtered(lambda p: p.state == 'validated') - (exclude or fond.partage_ids.browse())
+            shared = sum(done.mapped('base_amount'))
+            return fond.total_contributions, shared, fond.total_contributions - shared
+
+        def agency_amounts(allocation, exclude=None):
+            _received, allocated, _available = portfolio_amounts(allocation, exclude=exclude)
+            return allocation.amount_allocated, allocated, allocation.amount_allocated - allocated
+
+        self.patch(Fond, '_partage_bank_amounts', partage_amounts)
+        self.patch(Allocation, '_portfolio_bank_amounts', agency_amounts)
+
     def _create_fond(self, **kwargs):
         vals = {
             'name': 'Fonds Test',
