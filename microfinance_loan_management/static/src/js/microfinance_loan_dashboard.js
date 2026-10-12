@@ -691,6 +691,22 @@ export class MicrofinanceLoanDashboard extends Component {
         this._openDomainList(tile.model, tile.domain, tile.label, tile.views);
     }
 
+    /** Lien secondaire d'une tuile (ligne cliquable ou lien croisé) : une fiche (res_id) ou une liste filtrée. */
+    openTileLink(link) {
+        if (link.res_id) {
+            this.actionService.doAction({
+                type: "ir.actions.act_window",
+                res_model: link.model,
+                res_id: link.res_id,
+                name: link.name,
+                views: [[false, "form"]],
+                target: "current",
+            });
+            return;
+        }
+        this._openDomainList(link.model, link.domain, link.name, link.views);
+    }
+
     openTodayInstallments() {
         const link = this.state.data?.today_installments_link;
         if (link) {
