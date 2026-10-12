@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_microfinance_loan_release_wizard_form" model="ir.ui.view">
+        <field name="name">microfinance.loan.release.wizard.form</field>
+        <field name="model">microfinance.loan.release.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Envoyer à la caisse">
+                <div class="alert alert-warning" role="alert">
+                    La date de décaissement provisoire de ce crédit n'est pas encore atteinte ou n'a pas été
+                    confirmée : l'envoyer maintenant à la caisse anticipe cette date.
+                </div>
+                <group>
+                    <field name="loan_id"/>
+                    <field name="disbursement_date_planned"/>
+                    <field name="disbursement_date_confirmed"/>
+                    <field name="reason" required="1" placeholder="Pourquoi envoyer ce crédit à la caisse avant la date provisoire ?"/>
+                </group>
+                <footer>
+                    <button name="action_confirm" string="Confirmer l'envoi à la caisse" type="object" class="btn-primary"/>
+                    <button string="Annuler" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

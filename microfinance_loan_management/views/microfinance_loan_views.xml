@@ -125,6 +125,10 @@
                          'active' (contrôles conservés) ; le décaissement effectif (écriture de
                          sortie de caisse) a lieu au Guichet Caisse. -->
                     <button name="action_activate" string="Activer" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_finance" invisible="state != 'approved'"/>
+                    <!-- Libération vers le guichet sans attendre le cron (manager crédit / chef d'agence /
+                         gestionnaire, jamais le caissier) : action_release_to_cashier() redemande
+                         confirmation et motif si la date provisoire n'est pas confirmée et atteinte. -->
+                    <button name="action_release_to_cashier" string="Envoyer à la caisse" type="object" class="btn-primary" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'active' or disbursement_date or disbursement_release_ready"/>
                     <button name="action_reschedule" string="Rééchelonner" type="object" groups="microfinance_loan_management.group_microfinance_manager" invisible="state != 'active'"/>
                     <button name="action_mark_default" string="Marquer en défaut" type="object" invisible="state != 'active'"/>
                     <button name="action_close" string="Clôturer" type="object" invisible="state not in ('active','defaulted')"/>

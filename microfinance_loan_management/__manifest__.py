@@ -78,6 +78,7 @@
         'wizard/microfinance_loan_activation_confirm_wizard_views.xml',
         'views/microfinance_dashboard_views.xml',
         'views/microfinance_partner_views.xml',
+        'wizard/microfinance_loan_release_wizard_views.xml',
         'views/microfinance_client_blacklist_views.xml',
         'views/microfinance_caisse_fiche_journee_views.xml',
         'views/microfinance_caisse_session_views.xml',
