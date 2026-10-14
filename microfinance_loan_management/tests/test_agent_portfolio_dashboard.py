@@ -7,6 +7,7 @@ panneau échéances, snapshot, non-régression de get_par_buckets.
 """
 import base64
 from datetime import timedelta
+from unittest.mock import patch
 
 from odoo import fields
 from odoo.exceptions import AccessError
@@ -23,7 +24,12 @@ class TestAgentPortfolioDashboard(MicrofinanceCommon):
         super().setUpClass()
         # action_activate lève si un fonds de crédit actif existe ; on n'active pas de crédit
         # ici (forge directe) mais on neutralise par cohérence avec les autres suites.
-        cls.env['microfinance.fond.credit'].sudo().search([('active', '=', True)]).write({'active': False})
+        # Sur une base réelle (MOWGLI et copies) une société mère est désignée et refuse l'écriture
+        # sur les fonds depuis une autre société : on la neutralise le temps de cette écriture.
+        no_parent = patch.object(
+            type(cls.env['res.company']), '_get_microfinance_parent', lambda self: self.browse())
+        with no_parent:
+            cls.env['microfinance.fond.credit'].sudo().search([('active', '=', True)]).write({'active': False})
         cls.company_a = cls.env.company
 
         # --- Agence B : comptes, journaux, produit ---
@@ -134,13 +140,18 @@ class TestAgentPortfolioDashboard(MicrofinanceCommon):
         self.assertNotIn(self.agent_b1.id, ids)
         self.assertEqual({a['company_id'] for a in agents}, {self.company_a.id})
 
-    def test_scope_auditor_sees_multiple_agencies(self):
+    def test_scope_auditor_lists_all_authorized_agencies_but_figures_are_per_agency(self):
+        # L'auditeur autorisé sur plusieurs agences les voit toutes dans la liste des agents...
         agents = self.Loan.with_user(self.auditor_ab).get_available_agents()
-        ids = {a['officer_id'] for a in agents}
-        companies = {a['company_id'] for a in agents}
-        self.assertIn(self.agent_a1.id, ids)
-        self.assertIn(self.agent_b1.id, ids)
-        self.assertEqual(companies, {self.company_a.id, self.company_b.id})
+        self.assertEqual({a['company_id'] for a in agents}, {self.company_a.id, self.company_b.id})
+        # ... mais les chiffres ne portent jamais que sur UNE agence (pas de cumul).
+        kpis_a = self.Loan.with_user(self.auditor_ab).get_agent_portfolio_kpis()
+        self.assertEqual(kpis_a['nb_dossiers_actifs'], self.Loan.with_user(self.manager_a).get_agent_portfolio_kpis()['nb_dossiers_actifs'])
+        self.env['microfinance.portfolio'].create({'agent_id': self.agent_b1.id, 'company_id': self.company_b.id})
+        kpis_b1 = self.Loan.with_user(self.auditor_ab).get_agent_portfolio_kpis(self.agent_b1.id)
+        self.assertEqual(kpis_b1['nb_dossiers_actifs'], 1)  # agent de l'agence B : bascule sur B
+        kpis_b = self.Loan.with_user(self.auditor_ab).with_company(self.company_b).get_agent_portfolio_kpis()
+        self.assertEqual(kpis_b['nb_dossiers_actifs'], 1)
 
     def test_agent_forcing_a_colleague_officer_id_is_blocked(self):
         with self.assertRaises(AccessError):

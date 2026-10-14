@@ -24,3 +24,5 @@ from . import test_savings_transaction_creation_lock
 from . import test_savings_account_menu_creation_lock
 from . import test_savings_holder_account
 from . import test_savings_split_migration
+from . import test_opening_reprise
+from . import test_caisse_correctifs

@@ -16,4 +16,10 @@
         <field name="global" eval="True"/>
         <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
     </record>
+    <record id="mowgli_payroll_param_company_rule" model="ir.rule">
+        <field name="name">Paramètre de cotisation : global ou de mes sociétés</field>
+        <field name="model_id" ref="model_mowgli_payroll_param"/>
+        <field name="global" eval="True"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
 </odoo>

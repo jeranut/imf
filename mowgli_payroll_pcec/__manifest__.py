@@ -12,7 +12,9 @@
     'data': [
         'security/ir.model.access.csv',
         'security/hr_payroll_security.xml',
+        'data/mowgli_payroll_param_data.xml',
         'data/hr_payroll_rules_data.xml',
+        'views/mowgli_payroll_param_views.xml',
         'views/hr_payroll_structure_views.xml',
         'views/hr_salary_rule_views.xml',
         'views/account_account_views.xml',

@@ -9,6 +9,7 @@ import re
 import subprocess
 
 from odoo.tests.common import TransactionCase, tagged
+from odoo.addons.mowgli_payroll_pcec.tests.common import MowgliSmeTestMixin
 
 RULE_CODES = (
     'BASIC', 'Travel', 'GROSS', 'CNAPS', 'OSTIE', 'NETIMP', 'IRSA', 'NET',
@@ -16,7 +17,7 @@ RULE_CODES = (
 
 
 @tagged('post_install', '-at_install')
-class TestPayrollPcecReport(TransactionCase):
+class TestPayrollPcecReport(MowgliSmeTestMixin, TransactionCase):
 
     @classmethod
     def setUpClass(cls):
@@ -33,6 +34,7 @@ class TestPayrollPcecReport(TransactionCase):
 
     def setUp(self):
         super().setUp()
+        self._mowgli_add_test_sme()
         if not self.company or not self.structure:
             self.skipTest(
                 "Société CEFOR Isotry ou structure BASE absente de cette "

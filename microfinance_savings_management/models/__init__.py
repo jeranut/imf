@@ -13,3 +13,4 @@ from . import microfinance_loan_application_extension
 from . import microfinance_loan_payment_extension
 from . import microfinance_dashboard_extension
 from . import res_partner
+from . import microfinance_opening_reprise

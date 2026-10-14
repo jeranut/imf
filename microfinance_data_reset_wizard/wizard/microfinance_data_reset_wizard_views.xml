@@ -46,6 +46,8 @@
                         <field name="do_savings_accounts"/>
                         <field name="do_savings_transactions"/>
                         <field name="do_accounting_entries"/>
+                        <field name="do_reprise_clients"/>
+                        <field name="do_opening_balances"/>
                     </group>
                 </group>
 

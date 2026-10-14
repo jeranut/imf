@@ -13,7 +13,9 @@ class AccountJournal(models.Model):
         super()._fill_bank_cash_dashboard_data(dashboard_data)
         Statement = self.env['account.bank.statement'].sudo()
         Entry = self.env['microfinance.bank.statement.entry'].sudo()
-        for journal in self.filtered(lambda j: j.type == 'bank'):
+        banks = self.filtered(lambda j: j.type == 'bank')
+        amounts = banks._mf_treasury_amounts()
+        for journal in banks:
             data = dashboard_data[journal.id]
             currency = journal.currency_id or journal.company_id.sudo().currency_id
             last = Statement.search([('journal_id', '=', journal.id), ('mf_state', '=', 'validated')],
@@ -24,12 +26,19 @@ class AccountJournal(models.Model):
                 (journal.default_account_id.id, journal.company_id.id))
             book = self.env.cr.fetchone()[0] if journal.default_account_id else 0.0
             statement_balance = last.balance_end_real if last else 0.0
+            transit = amounts[journal.id]
+            unexplained = journal._mf_unexplained_gap(
+                currency, statement_balance, book, transit['out_transit'], transit['in_transit']) if last else 0.0
             data.update({
                 'mf_enabled': True,
                 'mf_statement_balance': currency.format(statement_balance),
                 'mf_book_balance': currency.format(book),
                 'mf_gap': currency.format(currency.round(statement_balance - book)),
                 'mf_gap_nonzero': not currency.is_zero(statement_balance - book),
+                'mf_transit': currency.format(transit['out_transit']),
+                'mf_transit_nonzero': not currency.is_zero(transit['out_transit']),
+                'mf_unexplained': currency.format(unexplained),
+                'mf_unexplained_nonzero': not currency.is_zero(unexplained),
                 'mf_last_statement': last._mf_fmt(last.mf_datetime_to, FMT_LONG),
                 'mf_todo_count': Entry.search_count([('journal_id', '=', journal.id), ('state', '=', 'todo')]),
             })

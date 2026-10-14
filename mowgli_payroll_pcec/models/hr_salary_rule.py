@@ -12,22 +12,61 @@ MANAGER_GROUP = 'hr_payroll_community.group_hr_payroll_community_manager'
 
 # Étape C : comptes PCEC des règles de la structure source, par code
 # compte (recherché dans la société de la structure, jamais inventé).
-ACCOUNT_DEBIT_BY_CODE = {'BASIC': '652100'}
+ACCOUNT_DEBIT_BY_CODE = {
+    'BASIC': '652100', 'Travel': '652100', 'HRA': '652100', 'DA': '652100', 'Meal': '652100',
+    'Medical': '652100', 'Other': '652100',
+}
 ACCOUNT_CREDIT_BY_CODE = {
     'CNAPS': '315000', 'OSTIE': '315000', 'IRSA': '315000', 'NET': '315000',
 }
 # GROSS et NETIMP ne reçoivent jamais de compte (lignes informatives).
-NO_ACCOUNT_CODES = ('GROSS', 'NETIMP')
+NO_ACCOUNT_CODES = ('GROSS', 'NETIMP', 'CNAPS_ER', 'OSTIE_ER')
 ACCOUNT_ROLES = (('debit', 'debit_account_id'), ('credit', 'credit_account_id'))
 
-OSTIE_CODE = (
-    "# OSTIE salarié - 1 % du brut (cf. CNAPS)\n"
+CNAPS_CODE = (
     "brut = categories.GROSS\n"
-    "result = -brut * 0.01 if brut > 0 else 0.0"
+    "base = payslip.dict._mowgli_contribution_base(brut)\n"
+    "result = -base * payslip.dict._mowgli_param('CNAPS_SAL')"
 )
 
+OSTIE_CODE = (
+    "brut = categories.GROSS\n"
+    "base = payslip.dict._mowgli_contribution_base(brut)\n"
+    "result = -base * payslip.dict._mowgli_param('OSTIE_SAL')"
+)
+
+# Parts patronales (catégorie COMP, sans compte, hors bulletin imprimé).
+CNAPS_ER_CODE = (
+    "brut = categories.GROSS\n"
+    "base = payslip.dict._mowgli_contribution_base(brut)\n"
+    "result = base * payslip.dict._mowgli_param('CNAPS_ER')"
+)
+
+OSTIE_ER_CODE = (
+    "brut = categories.GROSS\n"
+    "base = payslip.dict._mowgli_contribution_base(brut)\n"
+    "result = base * payslip.dict._mowgli_param('OSTIE_ER')"
+)
+
+EMPLOYER_CONDITION_CODE = "result = categories.GROSS > 0"
+EMPLOYER_RULES = (
+    ('CNAPS_ER', 'CNaPS patronal', CNAPS_ER_CODE),
+    ('OSTIE_ER', 'OSTIE patronal', OSTIE_ER_CODE),
+)
+
+# Indemnités du contrat (catégorie ALW) : Travel reste dans sa propre catégorie
+# (« Travel »), donc n'est jamais comptée deux fois dans categories.ALW.
 GROSS_CODE = (
-    "result = categories.BASIC + categories.Travel"
+    "result = categories.BASIC + categories.Travel + categories.ALW"
+)
+
+# (code, nom, champ hr.contract) - séquences consécutives juste après Travel.
+ALLOWANCE_RULES = (
+    ('HRA', 'Indemnité de logement', 'hra'),
+    ('DA', 'Indemnité de vie chère', 'da'),
+    ('Meal', 'Indemnité de repas', 'meal_allowance'),
+    ('Medical', 'Indemnité médicale', 'medical_allowance'),
+    ('Other', 'Autre indemnité', 'other_allowance'),
 )
 
 NET_CODE = (
@@ -47,27 +86,35 @@ IRSA_CODE = (
     "if base_irsa <= 0:\n"
     "    result = 0.0\n"
     "else:\n"
-    "    reste = max(base_irsa - 350000, 0.0)\n"
+    "    b0 = payslip.dict._mowgli_param('IRSA_B0')\n"
+    "    b1 = payslip.dict._mowgli_param('IRSA_B1')\n"
+    "    b2 = payslip.dict._mowgli_param('IRSA_B2')\n"
+    "    b3 = payslip.dict._mowgli_param('IRSA_B3')\n"
+    "    b4 = payslip.dict._mowgli_param('IRSA_B4')\n"
+    "    reste = max(base_irsa - b0, 0.0)\n"
     "    irsa = 0.0\n"
     "\n"
-    "    t1 = min(50000, reste)        # 350 001 - 400 000 -> 5 %\n"
-    "    irsa += t1 * 0.05\n"
+    "    t1 = min(b1 - b0, reste)\n"
+    "    irsa += t1 * payslip.dict._mowgli_param('IRSA_R1')\n"
     "    reste -= t1\n"
     "\n"
-    "    t2 = min(100000, reste)       # 400 001 - 500 000 -> 10 %\n"
-    "    irsa += t2 * 0.10\n"
+    "    t2 = min(b2 - b1, reste)\n"
+    "    irsa += t2 * payslip.dict._mowgli_param('IRSA_R2')\n"
     "    reste -= t2\n"
     "\n"
-    "    t3 = min(100000, reste)       # 500 001 - 600 000 -> 15 %\n"
-    "    irsa += t3 * 0.15\n"
+    "    t3 = min(b3 - b2, reste)\n"
+    "    irsa += t3 * payslip.dict._mowgli_param('IRSA_R3')\n"
     "    reste -= t3\n"
     "\n"
-    "    if reste > 0:                 # > 600 000 -> 20 %\n"
-    "        irsa += reste * 0.20\n"
+    "    t4 = min(b4 - b3, reste)\n"
+    "    irsa += t4 * payslip.dict._mowgli_param('IRSA_R4')\n"
+    "    reste -= t4\n"
+    "\n"
+    "    irsa += max(reste, 0.0) * payslip.dict._mowgli_param('IRSA_R5')\n"
     "\n"
     "    enfants = int(employee.children or 0)\n"
-    "    irsa = max(irsa - enfants * 2000, 0.0)\n"
-    "    irsa = max(irsa, 3000.0)\n"
+    "    irsa = max(irsa - enfants * payslip.dict._mowgli_param('IRSA_ENFANT'), 0.0)\n"
+    "    irsa = max(irsa, payslip.dict._mowgli_param('IRSA_MIN'))\n"
     "\n"
     "    result = -irsa"
 )
@@ -313,6 +360,10 @@ class HrSalaryRule(models.Model):
 
         rules_by_code = {rule.code: rule for rule in structure.rule_ids}
 
+        cnaps = rules_by_code.get('CNAPS')
+        if cnaps:
+            cnaps.write({'amount_python_compute': CNAPS_CODE})
+
         ostie = rules_by_code.get('OSTIE')
         if ostie:
             ostie.write({'amount_python_compute': OSTIE_CODE})
@@ -354,7 +405,78 @@ class HrSalaryRule(models.Model):
         if irsa:
             irsa.write({'amount_python_compute': IRSA_CODE})
 
+        self._mowgli_setup_allowance_rules(structure, rules_by_code)
+        self._mowgli_setup_employer_rules(structure, rules_by_code)
         self._mowgli_setup_rule_accounts(structure)
+
+    def _mowgli_setup_employer_rules(self, structure, rules_by_code):
+        """Ajoute (jamais ne remplace) les règles patronales CNAPS_ER et
+        OSTIE_ER : catégorie COMP, sans compte, hors bulletin imprimé,
+        séquences juste après OSTIE. Idempotent (recherche par code dans la
+        structure, rattachement par (4, id))."""
+        ostie = rules_by_code.get('OSTIE')
+        if not ostie:
+            return
+        category = self.env['hr.salary.rule.category'].search(
+            [('code', '=', 'COMP')], limit=1)
+        if not category:
+            category = self.env['hr.salary.rule.category'].create(
+                {'name': 'Charges patronales', 'code': 'COMP'})
+        for offset, (code, name, python) in enumerate(EMPLOYER_RULES, start=1):
+            vals = {
+                'name': name,
+                'code': code,
+                'category_id': category.id,
+                'sequence': ostie.sequence + 10 * offset,
+                'company_id': ostie.company_id.id,
+                'condition_select': 'python',
+                'condition_python': EMPLOYER_CONDITION_CODE,
+                'amount_select': 'code',
+                'amount_python_compute': python,
+                'appears_on_payslip': False,
+            }
+            rule = rules_by_code.get(code)
+            if rule:
+                rule.write(vals)
+            else:
+                rule = self.create(vals)
+                structure.write({'rule_ids': [(4, rule.id)]})
+                rules_by_code[code] = rule
+
+    def _mowgli_setup_allowance_rules(self, structure, rules_by_code):
+        """Ajoute (jamais ne remplace) les règles d'indemnités du contrat à la
+        structure : recherche par code dans la structure, création ou mise à
+        jour idempotente, rattachement par (4, id). Société identique à celle
+        de Travel. Le compte de débit est celui de BASIC, renseigné par
+        société dans _mowgli_setup_rule_accounts."""
+        travel = rules_by_code.get('Travel')
+        if not travel:
+            return
+        category = self.env['hr.salary.rule.category'].search(
+            [('code', '=', 'ALW')], limit=1)
+        if not category:
+            category = self.env['hr.salary.rule.category'].create(
+                {'name': 'Indemnités', 'code': 'ALW'})
+        for offset, (code, name, field) in enumerate(ALLOWANCE_RULES, start=1):
+            vals = {
+                'name': name,
+                'code': code,
+                'category_id': category.id,
+                'sequence': travel.sequence + offset,
+                'company_id': travel.company_id.id,
+                'condition_select': 'python',
+                'condition_python': 'result = bool(contract.%s)' % field,
+                'amount_select': 'code',
+                'amount_python_compute': 'result = contract.%s' % field,
+                'appears_on_payslip': True,
+            }
+            rule = rules_by_code.get(code)
+            if rule:
+                rule.write(vals)
+            else:
+                rule = self.create(vals)
+                structure.write({'rule_ids': [(4, rule.id)]})
+                rules_by_code[code] = rule
 
     def _mowgli_setup_rule_accounts(self, structure, debit_by_code=None,
                                     credit_by_code=None):
@@ -390,6 +512,53 @@ class HrSalaryRule(models.Model):
                             "mowgli_payroll_pcec: compte %s introuvable pour "
                             "la société %s, %s de la règle %s laissé vide.",
                             account_code, company.name, fname, code)
+
+    @api.model
+    def _mowgli_align_company_accounts(self, company, apply=True):
+        """Aligne sur la cible PCEC les comptes de paie de `company` pour les
+        règles de la structure BASE. Compte attendu cherché par CODE dans
+        cette société ; écrit seulement si le champ est vide ou diffère
+        (trace avant/après dans les lignes renvoyées) ; jamais de création de
+        compte, jamais de suppression (un compte présent sur un rôle sans
+        cible est seulement signalé). Statuts : conforme, ecrit, a_ecrire
+        (apply=False), compte_absent, inattendu."""
+        structure = self.env['hr.payroll.structure'].sudo().search(
+            [('code', '=', 'BASE')], limit=1)
+        credit_targets = dict(ACCOUNT_CREDIT_BY_CODE, LOAN='315000')
+        Account = self.env['account.account'].sudo()
+        rows = []
+        for rule in structure.rule_ids.sudo().sorted('sequence'):
+            scoped = rule.with_company(company)
+            for role, fname in ACCOUNT_ROLES:
+                targets = ACCOUNT_DEBIT_BY_CODE if role == 'debit' \
+                    else credit_targets
+                target = targets.get(rule.code)
+                current = scoped[fname]
+                row = {'regle': rule.code, 'societe': company.name,
+                       'role': role, 'cible': target or '',
+                       'avant': current.code or '', 'apres': current.code or '',
+                       'statut': 'conforme'}
+                if not target:
+                    if current:
+                        row['statut'] = 'inattendu'
+                    rows.append(row)
+                    continue
+                if current and current.company_id == company \
+                        and current.code == target:
+                    rows.append(row)
+                    continue
+                account = Account.search([
+                    ('code', '=', target), ('company_id', '=', company.id)],
+                    limit=1)
+                if not account:
+                    row['statut'] = 'compte_absent'
+                elif apply:
+                    scoped.write({fname: account.id})
+                    row.update(apres=account.code, statut='ecrit')
+                else:
+                    row.update(apres=account.code, statut='a_ecrire')
+                rows.append(row)
+        return rows
 
     @api.model
     def _mowgli_complete_new_company(self, company):

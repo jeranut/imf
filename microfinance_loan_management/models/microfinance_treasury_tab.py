@@ -114,6 +114,7 @@ class MicrofinanceLoan(models.Model):
                     [('journal_id', 'in', journals.ids), ('mf_state', '=', 'validated')],
                     ['mf_date_to:max'], ['journal_id'], lazy=False):
                 last_statement[group['journal_id'][0]] = fields.Date.to_date(group['mf_date_to'])
+        statement_balances = journals._mf_statement_balances()
         # dernière écriture comptabilisée sur le compte bancaire (tous journaux) ou les comptes d'attente du journal
         pending = {j.id: j._mf_pending_accounts() for j in journals}
         watched_accounts = {j.default_account_id.id for j in journals if j.default_account_id}
@@ -144,6 +145,11 @@ class MicrofinanceLoan(models.Model):
             late = bool(has_later and (last_end is None or days > statement_days))
             bank, out_transit = values['bank'], values['out_transit']
             available = values['available']
+            unexplained = 0.0
+            if journal.id in statement_balances:
+                unexplained = journal._mf_unexplained_gap(
+                    journal.currency_id or journal.company_id.currency_id, statement_balances[journal.id],
+                    bank, out_transit, values['in_transit'])
             watch = bool(bank < 0 or available < 0 or (bank > 0 and available <= bank * watch_ratio))
             bank_rec = journal.microfinance_bank_id
             rows.append({
@@ -156,6 +162,7 @@ class MicrofinanceLoan(models.Model):
                 'bank_balance': bank, 'out_transit': out_transit, 'in_transit': values['in_transit'],
                 'in_transit_old': old_in.get((journal.id, values['in_account_id']), 0.0),
                 'available': available,
+                'unexplained': unexplained,
                 'last_statement_date': fields.Date.to_string(last_end) if last_end else False,
                 'last_statement_days': days, 'watch': watch, 'late': late,
             })

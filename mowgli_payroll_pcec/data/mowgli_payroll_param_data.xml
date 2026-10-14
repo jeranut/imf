@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Valeurs initiales idempotentes (jamais d'écrasement d'une ligne existante). -->
+    <function model="mowgli.payroll.param" name="_seed_defaults"/>
+</odoo>

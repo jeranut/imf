@@ -117,6 +117,8 @@
                             </group>
                             <group string="Pénalités et commissions">
                                 <field name="account_penalites_id"/>
+                                <field name="account_cheques_emis_attente_id"/>
+                                <field name="account_virements_emis_attente_id"/>
                                 <field name="account_penalites_avance_individuel_id"/>
                                 <field name="account_penalites_avance_groupe_id"/>
                                 <field name="account_revenu_penalites_avance_individuel_id"/>

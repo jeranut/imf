@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import base64
+from unittest.mock import patch
 
 from odoo.tests.common import TransactionCase
 
@@ -185,4 +186,9 @@ class MicrofinanceNoFundMixin:
 
     def setUp(self):
         super().setUp()
-        self.env['microfinance.fond.credit'].sudo().search([('active', '=', True)]).write({'active': False})
+        # Sur une base réelle (MOWGLI et copies) une société mère est désignée et refuse l'écriture
+        # sur les fonds depuis une autre société : neutralisée le temps de cette seule écriture.
+        no_parent = patch.object(
+            type(self.env['res.company']), '_get_microfinance_parent', lambda rec: rec.browse())
+        with no_parent:
+            self.env['microfinance.fond.credit'].sudo().search([('active', '=', True)]).write({'active': False})

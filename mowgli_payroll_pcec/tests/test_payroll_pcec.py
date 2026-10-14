@@ -9,10 +9,11 @@ TransactionCase place chaque test dans une transaction annulée (rollback)
 à la fin : aucune donnée créée par ces tests n'est conservée.
 """
 from odoo.tests.common import TransactionCase, tagged
+from odoo.addons.mowgli_payroll_pcec.tests.common import MowgliSmeTestMixin
 
 
 @tagged('post_install', '-at_install')
-class TestPayrollPcec(TransactionCase):
+class TestPayrollPcec(MowgliSmeTestMixin, TransactionCase):
 
     @classmethod
     def setUpClass(cls):
@@ -26,6 +27,7 @@ class TestPayrollPcec(TransactionCase):
 
     def setUp(self):
         super().setUp()
+        self._mowgli_add_test_sme()
         if not self.company or not self.structure:
             self.skipTest(
                 "Société CEFOR Isotry ou structure BASE absente de cette "

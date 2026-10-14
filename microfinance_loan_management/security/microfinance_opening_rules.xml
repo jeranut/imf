@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Balance d'ouverture : mêmes sociétés que l'utilisateur (chef d'agence = sa société, siège = les sociétés cochées). -->
+    <record id="microfinance_opening_balance_company_rule" model="ir.rule">
+        <field name="name">Microfinance balance d'ouverture : sociétés autorisées</field>
+        <field name="model_id" ref="model_microfinance_opening_balance"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+    <record id="microfinance_opening_balance_line_company_rule" model="ir.rule">
+        <field name="name">Microfinance ligne de balance d'ouverture : sociétés autorisées</field>
+        <field name="model_id" ref="model_microfinance_opening_balance_line"/>
+        <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        <field name="groups" eval="[]"/>
+    </record>
+</odoo>

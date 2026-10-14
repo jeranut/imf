@@ -1,2 +1,4 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
 access_mowgli_payroll_sync_wizard_manager,access.mowgli.payroll.sync.wizard.manager,model_mowgli_payroll_sync_wizard,hr_payroll_community.group_hr_payroll_community_manager,1,1,1,1
+access_mowgli_payroll_param_manager,access.mowgli.payroll.param.manager,model_mowgli_payroll_param,hr_payroll_community.group_hr_payroll_community_manager,1,1,1,1
+access_mowgli_payroll_param_user,access.mowgli.payroll.param.user,model_mowgli_payroll_param,hr_payroll_community.group_hr_payroll_community_user,1,0,0,0

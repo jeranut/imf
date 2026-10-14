@@ -384,6 +384,10 @@
                             <div><span>Remboursements</span><strong t-esc="formatMoney(ticketTotals.remboursement_credit)"/></div>
                             <div><span>Décaissements</span><strong t-esc="formatMoney(ticketTotals.decaissement_credit)"/></div>
                             <div><span>Frais de dossier</span><strong t-esc="formatMoney(ticketTotals.frais_dossier)"/></div>
+                            <!-- Même valeur que « Solde caisse » de l'en-tête (session.theoretical_balance) : le
+                                 ticket se termine par le solde net en espèces. Les décaissements par chèque ou
+                                 virement figurent dans la ligne « Décaissements » mais ne baissent pas ce solde. -->
+                            <div class="o_microfinance_pos__ticket_balance"><span>Solde caisse</span><strong t-esc="formatMoney(state.session.theoretical_balance)"/></div>
                         </div>
                         <div class="o_microfinance_pos__ticket_list">
                             <div t-if="!state.mouvements.length" class="o_microfinance_pos__placeholder_small">Aucune opération enregistrée pour l'instant.</div>

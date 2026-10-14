@@ -100,9 +100,13 @@ from . import test_menus_fonds
 from . import test_general_ledger
 from . import test_trial_balance
 from . import test_journal_control
+from . import test_opening_balance
 from . import test_fond_partage_exploitation
 from . import test_mf_trace
+from . import test_opening_balance_guard
 from . import test_payslip_payment
 from . import test_treasury_tab
 from . import test_fond_recu_banque
 from . import test_release_to_cashier
+from . import test_disbursement_waiting_account
+from . import test_portefeuille_independant

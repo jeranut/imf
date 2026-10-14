@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="mowgli_payroll_contribution_view_tree" model="ir.ui.view">
+        <field name="name">mowgli.payroll.contribution.tree</field>
+        <field name="model">mowgli.payroll.contribution</field>
+        <field name="arch" type="xml">
+            <tree string="Cotisations et impôts" create="0" delete="0" edit="0">
+                <field name="date"/>
+                <field name="mois"/>
+                <field name="payslip_id"/>
+                <field name="employee_id"/>
+                <field name="organisme"/>
+                <field name="nature"/>
+                <field name="rule_code"/>
+                <field name="base" sum="Base"/>
+                <field name="taux"/>
+                <field name="montant" sum="Total"/>
+                <field name="state"/>
+                <field name="declaration_ref"/>
+                <field name="payment_date"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="currency_id" column_invisible="1"/>
+            </tree>
+        </field>
+    </record>
+    <record id="mowgli_payroll_contribution_view_form" model="ir.ui.view">
+        <field name="name">mowgli.payroll.contribution.form</field>
+        <field name="model">mowgli.payroll.contribution</field>
+        <field name="arch" type="xml">
+            <form string="Cotisation" create="0" delete="0">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="payslip_id"/>
+                            <field name="employee_id"/>
+                            <field name="company_id"/>
+                            <field name="date"/>
+                            <field name="organisme"/>
+                            <field name="nature"/>
+                            <field name="rule_code"/>
+                        </group>
+                        <group>
+                            <field name="currency_id" invisible="1"/>
+                            <field name="base"/>
+                            <field name="taux"/>
+                            <field name="montant"/>
+                            <field name="state"/>
+                            <field name="declaration_ref"/>
+                            <field name="payment_date"/>
+                            <field name="move_id"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <record id="mowgli_payroll_contribution_view_pivot" model="ir.ui.view">
+        <field name="name">mowgli.payroll.contribution.pivot</field>
+        <field name="model">mowgli.payroll.contribution</field>
+        <field name="arch" type="xml">
+            <pivot string="Cotisations par mois et organisme">
+                <field name="mois" type="row"/>
+                <field name="organisme" type="row"/>
+                <field name="nature" type="col"/>
+                <field name="montant" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+    <record id="mowgli_payroll_contribution_view_search" model="ir.ui.view">
+        <field name="name">mowgli.payroll.contribution.search</field>
+        <field name="model">mowgli.payroll.contribution</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="employee_id"/>
+                <field name="payslip_id"/>
+                <field name="declaration_ref"/>
+                <filter name="a_verser" string="À verser" domain="[('state', '=', 'a_verser')]"/>
+                <filter name="declare" string="Déclaré" domain="[('state', '=', 'declare')]"/>
+                <filter name="verse" string="Versé" domain="[('state', '=', 'verse')]"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_mois" string="Mois" context="{'group_by': 'mois'}"/>
+                    <filter name="group_organisme" string="Organisme" context="{'group_by': 'organisme'}"/>
+                    <filter name="group_nature" string="Nature" context="{'group_by': 'nature'}"/>
+                    <filter name="group_state" string="État" context="{'group_by': 'state'}"/>
+                    <filter name="group_company" string="Société" context="{'group_by': 'company_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="mowgli_payroll_contribution_action" model="ir.actions.act_window">
+        <field name="name">Cotisations et impôts</field>
+        <field name="res_model">mowgli.payroll.contribution</field>
+        <field name="view_mode">tree,pivot,form</field>
+        <field name="context">{'search_default_group_mois': 1, 'search_default_group_organisme': 1}</field>
+        <field name="help">Les lignes sont créées à la validation des bulletins. Total à verser par organisme = part salariale + part patronale (IRSA : mensuel, CNaPS : trimestriel).</field>
+    </record>
+    <menuitem id="menu_mowgli_payroll_contribution"
+              name="Cotisations et impôts"
+              parent="hr_payroll_community.menu_hr_payroll_community_root"
+              action="mowgli_payroll_contribution_action"
+              sequence="70"
+              groups="hr_payroll_community.group_hr_payroll_community_manager,account.group_account_user"/>
+</odoo>

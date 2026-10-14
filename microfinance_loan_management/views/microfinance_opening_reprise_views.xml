@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Reprise de portefeuille : assistant d'import (clients, crédits, épargne) rattaché à une balance d'ouverture en brouillon. -->
+    <record id="view_microfinance_opening_reprise_form" model="ir.ui.view">
+        <field name="name">microfinance.opening.reprise.form</field>
+        <field name="model">microfinance.opening.reprise</field>
+        <field name="arch" type="xml">
+            <form string="Reprise de portefeuille" create="false">
+                <header>
+                    <button name="action_import" type="object" string="Lancer" class="btn-primary"/>
+                    <button name="action_download_template" type="object" string="Télécharger le gabarit Excel"/>
+                </header>
+                <sheet>
+                    <div class="alert alert-info" role="alert">
+                        Importe clients, crédits en cours et soldes d'épargne dans la balance d'ouverture choisie, sans
+                        écriture comptable ni mouvement de caisse. Tant que « Simulation » est cochée, rien n'est créé.
+                        Seuls les profils Finance et Manager crédit peuvent importer pour de bon.
+                    </div>
+                    <group>
+                        <group>
+                            <field name="balance_id" options="{'no_create': True, 'no_open': True}"/>
+                            <field name="company_id"/>
+                        </group>
+                        <group>
+                            <field name="file" filename="filename"/>
+                            <field name="filename" invisible="1"/>
+                            <field name="dry_run"/>
+                            <field name="has_errors" invisible="1"/>
+                        </group>
+                    </group>
+                    <field name="report" invisible="not report"/>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_microfinance_opening_reprise" model="ir.actions.act_window">
+        <field name="name">Reprise de portefeuille</field>
+        <field name="res_model">microfinance.opening.reprise</field>
+        <field name="view_mode">form</field>
+        <field name="target">current</field>
+    </record>
+
+    <menuitem id="menu_microfinance_opening_reprise" name="Reprise de portefeuille" parent="account.menu_finance_entries"
+              action="action_microfinance_opening_reprise" sequence="6"
+              groups="microfinance_loan_management.group_microfinance_finance,microfinance_loan_management.group_microfinance_manager,microfinance_loan_management.group_microfinance_comptable,microfinance_loan_management.group_microfinance_auditor,account.group_account_manager"/>
+
+    <!-- Concordance affichée sur la balance d'ouverture quand une reprise existe -->
+    <record id="view_microfinance_opening_balance_form_reprise" model="ir.ui.view">
+        <field name="name">microfinance.opening.balance.form.reprise</field>
+        <field name="model">microfinance.opening.balance</field>
+        <field name="inherit_id" ref="microfinance_loan_management.view_microfinance_opening_balance_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='line_ids']" position="before">
+                <group invisible="not reprise_concordance_html" string="Concordance avec la reprise de portefeuille">
+                    <field name="reprise_concordance_html" nolabel="1" colspan="2"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

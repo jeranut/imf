@@ -36,7 +36,7 @@ class MicrofinancePortfolio(models.Model):
     montant_utilise = fields.Monetary(
         string='Fonds utilisé', compute='_compute_portfolio_totals',
         help="Principal restant dû des crédits 'approved'/'active' de cet agent dans cette agence "
-             "(même définition que microfinance.fond.allocation.montant_utilise). Non stocké -"
+             "RATTACHÉS À UN FONDS (les crédits de reprise sans fonds n'y entrent pas) (même définition que microfinance.fond.allocation.montant_utilise). Non stocké -"
              "contrairement à fond.allocation.montant_utilise, qui a un vrai chemin de dépendance "
              "ORM (fond_id.loan_ids), aucun champ relationnel direct ne relie un portefeuille aux "
              "crédits de son agent (ceux-ci ne connaissent que officer_id + company_id) : un "
@@ -63,16 +63,27 @@ class MicrofinancePortfolio(models.Model):
             else:
                 portfolio.display_name = _("Portefeuille #%s", portfolio.id)
 
-    def _compute_portfolio_totals(self):
-        outstanding_states = ('approved', 'active')
+    def _get_outstanding_fund_loans(self):
+        """Crédits comptés dans le « fonds utilisé » de ces portefeuilles : 'approved'/'active',
+        de l'agent ET de la société du portefeuille, rattachés à un fonds (fond_credit_id). Un
+        crédit sans fonds (reprise d'historique) ou d'une autre société n'y entre pas. Source
+        unique de la tuile du dashboard, de la liste Portefeuilles et du journal « Tous les
+        fonds » (qui en tire aussi le détail par fonds)."""
         Loan = self.env['microfinance.loan'].sudo()
+        loans = Loan
         for portfolio in self:
-            loans = Loan.search([
+            loans |= Loan.search([
                 ('officer_id', '=', portfolio.agent_id.id),
                 ('company_id', '=', portfolio.company_id.id),
-                ('state', 'in', outstanding_states),
+                ('fond_credit_id', '!=', False),
+                ('state', 'in', ('approved', 'active')),
             ])
-            utilise = sum(loan._get_principal_outstanding() for loan in loans)
+        return loans
+
+    def _compute_portfolio_totals(self):
+        for portfolio in self:
+            utilise = sum(loan._get_principal_outstanding()
+                          for loan in portfolio._get_outstanding_fund_loans())
             portfolio.montant_utilise = utilise
             portfolio.solde_disponible = portfolio.amount_allocated - utilise
 
@@ -113,6 +124,11 @@ class MicrofinancePortfolio(models.Model):
         get_dashboard_data() côté serveur qui résout agent_id/company_id par ORM (donc re-vérifié
         par les record rules de CE modèle) - jamais un agent_id envoyé tel quel par le client."""
         self.ensure_one()
+        if self.company_id != self.env.company:
+            raise UserError(_(
+                "Ce portefeuille appartient à l'agence « %(portfolio)s » ; l'agence active est "
+                "« %(active)s ». Changez d'agence dans le sélecteur pour le consulter."
+            ) % {'portfolio': self.company_id.name, 'active': self.env.company.name})
         action = self.env['ir.actions.actions']._for_xml_id(
             'microfinance_loan_management.action_microfinance_agent_portfolio')
         action['context'] = {'dashboard_topic': 'portefeuille', 'portfolio_id': self.id}

@@ -10,19 +10,22 @@ from datetime import timedelta
 from odoo import fields
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
+from odoo.addons.mowgli_payroll_pcec.tests.common import MowgliSmeTestMixin
 
 
 @tagged('post_install', '-at_install')
-class TestMicrofinancePayrollSalaryDeduction(TransactionCase):
+class TestMicrofinancePayrollSalaryDeduction(MowgliSmeTestMixin, TransactionCase):
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.company = cls.env['res.company'].search([('name', '=', 'CEFOR Isotry')], limit=1)
+        cls.company = cls.env['res.company'].search(
+            [('name', 'in', ['AGENCE ANALAKELY', 'CEFOR Isotry'])], limit=1)
         cls.structure = cls.env['hr.payroll.structure'].search([('code', '=', 'BASE')], limit=1)
 
     def setUp(self):
         super().setUp()
+        self._mowgli_add_test_sme()
         if not self.company or not self.structure or not self.structure.rule_ids.filtered(
             lambda r: r.code == 'LOAN'
         ):
@@ -30,6 +33,10 @@ class TestMicrofinancePayrollSalaryDeduction(TransactionCase):
                 "Société CEFOR Isotry, structure BASE ou règle LOAN absente de cette base : "
                 "ces tests nécessitent les données réelles de MOWGLI (ou une copie jetable) "
                 "avec microfinance_payroll_loan installé.")
+        # Société active = société du bulletin (comme un utilisateur de l'agence) : le
+        # remboursement RSAL est comptabilisé en sudo avec la société active de l'appelant.
+        self.env = self.env(context=dict(self.env.context, allowed_company_ids=[self.company.id]))
+        self._mowgli_legacy_accounts(self.company)
         # Neutralise les fonds bailleurs actifs réels (sinon action_activate() bloque), même
         # mécanisme que MicrofinanceNoFundMixin côté microfinance_loan_management.
         self.env['microfinance.fond.credit'].sudo().search([('active', '=', True)]).write({'active': False})
@@ -343,3 +350,32 @@ class TestMicrofinancePayrollSalaryDeduction(TransactionCase):
                 'amount': 1000.0,
                 'journal_id': self.loan_journal.id,
             })
+
+    def test_s3_retenue_pret_ecriture_et_remboursement(self):
+        """Salaire 750 000 + transport 150 000, prêt de 84 000/mois : crédit
+        315000 = 9 000 + 9 000 + 83 900 + 84 000 + 714 100 = débit 900 000 ;
+        le remboursement (journal RSAL) solde la part prêt de 315000."""
+        self.contract.write({'wage': 750000.0, 'travel_allowance': 150000.0})
+        loan = self._activate_loan(loan_amount=504000.0, term=6)
+        first_due = loan.installment_ids.sorted('due_date')[0].due_date
+        payslip = self._make_payslip(first_due.replace(day=1), first_due)
+        payslip.action_payslip_verify()
+        payslip.action_payslip_done()
+        self.assertAlmostEqual(self._line_total(payslip, 'LOAN'), -84000.0)
+        self.assertAlmostEqual(self._line_total(payslip, 'NET'), 714100.0)
+        totals = self._account_totals(payslip.move_id)
+        self.assertEqual(set(totals), {'652100', '315000'})
+        self.assertAlmostEqual(totals['652100'][0], 900000.0)
+        self.assertAlmostEqual(
+            totals['315000'][1], 9000 + 9000 + 83900 + 84000 + 714100)
+        self.assertAlmostEqual(sum(t[0] for t in totals.values()),
+                               sum(t[1] for t in totals.values()))
+        payment = self.env['microfinance.loan.payment'].sudo().search([
+            ('payslip_id', '=', payslip.id), ('loan_id', '=', loan.id)])
+        self.assertEqual(payment.state, 'posted')
+        self.assertEqual(payment.move_id.journal_id.code, 'RSAL')
+        repay = self._account_totals(payment.move_id)
+        self.assertAlmostEqual(repay['315000'][0], 84000.0)
+        self.assertAlmostEqual(
+            (totals['315000'][1] - totals['315000'][0]) + (repay['315000'][1] - repay['315000'][0]),
+            9000 + 9000 + 83900 + 714100)

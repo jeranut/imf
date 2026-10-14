@@ -22,6 +22,12 @@ class ResConfigSettings(models.TransientModel):
         string="Tolérance de rapprochement bancaire")
 
 
+class ResCompanyLoanProducts(models.Model):
+    _inherit = 'res.company'
+
+    mf_loan_product_ids = fields.One2many('microfinance.loan.product', 'company_id', string='Produits de crédit')
+
+
 class AccountJournal(models.Model):
     _inherit = 'account.journal'
 
@@ -40,7 +46,25 @@ class AccountJournal(models.Model):
         accounts = (self.inbound_payment_method_line_ids | self.outbound_payment_method_line_ids).payment_account_id
         company = self.company_id
         accounts |= company.account_journal_payment_debit_account_id | company.account_journal_payment_credit_account_id
+        accounts |= self._mf_loan_waiting_accounts()
         return (accounts | self.mf_pending_account_ids).filtered(lambda a: a.reconcile)
+
+    def _mf_loan_waiting_accounts(self):
+        """Comptes d'attente chèques/virements émis des produits de crédit de la société du journal : le
+        décaissement par chèque ou virement les crédite à la place de la banque, jusqu'au pointage du relevé."""
+        self.ensure_one()
+        # One2many de la société (préchargé pour tous les journaux du lot, y compris produits archivés) : pas de
+        # requête par journal.
+        products = self.sudo().company_id.with_context(active_test=False).mf_loan_product_ids
+        return (products.account_cheques_emis_attente_id | products.account_virements_emis_attente_id)
+
+    def _mf_loan_disbursement_waiting_domain(self):
+        """Domaine des lignes d'attente de décaissement chèque/virement NON lettrées postées dans CE journal (le
+        journal de la banque qui paiera) : base du « en transit » et des candidats de rapprochement."""
+        self.ensure_one()
+        return [('journal_id', '=', self.id), ('account_id', 'in', self._mf_loan_waiting_accounts().ids),
+                ('reconciled', '=', False), ('parent_state', '=', 'posted'),
+                ('move_id.microfinance_loan_id', '!=', False)]
 
 
 class AccountMoveLine(models.Model):

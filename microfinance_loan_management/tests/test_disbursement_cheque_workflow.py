@@ -45,20 +45,22 @@ class TestDisbursementChequeWorkflow(MicrofinanceNoFundMixin, MicrofinanceCommon
         with self.assertRaises(UserError):
             loan.action_process_disbursement()
 
-    def test_clear_disbursement_cheque_transfers_to_real_account(self):
+    def test_clear_disbursement_cheque_opens_writeoff_wizard_on_waiting_line(self):
+        # La compensation passe par l'assistant générique de lettrage (le dénouement lui-même est
+        # testé via le pointage du relevé : test_disbursement_waiting_account). Avant le dénouement
+        # la banque n'a pas bougé : la sortie réelle n'est constatée qu'à la compensation.
         loan = self._disburse_by_cheque()
-        loan.action_clear_disbursement_cheque()
-        self.assertEqual(loan.disbursement_cheque_state, 'compense')
-        self.assertTrue(loan.disbursement_clearing_move_id)
-        self.assertAlmostEqual(self.cheques_emis_attente_account.current_balance, 0.0, places=2)
-        self.assertAlmostEqual(
-            self.bank_account.current_balance, -loan.net_disbursed_amount, places=2,
-            msg="La sortie de caisse réelle n'a lieu qu'à la compensation, pas au décaissement.",
-        )
+        action = loan.action_clear_disbursement_cheque()
+        self.assertEqual(action['res_model'], 'account.move.line.writeoff.wizard')
+        waiting_line = loan.disbursement_move_id.line_ids.filtered(
+            lambda l: l.account_id == self.cheques_emis_attente_account)
+        self.assertEqual(action['context']['default_move_line_id'], waiting_line.id)
+        self.assertEqual(loan.disbursement_cheque_state, 'en_attente')
+        self.assertAlmostEqual(self.bank_account.current_balance, 0.0, places=2)
 
     def test_clear_disbursement_cheque_blocked_if_not_en_attente(self):
         loan = self._disburse_by_cheque()
-        loan.action_clear_disbursement_cheque()
+        loan.sudo().disbursement_cheque_state = 'compense'
         with self.assertRaises(UserError):
             loan.action_clear_disbursement_cheque()
 
@@ -101,16 +103,16 @@ class TestDisbursementChequeWorkflow(MicrofinanceNoFundMixin, MicrofinanceCommon
             "décaissement réglé autrement que par chèque.",
         )
         self.assertTrue(loan.disbursement_date)
-        move = loan.move_ids.filtered(lambda m: m.state == 'posted')
-        outflow_line = move.line_ids.filtered(lambda l: l.credit > 0)
+        # Le décaissement actif (pas la contre-passation de la tentative rejetée, aussi listée dans move_ids).
+        outflow_line = loan.disbursement_move_id.line_ids.filtered(lambda l: l.credit > 0)
         self.assertEqual(outflow_line.account_id, self.bank_account)
 
     def test_cash_disbursement_unaffected_by_cheque_workflow(self):
         loan = self._activate_loan_without_disbursement()
         loan.action_process_disbursement()
         self.assertFalse(loan.disbursement_cheque_state)
-        move = loan.move_ids.filtered(lambda m: m.state == 'posted')
-        outflow_line = move.line_ids.filtered(lambda l: l.credit > 0)
+        # Le décaissement actif (pas la contre-passation de la tentative rejetée, aussi listée dans move_ids).
+        outflow_line = loan.disbursement_move_id.line_ids.filtered(lambda l: l.credit > 0)
         self.assertEqual(outflow_line.account_id, self.bank_account)
 
     def test_disbursement_journal_override_takes_precedence_over_product(self):

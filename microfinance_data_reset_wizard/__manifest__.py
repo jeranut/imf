@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'RAZ Microfinance (multi-agence)',
-    'version': '17.0.1.1.0',
+    'version': '17.0.1.2.0',
     'category': 'Tools',
     'summary': "Assistant de remise à zéro des données transactionnelles microfinance "
                "(dossiers d'instruction, crédits, épargne, comptabilité) par agence.",

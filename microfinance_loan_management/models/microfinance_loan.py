@@ -124,15 +124,16 @@ class MicrofinanceLoan(models.Model):
         ('en_attente', 'En attente'),
         ('compense', 'Compensé'),
         ('rejete', 'Rejeté'),
-    ], string='État du chèque de décaissement', copy=False, readonly=True, tracking=True,
-        help="Ne concerne que les décaissements réglés par chèque "
-             "(disbursement_payment_method='cheque').",
+    ], string='État du chèque / virement de décaissement', copy=False, readonly=True, tracking=True,
+        help="Ne concerne que les décaissements réglés par chèque ou virement "
+             "(disbursement_payment_method='cheque' ou 'bank_transfer') : 'En attente' tant que "
+             "la ligne du relevé n'a pas été pointée sur l'écriture d'attente.",
     )
     disbursement_clearing_move_id = fields.Many2one(
         'account.move', string='Écriture de compensation du décaissement', readonly=True, copy=False,
-        help="Écriture générée par action_clear_disbursement_cheque(), transférant le montant du "
-             "compte d'attente chèques émis (product_id.account_cheques_emis_attente_id) vers le "
-             "compte du journal de décaissement. Vide tant que le chèque n'est pas compensé.",
+        help="Écriture de dénouement (débit du compte d'attente chèques/virements émis, crédit de la "
+             "banque) : écriture de la ligne de relevé pointée, ou générée par "
+             "action_clear_disbursement_cheque(). Vide tant que le paiement n'est pas dénoué.",
     )
     disbursement_move_id = fields.Many2one(
         'account.move', string='Écriture de décaissement', readonly=True, copy=False,
@@ -145,6 +146,12 @@ class MicrofinanceLoan(models.Model):
              "actuellement sur ce crédit.",
     )
     closed_date = fields.Date(string='Date de clôture', readonly=True, copy=False)
+    opening_balance_id = fields.Many2one(
+        'microfinance.opening.balance', string="Balance d'ouverture (reprise)", readonly=True, copy=False,
+        index=True, ondelete='set null',
+        help="Renseigné uniquement pour un crédit repris par « Reprise de portefeuille » : le crédit existait déjà à "
+             "l'ouverture, aucun décaissement, frais ni mouvement de caisse n'a été enregistré pour lui.",
+    )
     interest_rate = fields.Float(string='Taux intérêt annuel (%)', related='product_id.interest_rate', readonly=False, store=True)
     interest_method = fields.Selection(related='product_id.interest_method', readonly=False, store=True)
     repayment_frequency_mode = fields.Selection(
@@ -653,6 +660,10 @@ class MicrofinanceLoan(models.Model):
 
     @api.constrains('loan_amount', 'term', 'product_id', 'repayment_frequency_id')
     def _check_product_limits(self):
+        # Clé posée côté serveur par la reprise de portefeuille : le principal initial d'un crédit déjà accordé n'est
+        # plus à valider contre le catalogue des produits.
+        if self.env.context.get('mf_reprise_skip_product_limits'):
+            return
         for loan in self:
             product = loan.product_id
             if product and (loan.loan_amount < product.min_amount or loan.loan_amount > product.max_amount):
@@ -792,6 +803,12 @@ class MicrofinanceLoan(models.Model):
         if portfolio_id:
             portfolio = env['microfinance.portfolio'].browse(portfolio_id)
             portfolio_officer_id = portfolio.agent_id.id  # AccessError ici si hors périmètre.
+            if portfolio.company_id != company:
+                raise UserError(_(
+                    "Ce portefeuille appartient à l'agence « %(portfolio)s » ; l'agence active est "
+                    "« %(active)s ». Changez d'agence dans le sélecteur pour le consulter : chaque "
+                    "agence a son propre portefeuille, sans cumul."
+                ) % {'portfolio': portfolio.company_id.name, 'active': company.name})
             portfolio_is_own = portfolio_officer_id == env.uid
         today = fields.Date.context_today(self)
         month_start = today.replace(day=1)
@@ -1325,9 +1342,14 @@ class MicrofinanceLoan(models.Model):
 
     @api.model
     def _get_agent_portfolio_scope(self):
-        """(company_ids, officer_id | None) selon le rôle de self.env.user. L'ordre des tests
-        fait le « test en négatif » (décision n°11) : manager+auditeur -> traité en auditeur ;
-        un pur agent tombe dans le else."""
+        """(company_ids, officer_id | None) selon le rôle de self.env.user : sociétés dont l'utilisateur
+        peut LISTER les agents. Agent, manager et gestionnaire : la seule société active
+        (self.env.company ; les sociétés simplement cochées ne comptent pas). Auditeur : toutes
+        ses agences autorisées (user.company_ids) pour la liste des agents ; les chiffres, eux,
+        sont bornés à UNE société par _resolve_agent_request, jamais cumulés entre agences (un
+        agent présent dans deux agences a deux portefeuilles indépendants). L'ordre des tests fait
+        le « test en négatif » (décision n°11) : manager+auditeur -> traité comme auditeur ; un
+        pur agent tombe dans le else et ne voit que lui-même."""
         user = self.env.user
         mod = 'microfinance_loan_management.'
         if user.has_group(mod + 'group_microfinance_auditor'):
@@ -1393,6 +1415,21 @@ class MicrofinanceLoan(models.Model):
             if officer_id_filter and officer_id_filter != forced_officer:
                 raise AccessError(_("Vous ne pouvez consulter que votre propre portefeuille."))
             return company_ids, forced_officer
+        if len(company_ids) > 1:
+            # Auditeur multi-agences : les chiffres portent sur UNE société (jamais de cumul entre
+            # agences). La société active si elle est dans le périmètre, sinon la première agence
+            # où l'agent demandé a un portefeuille.
+            active = self.env.company.id
+            company_ids = [active] if active in company_ids else company_ids[:1]
+            if officer_id_filter:
+                portfolios = self.env['microfinance.portfolio'].search([
+                    ('agent_id', '=', officer_id_filter), ('company_id', 'in', self._get_agent_portfolio_scope()[0]),
+                ])
+                if not portfolios:
+                    raise AccessError(_("Cet agent n'appartient pas à votre périmètre."))
+                if company_ids[0] not in portfolios.company_id.ids:
+                    company_ids = [portfolios[0].company_id.id]
+            return company_ids, officer_id_filter
         if officer_id_filter:
             portfolio = self.env['microfinance.portfolio'].search([
                 ('agent_id', '=', officer_id_filter),
@@ -1895,7 +1932,10 @@ class MicrofinanceLoan(models.Model):
         disbursed_loans = Loan.search(loan_scope + [
             ('disbursement_date', '!=', False), ('state', 'in', disbursed_states),
         ])
-        outstanding_loans = Loan.search(loan_scope + [('state', 'in', ('approved', 'active'))])
+        # Même ensemble que microfinance.portfolio.montant_utilise (tuile, liste « Portefeuilles »
+        # et ce journal lisent donc la même définition) : principal restant des crédits
+        # approved/active RATTACHÉS À UN FONDS, dans la société du portefeuille.
+        outstanding_loans = portfolios._get_outstanding_fund_loans()
 
         rows_raw = []
         seq = 0
@@ -3042,20 +3082,23 @@ class MicrofinanceLoan(models.Model):
         historique, inchangé pour tout appelant qui ne fixe pas ce champ — action_disburse() déprécié
         et les tests directs listés dans docs_dev/guichet_caisse/AUDIT_decaissement_journal_cheque.md §6).
 
-        Contrepartie : si disbursement_payment_method == 'cheque', le montant part au compte
-        d'attente chèques émis du produit (product.account_cheques_emis_attente_id) plutôt qu'au
-        compte du journal — la sortie de caisse/banque réelle n'a lieu qu'à la compensation
-        (action_clear_disbursement_cheque), sur le modèle inversé du mécanisme chèque épargne."""
+        Contrepartie : si disbursement_payment_method vaut 'cheque' ou 'bank_transfer', le montant
+        part au compte d'attente du produit (chèques ou virements émis) plutôt qu'au compte du
+        journal — le journal bancaire reste égal au relevé, et la sortie réelle n'est constatée
+        qu'au dénouement (pointage de la ligne de relevé, ou action_clear_disbursement_cheque).
+        Espèces : inchangé, la caisse baisse immédiatement."""
         self.ensure_one()
         product = self.product_id
         journal = self.disbursement_journal_id or product.disbursement_journal_id
         principal_account = product._get_account('principal', self.partner_id)
         if not journal or not principal_account or not journal.default_account_id:
             raise UserError(_('Configurez le journal de décaissement, son compte par défaut et le compte principal en cours du produit.'))
-        if self.disbursement_payment_method == 'cheque':
-            if not product.account_cheques_emis_attente_id:
-                raise UserError(_("Configurez le compte d'attente chèques émis du produit pour décaisser par chèque."))
-            outflow_account = product.account_cheques_emis_attente_id
+        if self.disbursement_payment_method in ('cheque', 'bank_transfer'):
+            outflow_account = product._get_disbursement_waiting_account(self.disbursement_payment_method)
+            if not outflow_account:
+                if self.disbursement_payment_method == 'cheque':
+                    raise UserError(_("Configurez le compte d'attente chèques émis du produit pour décaisser par chèque."))
+                raise UserError(_("Configurez le compte d'attente virements émis du produit pour décaisser par virement."))
         else:
             outflow_account = journal.default_account_id
         credit_lines = [
@@ -3580,6 +3623,7 @@ class MicrofinanceLoan(models.Model):
             loan._regenerate_schedule_from_planned_disbursement()
             loan.write({'state': 'active', 'activation_date': fields.Date.context_today(loan)})
             loan.message_post(body=_('Crédit activé, en attente de décaissement en caisse.'))
+            loan._release_to_cashier('activation')
         return True
 
     def _regenerate_schedule_from_planned_disbursement(self):
@@ -3590,7 +3634,6 @@ class MicrofinanceLoan(models.Model):
         diffère via la chaîne de repli). Appelée par _do_activate() (première activation) et par
         write() (modification manuelle de disbursement_date_planned après activation, cf.
         _PLANNED_DISBURSEMENT_TRIGGER_FIELDS)."""
-            loan._release_to_cashier('activation')
         self.ensure_one()
         if any(inst.paid_principal or inst.paid_interest or inst.paid_penalty
                for inst in self.installment_ids):
@@ -3659,7 +3702,7 @@ class MicrofinanceLoan(models.Model):
                 # (action_reject_disbursement_cheque), une nouvelle tentative de décaissement au
                 # guichet peut choisir un autre moyen de paiement — l'état 'rejete' de la
                 # tentative précédente ne doit pas persister sur celle-ci.
-                'disbursement_cheque_state': 'en_attente' if loan.disbursement_payment_method == 'cheque' else False,
+                'disbursement_cheque_state': 'en_attente' if loan.disbursement_payment_method in ('cheque', 'bank_transfer') else False,
             }
             loan.write(vals)
             loan._regenerate_schedule_from_disbursement()
@@ -3708,19 +3751,19 @@ class MicrofinanceLoan(models.Model):
         écriture de décaissement présente). Un seul crédit à la fois (self.ensure_one()) : le
         wizard cible un move_line_id unique."""
         self.ensure_one()
-        if self.disbursement_payment_method != 'cheque':
-            raise UserError(_('Seul un décaissement réglé par chèque peut être compensé.'))
+        if self.disbursement_payment_method not in ('cheque', 'bank_transfer'):
+            raise UserError(_('Seul un décaissement réglé par chèque ou virement peut être compensé.'))
         if self.disbursement_cheque_state != 'en_attente':
             raise UserError(_(
                 "Ce chèque n'est plus en attente (état actuel : %s)."
             ) % dict(self._fields['disbursement_cheque_state'].selection).get(self.disbursement_cheque_state))
         product = self.product_id
         journal = self.disbursement_journal_id or product.disbursement_journal_id
-        waiting_account = product.account_cheques_emis_attente_id
+        waiting_account = product._get_disbursement_waiting_account(self.disbursement_payment_method)
         if not journal or not journal.default_account_id:
             raise UserError(_('Configurez le journal de décaissement et son compte par défaut du produit.'))
         if not waiting_account:
-            raise UserError(_("Configurez le compte d'attente chèques émis du produit."))
+            raise UserError(_("Configurez le compte d'attente chèques/virements émis du produit."))
         disbursement_move = self.disbursement_move_id
         if not disbursement_move:
             raise UserError(_("Aucune écriture de décaissement enregistrée pour ce crédit."))
@@ -3740,6 +3783,18 @@ class MicrofinanceLoan(models.Model):
             },
         }
 
+    def _mf_mark_disbursement_cleared(self, clearing_move):
+        """Le paiement chèque/virement est dénoué (ligne de relevé pointée sur l'écriture d'attente)."""
+        for loan in self.sudo():
+            loan.write({'disbursement_cheque_state': 'compense', 'disbursement_clearing_move_id': clearing_move.id})
+            loan.message_post(body=_('Décaissement dénoué par le relevé bancaire. Écriture : %s') % clearing_move.name)
+
+    def _mf_unmark_disbursement_cleared(self):
+        """Annulation du pointage du relevé : le paiement redevient « en attente »."""
+        for loan in self.sudo():
+            loan.write({'disbursement_cheque_state': 'en_attente', 'disbursement_clearing_move_id': False})
+            loan.message_post(body=_('Pointage du relevé annulé : décaissement de nouveau en attente.'))
+
     def action_reject_disbursement_cheque(self, reason=None):
         """Rejet d'un chèque de décaissement non encaissable (provision insuffisante, etc.) :
         contre-passe intégralement l'écriture de décaissement d'origine (même mécanisme que
@@ -3750,8 +3805,8 @@ class MicrofinanceLoan(models.Model):
         disbursement_cheque_state dans action_process_disbursement, qui garantit qu'aucun résidu
         'rejete' ne survit à cette nouvelle tentative)."""
         for loan in self:
-            if loan.disbursement_payment_method != 'cheque':
-                raise UserError(_('Seul un décaissement réglé par chèque peut être rejeté.'))
+            if loan.disbursement_payment_method not in ('cheque', 'bank_transfer'):
+                raise UserError(_('Seul un décaissement réglé par chèque ou virement peut être rejeté.'))
             if loan.disbursement_cheque_state != 'en_attente':
                 raise UserError(_(
                     "Ce chèque n'est plus en attente (état actuel : %s)."
@@ -3800,13 +3855,6 @@ class MicrofinanceLoan(models.Model):
         self.action_process_disbursement()
         return True
 
-    @api.model
-    def cron_release_ready_disbursements(self):
-        """Filet de sécurité quotidien (data/cron.xml) : libère via _release_to_cashier('cron')
-        les crédits activés dont la date provisoire de décaissement est confirmée et atteinte.
-        Idempotent : le domaine exclut les crédits déjà libérés, et la méthode ignore tout crédit
-        libéré entre-temps. Chantier décaissement provisoire, docs_dev/decaissement_provisoire/."""
-        today = fields.Date.context_today(self)
     def _release_is_due(self):
         """Date provisoire confirmée et atteinte (aujourd'hui ou avant, en date locale de
         l'utilisateur/du cron, même base que _compute_disbursement_date_planned_default)."""
@@ -3890,6 +3938,13 @@ class MicrofinanceLoan(models.Model):
         self._release_to_cashier('manual', reason=reason.strip())
         return True
 
+    @api.model
+    def cron_release_ready_disbursements(self):
+        """Filet de sécurité quotidien (data/cron.xml) : libère via _release_to_cashier('cron')
+        les crédits activés dont la date provisoire de décaissement est confirmée et atteinte.
+        Idempotent : le domaine exclut les crédits déjà libérés, et la méthode ignore tout crédit
+        libéré entre-temps. Chantier décaissement provisoire, docs_dev/decaissement_provisoire/."""
+        today = fields.Date.context_today(self)
         loans = self.search([
             ('state', '=', 'active'),
             ('disbursement_date', '=', False),

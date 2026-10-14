@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <!-- Comptes proposés par « Charger le modèle » de la balance d'ouverture (liste configurable : Comptabilité > Balance d'ouverture > Comptes du modèle).
+         Les comptes de trésorerie des journaux de la société et les comptes de fonds s'y ajoutent dynamiquement. -->
+    <record id="opening_template_101000" model="microfinance.opening.template">
+        <field name="code">101000</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">10</field>
+    </record>
+    <record id="opening_template_131101" model="microfinance.opening.template">
+        <field name="code">131101</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">20</field>
+    </record>
+    <record id="opening_template_131102" model="microfinance.opening.template">
+        <field name="code">131102</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">30</field>
+    </record>
+    <record id="opening_template_131103" model="microfinance.opening.template">
+        <field name="code">131103</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">40</field>
+    </record>
+    <record id="opening_template_131104" model="microfinance.opening.template">
+        <field name="code">131104</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">50</field>
+    </record>
+    <record id="opening_template_131201" model="microfinance.opening.template">
+        <field name="code">131201</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">60</field>
+    </record>
+    <record id="opening_template_131202" model="microfinance.opening.template">
+        <field name="code">131202</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">70</field>
+    </record>
+    <record id="opening_template_131203" model="microfinance.opening.template">
+        <field name="code">131203</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">80</field>
+    </record>
+    <record id="opening_template_131204" model="microfinance.opening.template">
+        <field name="code">131204</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">90</field>
+    </record>
+    <record id="opening_template_141010" model="microfinance.opening.template">
+        <field name="code">141010</field>
+        <field name="block">Trésorerie</field>
+        <field name="sequence">100</field>
+    </record>
+    <record id="opening_template_301000" model="microfinance.opening.template">
+        <field name="code">301000</field>
+        <field name="block">Inter-agences</field>
+        <field name="sequence">110</field>
+    </record>
+    <record id="opening_template_302000" model="microfinance.opening.template">
+        <field name="code">302000</field>
+        <field name="block">Inter-agences</field>
+        <field name="sequence">120</field>
+    </record>
+    <record id="opening_template_203001" model="microfinance.opening.template">
+        <field name="code">203001</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">130</field>
+    </record>
+    <record id="opening_template_203002" model="microfinance.opening.template">
+        <field name="code">203002</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">140</field>
+    </record>
+    <record id="opening_template_208001" model="microfinance.opening.template">
+        <field name="code">208001</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">150</field>
+    </record>
+    <record id="opening_template_208002" model="microfinance.opening.template">
+        <field name="code">208002</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">160</field>
+    </record>
+    <record id="opening_template_208003" model="microfinance.opening.template">
+        <field name="code">208003</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">170</field>
+    </record>
+    <record id="opening_template_208004" model="microfinance.opening.template">
+        <field name="code">208004</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">180</field>
+    </record>
+    <record id="opening_template_208005" model="microfinance.opening.template">
+        <field name="code">208005</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">190</field>
+    </record>
+    <record id="opening_template_273001" model="microfinance.opening.template">
+        <field name="code">273001</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">200</field>
+    </record>
+    <record id="opening_template_273002" model="microfinance.opening.template">
+        <field name="code">273002</field>
+        <field name="block">Crédit</field>
+        <field name="sequence">210</field>
+    </record>
+    <record id="opening_template_293001" model="microfinance.opening.template">
+        <field name="code">293001</field>
+        <field name="block">Provisions et produits constatés d&apos;avance</field>
+        <field name="sequence">220</field>
+    </record>
+    <record id="opening_template_293002" model="microfinance.opening.template">
+        <field name="code">293002</field>
+        <field name="block">Provisions et produits constatés d&apos;avance</field>
+        <field name="sequence">230</field>
+    </record>
+    <record id="opening_template_325001" model="microfinance.opening.template">
+        <field name="code">325001</field>
+        <field name="block">Provisions et produits constatés d&apos;avance</field>
+        <field name="sequence">240</field>
+    </record>
+    <record id="opening_template_325002" model="microfinance.opening.template">
+        <field name="code">325002</field>
+        <field name="block">Provisions et produits constatés d&apos;avance</field>
+        <field name="sequence">250</field>
+    </record>
+    <record id="opening_template_325003" model="microfinance.opening.template">
+        <field name="code">325003</field>
+        <field name="block">Provisions et produits constatés d&apos;avance</field>
+        <field name="sequence">260</field>
+    </record>
+    <record id="opening_template_325004" model="microfinance.opening.template">
+        <field name="code">325004</field>
+        <field name="block">Provisions et produits constatés d&apos;avance</field>
+        <field name="sequence">270</field>
+    </record>
+    <record id="opening_template_326101" model="microfinance.opening.template">
+        <field name="code">326101</field>
+        <field name="block">Provisions et produits constatés d&apos;avance</field>
+        <field name="sequence">280</field>
+    </record>
+    <record id="opening_template_326102" model="microfinance.opening.template">
+        <field name="code">326102</field>
+        <field name="block">Provisions et produits constatés d&apos;avance</field>
+        <field name="sequence">290</field>
+    </record>
+    <record id="opening_template_213001" model="microfinance.opening.template">
+        <field name="code">213001</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">300</field>
+    </record>
+    <record id="opening_template_213002" model="microfinance.opening.template">
+        <field name="code">213002</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">310</field>
+    </record>
+    <record id="opening_template_213003" model="microfinance.opening.template">
+        <field name="code">213003</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">320</field>
+    </record>
+    <record id="opening_template_218001" model="microfinance.opening.template">
+        <field name="code">218001</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">330</field>
+    </record>
+    <record id="opening_template_218002" model="microfinance.opening.template">
+        <field name="code">218002</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">340</field>
+    </record>
+    <record id="opening_template_218003" model="microfinance.opening.template">
+        <field name="code">218003</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">350</field>
+    </record>
+    <record id="opening_template_218004" model="microfinance.opening.template">
+        <field name="code">218004</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">360</field>
+    </record>
+    <record id="opening_template_218005" model="microfinance.opening.template">
+        <field name="code">218005</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">370</field>
+    </record>
+    <record id="opening_template_218006" model="microfinance.opening.template">
+        <field name="code">218006</field>
+        <field name="block">Épargne</field>
+        <field name="sequence">380</field>
+    </record>
+    <record id="opening_template_219000" model="microfinance.opening.template">
+        <field name="code">219000</field>
+        <field name="block">Autres sommes dues</field>
+        <field name="sequence">390</field>
+    </record>
+    <record id="opening_template_219001" model="microfinance.opening.template">
+        <field name="code">219001</field>
+        <field name="block">Autres sommes dues</field>
+        <field name="sequence">400</field>
+    </record>
+    <record id="opening_template_116000" model="microfinance.opening.template">
+        <field name="code">116000</field>
+        <field name="block">Fonds</field>
+        <field name="sequence">410</field>
+    </record>
+    <record id="opening_template_240000" model="microfinance.opening.template">
+        <field name="code">240000</field>
+        <field name="block">Fonds</field>
+        <field name="sequence">420</field>
+    </record>
+    <record id="opening_template_563000" model="microfinance.opening.template">
+        <field name="code">563000</field>
+        <field name="block">Fonds propres</field>
+        <field name="sequence">430</field>
+    </record>
+    <record id="opening_template_566000" model="microfinance.opening.template">
+        <field name="code">566000</field>
+        <field name="block">Fonds propres</field>
+        <field name="sequence">440</field>
+    </record>
+    <record id="opening_template_567000" model="microfinance.opening.template">
+        <field name="code">567000</field>
+        <field name="block">Fonds propres</field>
+        <field name="sequence">450</field>
+    </record>
+    <record id="opening_template_568000" model="microfinance.opening.template">
+        <field name="code">568000</field>
+        <field name="block">Fonds propres</field>
+        <field name="sequence">460</field>
+    </record>
+    <record id="opening_template_569000" model="microfinance.opening.template">
+        <field name="code">569000</field>
+        <field name="block">Fonds propres</field>
+        <field name="sequence">470</field>
+    </record>
+    <record id="opening_template_581000" model="microfinance.opening.template">
+        <field name="code">581000</field>
+        <field name="block">Fonds propres</field>
+        <field name="sequence">480</field>
+    </record>
+    <record id="opening_template_589000" model="microfinance.opening.template">
+        <field name="code">589000</field>
+        <field name="block">Fonds propres</field>
+        <field name="sequence">490</field>
+    </record>
+    <record id="opening_template_421100" model="microfinance.opening.template">
+        <field name="code">421100</field>
+        <field name="block">Immobilisations</field>
+        <field name="sequence">500</field>
+    </record>
+    <record id="opening_template_421200" model="microfinance.opening.template">
+        <field name="code">421200</field>
+        <field name="block">Immobilisations</field>
+        <field name="sequence">510</field>
+    </record>
+    <record id="opening_template_421900" model="microfinance.opening.template">
+        <field name="code">421900</field>
+        <field name="block">Immobilisations</field>
+        <field name="sequence">520</field>
+    </record>
+    <record id="opening_template_422100" model="microfinance.opening.template">
+        <field name="code">422100</field>
+        <field name="block">Immobilisations</field>
+        <field name="sequence">530</field>
+    </record>
+    <record id="opening_template_422200" model="microfinance.opening.template">
+        <field name="code">422200</field>
+        <field name="block">Immobilisations</field>
+        <field name="sequence">540</field>
+    </record>
+    <record id="opening_template_422900" model="microfinance.opening.template">
+        <field name="code">422900</field>
+        <field name="block">Immobilisations</field>
+        <field name="sequence">550</field>
+    </record>
+    <record id="opening_template_482000" model="microfinance.opening.template">
+        <field name="code">482000</field>
+        <field name="block">Immobilisations</field>
+        <field name="sequence">560</field>
+    </record>
+    <record id="opening_template_493000" model="microfinance.opening.template">
+        <field name="code">493000</field>
+        <field name="block">Immobilisations</field>
+        <field name="sequence">570</field>
+    </record>
+    <record id="opening_template_315000" model="microfinance.opening.template">
+        <field name="code">315000</field>
+        <field name="block">Paie</field>
+        <field name="sequence">580</field>
+    </record>
+</odoo>

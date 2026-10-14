@@ -70,7 +70,15 @@ class MicrofinanceBankStatementEntry(models.Model):
         if self.treatment == 'point':
             return base + [('account_id', '=', journal.default_account_id.id), ('mf_pointed_entry_id', '=', False),
                            ('move_id.statement_line_id', '=', False)]
-        return base + [('account_id', 'in', journal.sudo()._mf_pending_accounts().ids), ('reconciled', '=', False)]
+        journal = journal.sudo()
+        loan_accounts = journal._mf_loan_waiting_accounts()
+        accounts = journal._mf_pending_accounts()
+        # Attente de décaissement crédit : seulement les lignes postées dans CE journal (plusieurs banques d'une même
+        # société partagent le même 219000) ; les autres comptes d'attente restent proposés sans restriction.
+        others = accounts - (loan_accounts - journal.mf_pending_account_ids)
+        return base + ['|', ('account_id', 'in', others.ids),
+                       '&', ('account_id', 'in', (accounts & loan_accounts).ids), ('journal_id', '=', journal.id),
+                       ('reconciled', '=', False)]
 
     @api.depends('treatment', 'amount', 'date', 'reference', 'journal_id', 'state')
     def _compute_candidates(self):
@@ -217,6 +225,11 @@ class MicrofinanceBankStatementEntry(models.Model):
         st_line = entry.env['account.bank.statement.line'].create(st_line_vals)
         counterpart = st_line.move_id.line_ids.filtered(lambda l: l.account_id == target.account_id)
         (target | counterpart).reconcile()
+        # Dénouement d'un décaissement crédit chèque/virement : l'écriture de la ligne de relevé (débit attente /
+        # crédit banque) EST l'écriture de dénouement.
+        entry.env['microfinance.loan'].search([
+            ('disbursement_move_id', '=', target.move_id.id), ('disbursement_cheque_state', '=', 'en_attente'),
+        ])._mf_mark_disbursement_cleared(st_line.move_id)
         self.write({'state': 'done', 'statement_line_id': st_line.id})
         self._log('treat', detail=_("Rapproché avec %s") % (target.move_id.name or target.display_name))
 
@@ -274,6 +287,8 @@ class MicrofinanceBankStatementEntry(models.Model):
                 move = env_entry.statement_line_id.move_id
                 reconciled = move.line_ids.filtered(lambda l: l.matched_debit_ids or l.matched_credit_ids)
                 reconciled.remove_move_reconcile()
+                env_entry.env['microfinance.loan'].search(
+                    [('disbursement_clearing_move_id', '=', move.id)])._mf_unmark_disbursement_cleared()
                 reversal = move._reverse_moves([{
                     'date': fields.Date.context_today(entry), 'ref': _('Extourne %s') % (move.ref or move.name)}], cancel=True)
                 detail = _("Lettrage défait, écriture %(ecr)s extournée (%(ext)s)") % {

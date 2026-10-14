@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- À chaque install/update, idempotent : compte de charge patronale créé
+         seulement s'il manque dans une société active avec plan, journal CSOC
+         créé seulement s'il manque. -->
+    <function model="mowgli.payroll.contribution" name="_setup_all"/>
+</odoo>

@@ -209,7 +209,8 @@ class TestTreasuryTab(PayslipPaymentCommon):
         self.assertNotIn('operating_treasury', tiles)
         tile = tiles['treasury_overview']
         rows = self._loan().get_treasury_data()['rows']
-        self.assertEqual(tile['counts'], {'watch': sum(r['watch'] for r in rows), 'late': sum(r['late'] for r in rows)})
+        self.assertEqual(tile['counts'], {'watch': sum(r['watch'] for r in rows), 'late': sum(r['late'] for r in rows),
+                                          'unexplained': sum(1 for r in rows if r['unexplained'])})
         self.assertFalse(tile['model'])
         self.assertEqual(tile['extra_links'][0]['topic'], 'tresorerie')
         keys = list(tiles)

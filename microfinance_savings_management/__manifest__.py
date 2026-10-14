@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': 'Microfinance Savings Management',
-    'version': '17.0.1.7.0',
+    'version': '17.0.1.8.0',
     'summary': "Comptes et produits d'épargne, prélèvement automatique sur crédit",
     'description': "Produits d'épargne, comptes, transactions, capitalisation des intérêts, "
                    "prélèvement automatique sur échéance de crédit impayée, éligibilité progressive "

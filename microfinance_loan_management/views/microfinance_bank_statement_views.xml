@@ -191,6 +191,8 @@
                     <div>Solde du relevé<t t-if="dashboard.mf_last_statement"> (au <t t-esc="dashboard.mf_last_statement"/>)</t> : <strong t-esc="dashboard.mf_statement_balance"/></div>
                     <div>Solde comptable : <strong t-esc="dashboard.mf_book_balance"/></div>
                     <div t-att-class="dashboard.mf_gap_nonzero and 'text-danger' or 'text-success'">Écart : <strong t-esc="dashboard.mf_gap"/></div>
+                    <div t-if="dashboard.mf_transit_nonzero">Sorties en transit : <strong t-esc="dashboard.mf_transit"/></div>
+                    <div t-if="dashboard.mf_unexplained_nonzero" class="text-danger">Écart non expliqué : <strong t-esc="dashboard.mf_unexplained"/></div>
                     <a type="object" name="action_mf_open_statements" t-if="dashboard.mf_todo_count">
                         <t t-esc="dashboard.mf_todo_count"/> ligne(s) à traiter
                     </a>

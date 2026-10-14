@@ -64,6 +64,10 @@ from . import account_trial_balance_report
 from . import report_trial_balance_mf
 from . import account_journal_control_report
 from . import report_journal_control_mf
+from . import microfinance_opening_balance
+from . import microfinance_opening_import
+from . import microfinance_opening_reprise
+from . import microfinance_opening_reprise_balance
 from . import microfinance_fond_partage_exploitation
 from . import mf_operating_treasury
 from . import hr_payslip_payment

@@ -136,6 +136,17 @@ class MicrofinanceDataResetWizard(models.TransientModel):
              "claire plutôt que de contourner la sécurité comptable.",
     )
 
+    do_reprise_clients = fields.Boolean(
+        string="Clients créés par la reprise de portefeuille", default=True,
+        help="Supprime uniquement les clients marqués par « Reprise de portefeuille » (opening_balance_id), après leurs "
+             "crédits, comptes crédit et comptes épargne. Les autres clients ne sont jamais touchés.",
+    )
+    do_opening_balances = fields.Boolean(
+        string="Balances d'ouverture et leur écriture d'à-nouveau", default=True,
+        help="Supprime les balances d'ouverture de l'agence, y compris validées, et leur écriture d'ouverture (remise en "
+             "brouillon puis suppression) : permet de refaire un test. Aucun autre outil ne supprime une balance validée.",
+    )
+
     i_confirm = fields.Boolean(
         string="Je confirme avoir fait un backup complet de la base et je "
                "veux supprimer définitivement ces données",
@@ -276,6 +287,10 @@ class MicrofinanceDataResetWizard(models.TransientModel):
             n_sav_holders = self.env['microfinance.savings.holder.account'].sudo().search_count(
                 [('company_id', '=', cid)]) if 'microfinance.savings.holder.account' in self.env else 0
             n_moves = Move.search_count(self._accounting_domain(cid))
+            balances = self.env['microfinance.opening.balance'].sudo().search([('company_id', '=', cid)])
+            n_balances, n_opening_moves = len(balances), len(balances.move_id)
+            n_reprise_clients = self.env['res.partner'].sudo().with_context(active_test=False).search_count(
+                [('company_id', '=', cid), ('opening_balance_id', '!=', False)])
             lines.append(
                 f"[{cid}] {company.name} : "
                 f"{n_loans} crédits, {n_loan_accounts} comptes crédit conteneurs, "
@@ -285,7 +300,9 @@ class MicrofinanceDataResetWizard(models.TransientModel):
                 f"{n_guarantees} garanties, {n_scoring} lignes de scoring, "
                 f"{n_reschedule} historiques de rééchelonnement, {n_visits} visites de recouvrement, "
                 f"{n_sav_holders} comptes épargne, {n_sav_acc} produits d'épargne, {n_sav_txn} transactions épargne, "
-                f"{n_moves} écritures comptables liées"
+                f"{n_moves} écritures comptables liées, "
+                f"{n_balances} balances d'ouverture ({n_opening_moves} écritures d'ouverture), "
+                f"{n_reprise_clients} clients de la reprise de portefeuille"
             )
 
         self.log = "APERÇU (aucune donnée modifiée) :\n\n" + "\n".join(lines)
@@ -634,6 +651,33 @@ class MicrofinanceDataResetWizard(models.TransientModel):
                     "comptes épargne (client)", cid, company_name, dry_run, stats,
                 )
                 lines.append(f"  - {n} microfinance.savings.holder.account supprimés (par lots de {self._BATCH_SIZE})")
+
+        # Reprise de portefeuille : ses crédits, comptes et transactions sont déjà traités ci-dessus ; restent ses clients
+        # (marqueur opening_balance_id, posé uniquement par la reprise) puis les balances d'ouverture. Les clients passent
+        # AVANT les balances : opening_balance_id est en ondelete='set null', supprimer la balance d'abord ferait perdre le
+        # marqueur.
+        if self.do_reprise_clients:
+            n = self._batch_unlink(
+                'res.partner', [('company_id', '=', cid), ('opening_balance_id', '!=', False)],
+                "clients de la reprise de portefeuille", cid, company_name, dry_run, stats,
+            )
+            lines.append(f"  - {n} res.partner (clients de la reprise) supprimés (par lots de {self._BATCH_SIZE})")
+
+        if self.do_opening_balances:
+            # Écriture d'ouverture d'abord (remise en brouillon puis suppression, comme les autres écritures), puis balance
+            # et lignes. mf_opening_purge n'est honoré que pour group_system (cf. microfinance.opening.balance.unlink).
+            purge = self.with_context(mf_opening_purge=True)
+            move_ids = self.env['microfinance.opening.balance'].sudo().search([('company_id', '=', cid)]).move_id.ids
+            n_moves = purge._batch_unlink(
+                'account.move', [('id', 'in', move_ids)], "écritures d'ouverture", cid, company_name, dry_run, stats,
+                pre_unlink=lambda recs: recs.filtered(lambda m: m.state == 'posted').button_draft(),
+            )
+            lines.append(f"  - {n_moves} account.move (écritures d'ouverture) supprimées")
+            n = purge._batch_unlink(
+                'microfinance.opening.balance', [('company_id', '=', cid)],
+                "balances d'ouverture", cid, company_name, dry_run, stats,
+            )
+            lines.append(f"  - {n} microfinance.opening.balance supprimées (lignes en cascade)")
 
         return [f"Agence [{cid}] {company_name} :"] + lines
 

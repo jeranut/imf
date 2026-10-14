@@ -6,10 +6,11 @@ Comme les autres fichiers de ce dossier, suppose les données réelles de
 MOWGLI (copie jetable uniquement). TransactionCase : rollback automatique.
 """
 from odoo.tests.common import TransactionCase, tagged
+from odoo.addons.mowgli_payroll_pcec.tests.common import MowgliSmeTestMixin
 
 
 @tagged('post_install', '-at_install')
-class TestPayrollPcecAccounts(TransactionCase):
+class TestPayrollPcecAccounts(MowgliSmeTestMixin, TransactionCase):
 
     @classmethod
     def setUpClass(cls):
@@ -23,6 +24,7 @@ class TestPayrollPcecAccounts(TransactionCase):
 
     def setUp(self):
         super().setUp()
+        self._mowgli_add_test_sme()
         if not (self.company and self.structure and self.target):
             self.skipTest(
                 "Données MOWGLI (CEFOR Isotry/Ambanidia, structure BASE) "

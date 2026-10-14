@@ -156,6 +156,29 @@ class MicrofinanceCaisseSession(models.Model):
             lines = moves.line_ids.filtered(
                 lambda l: l.account_id == account and l.move_id not in fee_moves and l.move_id not in savings_moves)
             net_cash = sum(lines.mapped('debit')) - sum(lines.mapped('credit'))
+            # Espèces sans équivalent sur le compte de la session (remboursement ou décaissement
+            # espèces posté sur le compte d'un AUTRE journal de caisse, p. ex. journal du produit
+            # distinct du journal de la session) : comptées par mouvement.amount, et seulement
+            # celles-là - un mouvement dont l'écriture touche le compte de la session reste lu
+            # dans le grand livre ci-dessus, donc jamais compté deux fois. Chèque/virement : jamais
+            # des espèces, ni ici ni via le grand livre.
+            for mouvement in session.mouvement_ids.filtered(
+                    lambda m: m.type in ('remboursement_credit', 'decaissement_credit')):
+                # Mouvement sans pièce rattachée (données historiques) : rien ne prouve le moyen de
+                # paiement, il n'est donc pas compté (comportement inchangé).
+                source = mouvement.payment_id if mouvement.type == 'remboursement_credit' else mouvement.loan_id
+                if not source:
+                    continue
+                move = (mouvement.payment_id.move_id if mouvement.type == 'remboursement_credit'
+                        else mouvement.loan_id.disbursement_move_id)
+                if move and move.line_ids.filtered(lambda l: l.account_id == account):
+                    continue
+                if mouvement.type == 'decaissement_credit':
+                    if mouvement.loan_id.disbursement_payment_method not in (False, 'cash'):
+                        continue
+                    net_cash -= mouvement.amount
+                else:
+                    net_cash += mouvement.amount
             fee_mouvements = session.mouvement_ids.filtered(lambda m: m.type == 'frais_dossier')
             net_fees = sum(fee_mouvements.mapped('amount'))
             # Signe : un dépôt épargne fait rentrer de l'argent en caisse (comme un
@@ -178,7 +201,10 @@ class MicrofinanceCaisseSession(models.Model):
         domain = [('cashier_id', '=', cashier_id), ('state', '=', 'open')]
         if exclude_session_id:
             domain.append(('id', '!=', exclude_session_id))
-        other = self.search(domain, limit=1)
+        # sudo() ciblé sur cette seule recherche : une règle multi-agences ne doit pas masquer
+        # la session ouverte du même caissier dans une autre agence (aucune donnée exposée,
+        # seuls le journal et la date de la session bloquante figurent dans le message).
+        other = self.sudo().search(domain, limit=1)
         if other:
             raise UserError(_(
                 "%(cashier)s a déjà une session de caisse ouverte (%(journal)s, %(date)s) : "
@@ -188,6 +214,16 @@ class MicrofinanceCaisseSession(models.Model):
                 'journal': other.journal_id.name,
                 'date': other.date,
             })
+
+    @api.constrains('state', 'cashier_id')
+    def _check_one_open_session_per_cashier(self):
+        """Filet serveur du verrou « une seule session ouverte par caissier » : action_open_session()
+        ne couvre pas un create()/write() direct avec state='open' (RPC, import, réouverture
+        manager). Ne joue que sur la session qui devient/est 'open' ; un autre caissier n'est
+        jamais concerné (le contrôle est par caissier, pas par journal)."""
+        for session in self.filtered(lambda s: s.state == 'open'):
+            session._check_cashier_has_no_other_open_session(
+                session.cashier_id.id, exclude_session_id=session.id)
 
     def action_open_session(self):
         for session in self:

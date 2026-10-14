@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="mowgli_payroll_param_view_tree" model="ir.ui.view">
+        <field name="name">mowgli.payroll.param.tree</field>
+        <field name="model">mowgli.payroll.param</field>
+        <field name="arch" type="xml">
+            <tree editable="bottom" string="Paramètres de cotisations">
+                <field name="code"/>
+                <field name="value"/>
+                <field name="date_from"/>
+                <field name="company_id" options="{'no_create': True}"/>
+                <field name="note"/>
+            </tree>
+        </field>
+    </record>
+    <record id="mowgli_payroll_param_view_search" model="ir.ui.view">
+        <field name="name">mowgli.payroll.param.search</field>
+        <field name="model">mowgli.payroll.param</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="code"/>
+                <field name="company_id"/>
+                <group expand="0" string="Regrouper par">
+                    <filter name="group_code" string="Paramètre" context="{'group_by': 'code'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+    <record id="mowgli_payroll_param_action" model="ir.actions.act_window">
+        <field name="name">Paramètres de cotisations</field>
+        <field name="res_model">mowgli.payroll.param</field>
+        <field name="view_mode">tree</field>
+        <field name="help">Chaque ligne a une date d'effet : une nouvelle ligne remplace la précédente à partir de cette date. Les taux sont des fractions (0.01 = 1 %).</field>
+    </record>
+    <menuitem id="menu_mowgli_payroll_param"
+              name="Paramètres de cotisations"
+              parent="hr_payroll_community.menu_hr_payroll_community_configuration"
+              action="mowgli_payroll_param_action"
+              sequence="60"
+              groups="hr_payroll_community.group_hr_payroll_community_manager"/>
+</odoo>

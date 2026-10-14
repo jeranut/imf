@@ -4,7 +4,7 @@
 Calcul AGRÉGÉ (read_group, 2 requêtes pour tout un lot de journaux), jamais ligne par ligne. Sert au tableau de bord
 (tuile « Trésorerie d'exploitation ») et à l'avertissement de solde d'un paiement de salaires.
 """
-from odoo import models
+from odoo import api, models
 
 
 class AccountJournal(models.Model):
@@ -49,6 +49,37 @@ class AccountJournal(models.Model):
                     values['out_transit'] = -group['amount_residual']
                 elif account_id == values['in_account_id']:
                     values['in_transit'] = group['amount_residual']
+        # Décaissements crédit par chèque/virement : crédités au compte d'attente (219000) de CE journal, non lettrés.
+        waiting_accounts = self.env['account.account']
+        for journal in journals:
+            waiting_accounts |= journal._mf_loan_waiting_accounts()
+        if waiting_accounts:
+            for group in Line.read_group(
+                    [('journal_id', 'in', journals.ids), ('account_id', 'in', waiting_accounts.ids),
+                     ('reconciled', '=', False), ('parent_state', '=', 'posted'),
+                     ('move_id.microfinance_loan_id', '!=', False)],
+                    ['amount_residual:sum'], ['journal_id'], lazy=False):
+                info[group['journal_id'][0]]['out_transit'] += -group['amount_residual']
         for values in info.values():
             values['available'] = values['bank'] - values['out_transit']
         return info
+
+    def _mf_statement_balances(self):
+        """{journal.id: solde final du dernier relevé validé} ; les journaux sans relevé validé sont absents."""
+        if not self.ids:
+            return {}
+        self.env.cr.execute(
+            "SELECT DISTINCT ON (journal_id) journal_id, balance_end_real FROM account_bank_statement "
+            "WHERE journal_id IN %s AND mf_state = 'validated' "
+            "ORDER BY journal_id, mf_datetime_to DESC, id DESC", (tuple(self.ids),))
+        return dict(self.env.cr.fetchall())
+
+    @api.model
+    def _mf_unexplained_gap(self, currency, statement, book, out_transit, in_transit):
+        """Part de l'écart relevé - comptable que le transit ne couvre pas. Un relevé inférieur au comptable
+        (chèque/virement encaissé, ligne pas encore pointée) est couvert jusqu'aux sorties en transit ; un relevé
+        supérieur, jusqu'aux entrées en transit. Le reste est un écart non expliqué (signé)."""
+        gap = currency.round(statement - book)
+        if gap < 0:
+            return min(0.0, currency.round(gap + out_transit))
+        return max(0.0, currency.round(gap - in_transit))

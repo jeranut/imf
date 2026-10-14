@@ -38,6 +38,8 @@ class MicrofinanceLoan(models.Model):
             holder['watch'] = sum(1 for row in rows if row['watch'])
             holder['late'] = sum(1 for row in rows if row['late'])
             holder['count'] = len(rows)
+            holder['transit'] = sum(row['out_transit'] for row in rows)
+            holder['unexplained'] = sum(1 for row in rows if row['unexplained'])
             return sum(row['available'] for row in rows)
 
         tile = self._overview_tile(
@@ -49,7 +51,10 @@ class MicrofinanceLoan(models.Model):
         tile['secondary_items'] = [{
             'label': _('%(watch)s comptes à surveiller · %(late)s relevés à saisir') % {
                 'watch': holder.get('watch', 0), 'late': holder.get('late', 0)},
-            'text': True}]
-        tile['counts'] = {'watch': holder.get('watch', 0), 'late': holder.get('late', 0)}
+            'text': True}, {
+            'label': _('En transit'), 'value': holder.get('transit', 0.0)}, {
+            'label': _('Écarts non expliqués : %s') % holder.get('unexplained', 0), 'text': True}]
+        tile['counts'] = {'watch': holder.get('watch', 0), 'late': holder.get('late', 0),
+                          'unexplained': holder.get('unexplained', 0)}
         tile['extra_links'] = [{'label': _('Voir la trésorerie'), 'topic': 'tresorerie', 'usage': ''}]
         return tile

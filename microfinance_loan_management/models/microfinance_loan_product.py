@@ -369,6 +369,25 @@ class MicrofinanceLoanProduct(models.Model):
              "(account_cheques_attente_id, actif) : ici l'institution émet le chèque, elle ne "
              "le reçoit pas. Requis uniquement si un décaissement est réglé par chèque.",
     )
+    account_virements_emis_attente_id = fields.Many2one(
+        'account.account', string="Compte d'attente virements émis",
+        domain="[('account_type', '=', 'liability_current'), ('company_id', '=', company_id)]",
+        default=_pcec_default('219000'),
+        help="Équivalent virement du compte d'attente chèques émis : un décaissement réglé par virement "
+             "crédite ce compte, et non le compte bancaire, tant que la ligne du relevé n'est pas pointée "
+             "sur l'écriture d'attente (la banque reste ainsi égale au relevé). Au pointage, l'écriture de "
+             "dénouement débite l'attente et crédite la banque ; un rejet contre-passe le décaissement. "
+             "Vide : repli sur le compte d'attente chèques émis.",
+    )
+
+    def _get_disbursement_waiting_account(self, payment_method):
+        """Compte d'attente crédité par un décaissement chèque ou virement ; vide pour les espèces."""
+        self.ensure_one()
+        if payment_method == 'cheque':
+            return self.account_cheques_emis_attente_id
+        if payment_method == 'bank_transfer':
+            return self.account_virements_emis_attente_id or self.account_cheques_emis_attente_id
+        return self.env['account.account']
 
     fee_type = fields.Selection([
         ('fixed', 'Montant fixe'),

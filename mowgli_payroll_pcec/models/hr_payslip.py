@@ -1,13 +1,19 @@
 # -*- coding: utf-8 -*-
 from odoo import models
 
+from .payroll_param import PARAM_CODES
+
+PAYSLIP_REQUIRED_PARAMS = [code for code, __ in PARAM_CODES]
+
 # hr_payroll_community._prepare_account_move_line_vals() ne retient que
 # BASIC/ALW/DED/COMP : la catégorie NET en est exclue, donc le Net à payer
 # ne peut jamais être crédité et l'écriture de paie ne peut jamais être
 # équilibrée. On surcharge ici (sans toucher au fichier d'origine) pour
 # ajouter NET à la liste des catégories éligibles. GROSS reste exclu
 # volontairement pour ne pas comptabiliser le brut une deuxième fois.
-ELIGIBLE_CATEGORY_CODES = ('BASIC', 'ALW', 'DED', 'COMP', 'NET')
+# 'Travel' : catégorie propre de l'indemnité de transport (distincte de ALW),
+# sinon son montant n'est jamais débité et l'écriture est déséquilibrée.
+ELIGIBLE_CATEGORY_CODES = ('BASIC', 'ALW', 'Travel', 'DED', 'COMP', 'NET')
 
 
 class HrPayslip(models.Model):
@@ -49,3 +55,29 @@ class HrPayslip(models.Model):
                 'credit': amount if direction == 'credit' else 0.0,
             }))
         return move_lines
+
+    # ------------------------------------------------------------------
+    # Paramètres de cotisations (lus à la date_to et pour la société du bulletin)
+    # ------------------------------------------------------------------
+    def _mowgli_param(self, code):
+        self.ensure_one()
+        return self.env['mowgli.payroll.param']._get_value(
+            code, self.date_to, self.company_id)
+
+    def _mowgli_contribution_base(self, brut):
+        """Base cotisable : min(plafond, max(plancher, brut)), plancher = SME
+        si PLANCHER = 1 sinon 0."""
+        self.ensure_one()
+        sme = self._mowgli_param('SME')
+        plafond = self._mowgli_param('FACTEUR_PLAFOND') * sme
+        plancher = sme if self._mowgli_param('PLANCHER') else 0.0
+        return min(plafond, max(plancher, brut))
+
+    def action_compute_sheet(self):
+        # Les erreurs levées dans le code python d'une règle sont masquées par
+        # le moteur (« Wrong python code ») : on vérifie donc les paramètres
+        # AVANT le calcul pour donner un message clair (ex. SME non défini).
+        for payslip in self:
+            for code in PAYSLIP_REQUIRED_PARAMS:
+                payslip._mowgli_param(code)
+        return super().action_compute_sheet()

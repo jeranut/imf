@@ -61,6 +61,12 @@ class ResPartner(models.Model):
              "de l'agent (ou par le wizard « Avance spéciale ») ; ne change jamais tout seul.",
     )
 
+    opening_balance_id = fields.Many2one(
+        'microfinance.opening.balance', string="Balance d'ouverture (reprise)", readonly=True, copy=False, index=True,
+        ondelete='set null',
+        help="Renseigné pour un client créé par « Reprise de portefeuille » : permet au RAZ microfinance de retirer ces "
+             "clients de test avec la reprise.")
+
     @api.model
     def _microfinance_is_unauthorized_client_creation(self, vals):
         context = self.env.context

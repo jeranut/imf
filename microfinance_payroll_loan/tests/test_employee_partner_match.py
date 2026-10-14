@@ -8,10 +8,11 @@ import base64
 from odoo.exceptions import UserError
 from odoo.tests import tagged
 from odoo.tests.common import TransactionCase
+from odoo.addons.mowgli_payroll_pcec.tests.common import MowgliSmeTestMixin
 
 
 @tagged('post_install', '-at_install')
-class TestMicrofinanceEmployeePartnerMatch(TransactionCase):
+class TestMicrofinanceEmployeePartnerMatch(MowgliSmeTestMixin, TransactionCase):
 
     @classmethod
     def setUpClass(cls):
@@ -21,6 +22,7 @@ class TestMicrofinanceEmployeePartnerMatch(TransactionCase):
 
     def setUp(self):
         super().setUp()
+        self._mowgli_add_test_sme()
         if not self.company or not self.structure or not self.structure.rule_ids.filtered(
             lambda r: r.code == 'LOAN'
         ):

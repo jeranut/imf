@@ -191,6 +191,11 @@ class AccountBankStatement(models.Model):
             previous = self._mf_previous()
             if previous:
                 self.balance_start = previous.balance_end_real
+            else:  # premier relevé du journal : point de départ = solde de la balance d'ouverture validée (s'il y en a une)
+                opening = self.env['microfinance.opening.balance'].bank_starting_balance(
+                    self.journal_id, self._mf_local(self.mf_datetime_from).date())
+                if opening is not None:
+                    self.balance_start = opening
 
     def _mf_post(self, body):
         """Message de traçabilité dans le fil du relevé. L'expéditeur est toujours renseigné (utilisateur, sinon société,
